@@ -35,6 +35,28 @@ export {
   type RunMigrationsOptions,
 } from './migrations/runner';
 export {
+  canonicalJson,
+  CanonicalJsonError,
+  parseJson,
+  type JsonObject,
+  type JsonPrimitive,
+  type JsonValue,
+} from './events/json';
+export { GENESIS_HASH, hashEntry, hashPayload, sha256Hex, type HashableEntry } from './events/hash';
+export {
+  EventLog,
+  EventLogError,
+  HEAD_ANCHOR_KEY,
+  type AppendEventInput,
+  type ChainFailure,
+  type ChainFailureReason,
+  type ChainHead,
+  type ChainVerification,
+  type EventLogOptions,
+  type EventRecord,
+  type ReadEventsOptions,
+} from './events/log';
+export {
   BACKUP_DIRNAME,
   DATABASE_FILENAME,
   DEFAULT_BACKUP_RETENTION,

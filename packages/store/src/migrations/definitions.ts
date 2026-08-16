@@ -26,4 +26,24 @@ export const MIGRATIONS: readonly Migration[] = [
       VALUES ('schema_initialised_at', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
     `,
   },
+  {
+    version: 2,
+    name: 'event_log',
+    up: `
+      CREATE TABLE events (
+        seq          INTEGER PRIMARY KEY,
+        event_id     TEXT NOT NULL UNIQUE,
+        session_id   TEXT,
+        type         TEXT NOT NULL,
+        payload      TEXT NOT NULL,
+        recorded_at  TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL UNIQUE
+      ) STRICT;
+
+      CREATE INDEX events_session_seq_idx ON events (session_id, seq);
+      CREATE INDEX events_type_seq_idx    ON events (type, seq);
+    `,
+  },
 ];

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { IPC_CHANNELS } from './channels';
 import {
   DuplicateHandlerError,
   IpcValidationError,
@@ -105,9 +106,14 @@ describe('IpcRegistry', () => {
 
   it('tracks which channels are wired up', () => {
     expect(new IpcRegistry().registeredChannels()).toEqual([]);
-    expect(new IpcRegistry().missingChannels()).toEqual(['sheep:ping']);
-    expect(pingRegistry().registeredChannels()).toEqual(['sheep:ping']);
-    expect(pingRegistry().missingChannels()).toEqual([]);
+    expect(new IpcRegistry().missingChannels()).toEqual([...IPC_CHANNELS]);
+
+    const partial = pingRegistry();
+    expect(partial.registeredChannels()).toEqual(['sheep:ping']);
+    expect(partial.missingChannels()).toEqual(
+      IPC_CHANNELS.filter((channel) => channel !== 'sheep:ping'),
+    );
+    expect(partial.has('sheep:ping')).toBe(true);
   });
 
   it('awaits async handlers', async () => {

@@ -27,6 +27,32 @@ export const IPC_CONTRACTS = {
       elapsedMs: z.number().int(),
     }),
   },
+  'sheep:event-log-summary': {
+    request: z.object({}),
+    response: z.object({
+      count: z.number().int().nonnegative(),
+      schemaVersion: z.number().int().nonnegative(),
+      driver: z.string().min(1),
+      journalMode: z.string().min(1),
+      head: z
+        .object({
+          seq: z.number().int().positive(),
+          entryHash: z.string().regex(/^[0-9a-f]{64}$/),
+        })
+        .nullable(),
+      chain: z.object({
+        ok: z.boolean(),
+        checked: z.number().int().nonnegative(),
+        failures: z.array(
+          z.object({
+            seq: z.number().int().nonnegative(),
+            reason: z.string().min(1),
+            detail: z.string(),
+          }),
+        ),
+      }),
+    }),
+  },
 } as const satisfies Record<IpcChannel, IpcContract>;
 
 export type IpcContracts = typeof IPC_CONTRACTS;

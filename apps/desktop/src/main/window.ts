@@ -1,3 +1,4 @@
+import { writeFile } from 'node:fs/promises';
 import { BrowserWindow, nativeImage, shell } from 'electron';
 import { APP_NAME } from '../shared/product';
 import { bundlePath, resourcePath } from './paths';
@@ -50,13 +51,22 @@ export function createMainWindow(): BrowserWindow {
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-type RendererState = { mounted: boolean; bridge: boolean; ping: string | null };
+type RendererState = {
+  mounted: boolean;
+  bridge: boolean;
+  ping: string | null;
+  chain: string | null;
+};
 
-const RENDERER_STATE_EXPRESSION = `(() => ({
-  mounted: Boolean(document.querySelector('[data-sheep-ready]')),
-  bridge: Boolean(window.sheep),
-  ping: document.querySelector('[data-sheep-ping]')?.getAttribute('data-sheep-ping') ?? null,
-}))()`;
+const RENDERER_STATE_EXPRESSION = `(() => {
+  const root = document.querySelector('[data-sheep-ready]');
+  return {
+    mounted: Boolean(root),
+    bridge: Boolean(window.sheep),
+    ping: root?.getAttribute('data-sheep-ping') ?? null,
+    chain: root?.getAttribute('data-sheep-chain') ?? null,
+  };
+})()`;
 
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
@@ -95,9 +105,12 @@ async function pollRenderer(
  * channel is refused.
  */
 async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
+  const settled = (value: string | null | undefined): boolean =>
+    value != null && value !== 'pending';
+
   const state = (await pollRenderer(window, RENDERER_STATE_EXPRESSION, (value) => {
     const s = value as RendererState | undefined;
-    return Boolean(s?.mounted) && s?.ping != null && s.ping !== 'pending';
+    return Boolean(s?.mounted) && settled(s?.ping) && settled(s?.chain);
   })) as RendererState | undefined;
 
   recordSmokeCheck(
@@ -106,11 +119,38 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
     state?.bridge ? 'bridge present' : 'bridge missing',
   );
   recordSmokeCheck('ipc-ping', state?.ping === 'ok', `ping state: ${state?.ping ?? 'none'}`);
+  recordSmokeCheck(
+    'renderer-chain-status',
+    state?.chain === 'ok',
+    `chain state: ${state?.chain ?? 'none'}`,
+  );
 
   if (window.isDestroyed()) return;
   const guard = await window.webContents
     .executeJavaScript(CHANNEL_GUARD_EXPRESSION)
     .catch((error: unknown) => String(error));
+  // Capture before the last check is recorded: the final report quits the app.
+  await captureScreenshot(window);
+
   const refused = typeof guard === 'string' && guard.includes('Unknown IPC channel');
   recordSmokeCheck('ipc-channel-guard', refused, String(guard));
+}
+
+/**
+ * Writes a PNG of the window when SHEEP_SMOKE_SCREENSHOT names a path, so a
+ * headless run can leave evidence of what the app actually looked like.
+ */
+async function captureScreenshot(window: BrowserWindow): Promise<void> {
+  const target = process.env['SHEEP_SMOKE_SCREENSHOT'];
+  if (!target || window.isDestroyed()) return;
+
+  try {
+    const image = await window.webContents.capturePage();
+    await writeFile(target, image.toPNG());
+    process.stdout.write(`sheep-smoke: screenshot ${target}\n`);
+  } catch (error) {
+    process.stderr.write(
+      `sheep-smoke: screenshot failed - ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
 }

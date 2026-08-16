@@ -3,7 +3,7 @@ import { APP_NAME } from '../shared/product';
 import { bindIpcRegistry, createIpcRegistry } from './ipc';
 import { applyRendererSecurityPolicy } from './security';
 import { beginSmokeRun, expectSmokeCheck, isSmokeRun, recordSmokeCheck } from './smoke';
-import { closeStore, openStore } from './store';
+import { closeStore, openStore, recordLaunch } from './store';
 import { createMainWindow, rendererDevServerUrl } from './window';
 
 app.setName(APP_NAME);
@@ -11,10 +11,12 @@ if (process.platform === 'win32') app.setAppUserModelId('dev.sheep.app');
 
 if (isSmokeRun) {
   expectSmokeCheck('store-ready');
+  expectSmokeCheck('event-log');
   expectSmokeCheck('window-ready');
   expectSmokeCheck('renderer-mounted');
   expectSmokeCheck('ipc-ping');
   expectSmokeCheck('ipc-channel-guard');
+  expectSmokeCheck('renderer-chain-status');
   beginSmokeRun((exitCode) => {
     app.exit(exitCode);
   });
@@ -37,12 +39,14 @@ if (!hasInstanceLock) {
 
     try {
       openStore();
+      recordLaunch();
     } catch (error) {
       // A broken store is worth surfacing loudly, but the window still opens
       // so the failure can be shown rather than the app vanishing.
       const message = error instanceof Error ? error.message : String(error);
       process.stderr.write(`sheep: could not open the store - ${message}\n`);
       recordSmokeCheck('store-ready', false, message);
+      recordSmokeCheck('event-log', false, message);
     }
 
     bindIpcRegistry(createIpcRegistry());

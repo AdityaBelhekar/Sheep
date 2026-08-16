@@ -85,7 +85,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   *Done when:* DB file is created at the user data path; migrations apply and are idempotent.
   `feat(store): sqlite with versioned migrations`
 
-- [ ] **5. Hash-chained event log**
+- [x] **5. Hash-chained event log**
   `events` table, append API, SHA-256 `payload_hash` + `prev_hash` chaining, sequential reader, chain-integrity verifier.
   *Done when:* unit tests prove append/read works and a tampered row fails verification.
   `feat(store): hash-chained append-only event log`

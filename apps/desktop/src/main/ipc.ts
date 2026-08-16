@@ -1,19 +1,43 @@
 import { app, ipcMain } from 'electron';
 import { IpcError, IpcRegistry } from '@sheep/ipc';
 import { APP_NAME } from '../shared/product';
+import { getEventLog, getStore } from './store';
 
 /** Builds the main-process registry with every handler this app serves. */
 export function createIpcRegistry(): IpcRegistry {
-  return new IpcRegistry().register('sheep:ping', (request) => {
-    const receivedAt = Date.now();
-    return {
-      pong: true as const,
-      app: APP_NAME,
-      version: app.getVersion(),
-      receivedAt,
-      elapsedMs: receivedAt - request.sentAt,
-    };
-  });
+  return new IpcRegistry()
+    .register('sheep:ping', (request) => {
+      const receivedAt = Date.now();
+      return {
+        pong: true as const,
+        app: APP_NAME,
+        version: app.getVersion(),
+        receivedAt,
+        elapsedMs: receivedAt - request.sentAt,
+      };
+    })
+    .register('sheep:event-log-summary', () => {
+      const store = getStore();
+      const log = getEventLog();
+      const verification = log.verify();
+
+      return {
+        count: log.count(),
+        schemaVersion: store.schemaVersion,
+        driver: store.driver,
+        journalMode: store.journalMode,
+        head: verification.head ?? null,
+        chain: {
+          ok: verification.ok,
+          checked: verification.checked,
+          failures: verification.failures.map((failure) => ({
+            seq: failure.seq,
+            reason: failure.reason,
+            detail: failure.detail,
+          })),
+        },
+      };
+    });
 }
 
 /**
