@@ -80,7 +80,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   *Done when:* renderer calls `ipc.ping()` and gets a validated reply; an unregistered channel throws.
   `feat(ipc): typed zod-validated ipc bridge`
 
-- [ ] **4. SQLite + migrations**
+- [x] **4. SQLite + migrations**
   Driver selection (better-sqlite3, WASM fallback if native build fails), WAL mode, versioned migration runner, pre-migration backup.
   *Done when:* DB file is created at the user data path; migrations apply and are idempotent.
   `feat(store): sqlite with versioned migrations`

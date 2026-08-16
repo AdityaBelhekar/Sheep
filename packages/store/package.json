@@ -11,5 +11,11 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "node-sqlite3-wasm": "^0.8.60"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^13.0.3"
   }
 }
