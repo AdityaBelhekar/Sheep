@@ -1,0 +1,11 @@
+node_modules/
+dist/
+out/
+.vite/
+coverage/
+package-lock.json
+*.png
+
+# hand-maintained prose and local tooling config
+*.md
+.claude/

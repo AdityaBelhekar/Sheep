@@ -1,0 +1,10 @@
+{
+  "name": "@sheep/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sheep desktop application: Electron main, preload and React renderer.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

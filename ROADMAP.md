@@ -65,7 +65,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 
 ## Stage 0 — Foundation `Phases 1–5`
 
-- [ ] **1. Scaffold the monorepo**
+- [x] **1. Scaffold the monorepo**
   npm workspaces, `tsconfig` base + per-package, ESLint + Prettier, vitest, `.gitignore`, empty package skeletons per the layout.
   *Done when:* `npm install` succeeds and `npm test` runs green with zero tests.
   `chore: scaffold monorepo with typescript workspaces`

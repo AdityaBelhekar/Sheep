@@ -1,0 +1,15 @@
+{
+  "name": "@sheep/ipc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed, zod-validated IPC channel contracts shared by main, preload and renderer.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}
