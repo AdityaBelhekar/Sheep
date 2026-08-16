@@ -75,7 +75,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   *Done when:* `npm run dev` opens a window; hot reload works.
   `feat(desktop): electron shell with react renderer`
 
-- [ ] **3. Typed IPC bridge**
+- [x] **3. Typed IPC bridge**
   zod-validated channel contracts, allowlisted channel registry, `contextBridge` preload, `ping` round-trip.
   *Done when:* renderer calls `ipc.ping()` and gets a validated reply; an unregistered channel throws.
   `feat(ipc): typed zod-validated ipc bridge`

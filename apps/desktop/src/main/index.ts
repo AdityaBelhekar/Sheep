@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import { APP_NAME } from '../shared/product';
+import { bindIpcRegistry, createIpcRegistry } from './ipc';
 import { applyRendererSecurityPolicy } from './security';
 import { beginSmokeRun, expectSmokeCheck, isSmokeRun } from './smoke';
 import { createMainWindow, rendererDevServerUrl } from './window';
@@ -10,6 +11,8 @@ if (process.platform === 'win32') app.setAppUserModelId('dev.sheep.app');
 if (isSmokeRun) {
   expectSmokeCheck('window-ready');
   expectSmokeCheck('renderer-mounted');
+  expectSmokeCheck('ipc-ping');
+  expectSmokeCheck('ipc-channel-guard');
   beginSmokeRun((exitCode) => {
     app.exit(exitCode);
   });
@@ -29,6 +32,7 @@ if (!hasInstanceLock) {
 
   void app.whenReady().then(() => {
     applyRendererSecurityPolicy(Boolean(rendererDevServerUrl));
+    bindIpcRegistry(createIpcRegistry());
     createMainWindow();
 
     app.on('activate', () => {

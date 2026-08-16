@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { SheepBridge } from '../../preload';
+import type { SheepBridge } from '@shared/bridge';
 
 declare global {
   interface Window {

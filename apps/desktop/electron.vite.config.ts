@@ -1,12 +1,22 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 
 const here = import.meta.dirname;
 
+// Workspace packages ship TypeScript source, so they must be bundled rather
+// than externalised like ordinary npm dependencies.
+const manifest = JSON.parse(readFileSync(resolve(here, 'package.json'), 'utf8')) as {
+  dependencies?: Record<string, string>;
+};
+const workspaceDeps = Object.keys(manifest.dependencies ?? {}).filter((name) =>
+  name.startsWith('@sheep/'),
+);
+
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: workspaceDeps })],
     build: {
       rollupOptions: {
         input: resolve(here, 'src/main/index.ts'),
@@ -14,7 +24,7 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: workspaceDeps })],
     build: {
       rollupOptions: {
         input: resolve(here, 'src/preload/index.ts'),

@@ -43,37 +43,74 @@ export function createMainWindow(): BrowserWindow {
     void window.loadFile(bundlePath('renderer', 'index.html'));
   }
 
-  if (isSmokeRun) void verifyRendererMounted(window);
+  if (isSmokeRun) void runRendererSmokeChecks(window);
 
   return window;
 }
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Smoke-run only: proves React actually mounted, which also proves the CSP and
- * the preload bridge did not break the renderer.
- */
-async function verifyRendererMounted(window: BrowserWindow): Promise<void> {
-  const deadline = Date.now() + 15_000;
+type RendererState = { mounted: boolean; bridge: boolean; ping: string | null };
+
+const RENDERER_STATE_EXPRESSION = `(() => ({
+  mounted: Boolean(document.querySelector('[data-sheep-ready]')),
+  bridge: Boolean(window.sheep),
+  ping: document.querySelector('[data-sheep-ping]')?.getAttribute('data-sheep-ping') ?? null,
+}))()`;
+
+/** Proves the renderer refuses a channel that is not on the allowlist. */
+const CHANNEL_GUARD_EXPRESSION = `(async () => {
+  try {
+    await window.sheep.invoke('sheep:not-a-channel', {});
+    return 'no-throw';
+  } catch (error) {
+    return String(error && error.message ? error.message : error);
+  }
+})()`;
+
+async function pollRenderer(
+  window: BrowserWindow,
+  expression: string,
+  isDone: (value: unknown) => boolean,
+  timeoutMs = 15_000,
+): Promise<unknown> {
+  const deadline = Date.now() + timeoutMs;
+  let last: unknown;
   while (Date.now() < deadline) {
-    if (window.isDestroyed()) return;
+    if (window.isDestroyed()) return last;
     try {
-      const state: unknown = await window.webContents.executeJavaScript(
-        `(() => {
-          const root = document.querySelector('[data-sheep-ready]');
-          return { mounted: Boolean(root), bridge: Boolean(window.sheep) };
-        })()`,
-      );
-      const { mounted, bridge } = state as { mounted: boolean; bridge: boolean };
-      if (mounted) {
-        recordSmokeCheck('renderer-mounted', true, bridge ? 'bridge present' : 'bridge missing');
-        return;
-      }
+      last = await window.webContents.executeJavaScript(expression);
+      if (isDone(last)) return last;
     } catch {
       // Page still loading; retry until the deadline.
     }
-    await delay(200);
+    await delay(150);
   }
-  recordSmokeCheck('renderer-mounted', false, 'no [data-sheep-ready] element');
+  return last;
+}
+
+/**
+ * Smoke-run only: asserts React mounted, the preload bridge is present, the
+ * renderer's `ipc.ping()` returned a contract-valid reply, and an unregistered
+ * channel is refused.
+ */
+async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
+  const state = (await pollRenderer(window, RENDERER_STATE_EXPRESSION, (value) => {
+    const s = value as RendererState | undefined;
+    return Boolean(s?.mounted) && s?.ping != null && s.ping !== 'pending';
+  })) as RendererState | undefined;
+
+  recordSmokeCheck(
+    'renderer-mounted',
+    Boolean(state?.mounted),
+    state?.bridge ? 'bridge present' : 'bridge missing',
+  );
+  recordSmokeCheck('ipc-ping', state?.ping === 'ok', `ping state: ${state?.ping ?? 'none'}`);
+
+  if (window.isDestroyed()) return;
+  const guard = await window.webContents
+    .executeJavaScript(CHANNEL_GUARD_EXPRESSION)
+    .catch((error: unknown) => String(error));
+  const refused = typeof guard === 'string' && guard.includes('Unknown IPC channel');
+  recordSmokeCheck('ipc-channel-guard', refused, String(guard));
 }

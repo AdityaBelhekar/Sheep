@@ -1,17 +1,25 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
+import { assertKnownChannel } from '@sheep/ipc/channels';
+import type { SheepBridge } from '../shared/bridge';
 
 /**
  * The only surface the renderer sees. The renderer is sandboxed and has no
  * Node access; everything it can do arrives through this object.
+ *
+ * The allowlist check here is the second line of defence — the typed client in
+ * the renderer checks first, and the main process refuses unknown channels
+ * regardless — but it is the one that survives a compromised renderer bundle.
  */
-const sheep = {
+const sheep: SheepBridge = {
   versions: {
     electron: process.versions['electron'] ?? 'unknown',
     chrome: process.versions['chrome'] ?? 'unknown',
     node: process.versions['node'] ?? 'unknown',
   },
-} as const;
-
-export type SheepBridge = typeof sheep;
+  invoke(channel: string, payload: unknown): Promise<unknown> {
+    assertKnownChannel(channel);
+    return ipcRenderer.invoke(channel, payload);
+  },
+};
 
 contextBridge.exposeInMainWorld('sheep', sheep);

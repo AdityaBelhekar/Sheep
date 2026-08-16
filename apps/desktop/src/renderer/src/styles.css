@@ -3,6 +3,8 @@
   --fg: #e8eaed;
   --muted: #8b93a1;
   --accent: #cbd5e1;
+  --ok: #7ee7a8;
+  --error: #ff8a8a;
   color-scheme: dark;
 }
 
@@ -61,6 +63,26 @@ body {
   color: var(--muted);
   font-size: 0.975rem;
   line-height: 1.5;
+}
+
+.shell__status {
+  margin: 1.25rem 0 0;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.shell__status[data-status='ok'] {
+  color: var(--ok);
+  border-color: rgb(126 231 168 / 25%);
+}
+
+.shell__status[data-status='error'] {
+  color: var(--error);
+  border-color: rgb(255 138 138 / 30%);
 }
 
 .shell__footer {

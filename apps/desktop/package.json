@@ -9,10 +9,11 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
-    "smoke": "node scripts/smoke.mjs",
+    "smoke": "electron-vite build && node scripts/smoke.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
+    "@sheep/ipc": "*",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
