@@ -20,16 +20,24 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "dev": "npm run dev --workspace @sheep/desktop",
+    "build": "npm run build --workspace @sheep/desktop",
+    "start": "npm run start --workspace @sheep/desktop",
+    "smoke": "npm run smoke --workspace @sheep/desktop"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.10.1",
     "eslint": "^10.8.1",
     "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.11.0",
     "prettier": "^3.9.6",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.10"
+  },
+  "allowScripts": {
+    "esbuild": true
   }
 }

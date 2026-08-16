@@ -70,7 +70,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   *Done when:* `npm install` succeeds and `npm test` runs green with zero tests.
   `chore: scaffold monorepo with typescript workspaces`
 
-- [ ] **2. Electron shell**
+- [x] **2. Electron shell**
   electron-vite, `apps/desktop/{main,preload,renderer}`, React 19 + Vite, a window that opens with the Sheep logo.
   *Done when:* `npm run dev` opens a window; hot reload works.
   `feat(desktop): electron shell with react renderer`
