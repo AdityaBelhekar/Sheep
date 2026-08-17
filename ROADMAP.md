@@ -102,7 +102,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 - [x] **7. Content-addressed store** — `.sheep/objects/<ab>/<sha256>`, put/get/has, streaming writes, reference counting, GC for unreferenced blobs.
   *Done when:* identical content dedupes; GC removes only unreferenced objects. → `feat(store): content-addressed blob store with gc`
 
-- [ ] **8. Projections** — rebuild `sessions`/`messages` tables purely by replaying events; incremental catch-up on append.
+- [x] **8. Projections** — rebuild `sessions`/`messages` tables purely by replaying events; incremental catch-up on append.
   *Done when:* dropping all projection tables and replaying reproduces identical state. → `feat(store): event replay projections`
 
 - [ ] **9. Keychain & settings** — keytar-backed credential storage, `credential_ref` indirection, app settings store, key redaction in logs.

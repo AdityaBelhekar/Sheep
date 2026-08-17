@@ -12,6 +12,7 @@ if (process.platform === 'win32') app.setAppUserModelId('dev.sheep.app');
 if (isSmokeRun) {
   expectSmokeCheck('store-ready');
   expectSmokeCheck('event-log');
+  expectSmokeCheck('projections');
   expectSmokeCheck('window-ready');
   expectSmokeCheck('renderer-mounted');
   expectSmokeCheck('ipc-ping');
@@ -47,6 +48,7 @@ if (!hasInstanceLock) {
       process.stderr.write(`sheep: could not open the store - ${message}\n`);
       recordSmokeCheck('store-ready', false, message);
       recordSmokeCheck('event-log', false, message);
+      recordSmokeCheck('projections', false, message);
     }
 
     bindIpcRegistry(createIpcRegistry());

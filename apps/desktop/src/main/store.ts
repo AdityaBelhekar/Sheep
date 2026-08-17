@@ -1,9 +1,9 @@
 import { app } from 'electron';
-import { EventLog, openSheepStore, type SheepStore } from '@sheep/store';
+import { domainEvent } from '@sheep/core';
+import { openSheepStore, type EventLog, type SheepStore } from '@sheep/store';
 import { recordSmokeCheck } from './smoke';
 
 let store: SheepStore | undefined;
-let eventLog: EventLog | undefined;
 
 /**
  * Opens the local database under Electron's user data path.
@@ -17,7 +17,6 @@ export function openStore(): SheepStore {
 
   const opened = openSheepStore({ dataDir: app.getPath('userData') });
   store = opened;
-  eventLog = new EventLog(opened.db);
 
   const detail = [
     opened.driver,
@@ -26,6 +25,7 @@ export function openStore(): SheepStore {
     `applied=${String(opened.migrations.applied.length)}`,
   ].join(' · ');
   recordSmokeCheck('store-ready', true, detail);
+  reportProjections(opened);
 
   if (opened.fallbackReason !== undefined) {
     process.stdout.write(`sheep: sqlite fell back to wasm - ${opened.fallbackReason}\n`);
@@ -39,8 +39,37 @@ export function getStore(): SheepStore {
 }
 
 export function getEventLog(): EventLog {
-  if (!eventLog) throw new Error('store: openStore() has not run yet');
-  return eventLog;
+  return getStore().events;
+}
+
+/**
+ * Reports what the projections did on open.
+ *
+ * A rebuild is normal — after an upgrade that changes a projected column, the
+ * derived tables are thrown away and replayed — but a payload that failed its
+ * schema is not, so those are surfaced rather than counted.
+ */
+function reportProjections(opened: SheepStore): void {
+  const detail = opened.projectionState
+    .map((result) => {
+      const parts = [result.name, `seq=${String(result.report.lastSeq)}`];
+      if (result.created) parts.push('created');
+      if (result.rebuilt) parts.push('rebuilt');
+      if (result.report.unknown > 0) parts.push(`unknown=${String(result.report.unknown)}`);
+      if (result.report.failures.length > 0) {
+        parts.push(`failures=${String(result.report.failures.length)}`);
+      }
+      return parts.join(' ');
+    })
+    .join(' · ');
+
+  const failures = opened.projectionState.flatMap((result) => result.report.failures);
+  for (const failure of failures.slice(0, 5)) {
+    process.stderr.write(
+      `sheep: projection could not read event ${String(failure.seq)} (${failure.type}) - ${failure.detail}\n`,
+    );
+  }
+  recordSmokeCheck('projections', failures.length === 0, detail);
 }
 
 /**
@@ -49,16 +78,19 @@ export function getEventLog(): EventLog {
  * built on top of it.
  */
 export function recordLaunch(): void {
-  const log = getEventLog();
-  log.append({
-    type: 'app.started',
-    payload: {
+  const current = getStore();
+
+  // Through `record`, so the log entry and the projections it feeds move
+  // together — a reader can never see one without the other.
+  current.record([
+    domainEvent('app.started', {
       version: app.getVersion(),
       platform: process.platform,
       electron: process.versions['electron'] ?? 'unknown',
-    },
-  });
+    }),
+  ]);
 
+  const log = current.events;
   const verification = log.verify();
   const detail = `entries=${String(log.count())} verified=${String(verification.checked)}${
     verification.ok ? '' : ` failures=${String(verification.failures.length)}`
@@ -77,5 +109,4 @@ export function recordLaunch(): void {
 export function closeStore(): void {
   store?.close();
   store = undefined;
-  eventLog = undefined;
 }

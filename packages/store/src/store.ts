@@ -1,8 +1,10 @@
 import { copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { BlobStore, OBJECTS_DIRNAME } from './cas/blob-store';
+import { EventLog, type AppendEventInput, type EventRecord } from './events/log';
 import type { Migration } from './migrations/definitions';
 import { runMigrations, type MigrationReport } from './migrations/runner';
+import { ProjectionRunner, type EnsureResult } from './projections/runner';
 import { openDatabase, type DriverPreference } from './sqlite/open';
 import type { SqliteDatabase, SqliteDriverName } from './sqlite/types';
 
@@ -24,14 +26,24 @@ export interface SheepStore {
   readonly db: SqliteDatabase;
   readonly path: string;
   readonly dataDir: string;
+  /** The authoritative record. Everything else here is derived from it. */
+  readonly events: EventLog;
   /** Content-addressed blobs, indexed by the same database. */
   readonly blobs: BlobStore;
+  /** Derived tables, brought up to date on open. */
+  readonly projections: ProjectionRunner;
+  readonly projectionState: readonly EnsureResult[];
   readonly driver: SqliteDriverName;
   readonly journalMode: string;
   /** Why the native driver was not used, when it was not. */
   readonly fallbackReason?: string;
   readonly migrations: MigrationReport;
   readonly schemaVersion: number;
+  /**
+   * Appends events and folds them into the projections in one transaction, so
+   * a reader can never see a log entry the derived tables do not reflect.
+   */
+  record(inputs: readonly AppendEventInput[]): EventRecord[];
   close(): void;
 }
 
@@ -59,16 +71,37 @@ export function openSheepStore(options: SheepStoreOptions): SheepStore {
     throw error;
   }
 
+  const events = new EventLog(opened.db);
+  const projections = new ProjectionRunner(opened.db, events);
+
+  let projectionState: EnsureResult[];
+  try {
+    projectionState = projections.ensure();
+  } catch (error) {
+    opened.db.close();
+    throw error;
+  }
+
   const store: SheepStore = {
     db: opened.db,
     path,
     dataDir: options.dataDir,
+    events,
     blobs: new BlobStore(opened.db, join(options.dataDir, OBJECTS_DIRNAME)),
+    projections,
+    projectionState,
     driver: opened.driver,
     journalMode: opened.journalMode,
     ...(opened.fallbackReason === undefined ? {} : { fallbackReason: opened.fallbackReason }),
     migrations,
     schemaVersion: migrations.finalVersion,
+    record(inputs) {
+      return opened.db.transaction(() => {
+        const written = events.appendAll(inputs);
+        projections.catchUp();
+        return written;
+      });
+    },
     close() {
       if (opened.db.isOpen) opened.db.close();
     },

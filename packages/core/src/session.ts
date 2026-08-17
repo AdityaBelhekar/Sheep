@@ -28,8 +28,13 @@ export function isTerminalSessionStatus(status: SessionStatus): boolean {
 }
 
 export const sessionBudgetSchema = z.strictObject({
-  /** Hard ceiling. Reaching it halts the session rather than degrading it. */
-  capUsd: usdSchema,
+  /**
+   * Hard ceiling. Reaching it halts the session rather than degrading it.
+   *
+   * Null means no cap has been set — deliberately not 0, which would otherwise
+   * have to mean both "spend nothing" and "spend freely".
+   */
+  capUsd: usdSchema.nullable(),
   spentUsd: usdSchema,
 });
 export type SessionBudget = z.infer<typeof sessionBudgetSchema>;

@@ -71,6 +71,27 @@ export {
   type GcReport,
 } from './cas/blob-store';
 export {
+  PROJECTIONS,
+  ProjectionRunner,
+  type EnsureResult,
+  type ProjectionRunnerOptions,
+} from './projections/runner';
+export {
+  SESSIONS_DDL,
+  SESSIONS_PROJECTION,
+  countSessions,
+  getSession,
+  listMessages,
+  listSessions,
+  type SessionSummary,
+} from './projections/sessions';
+export type {
+  Projection,
+  ProjectionFailure,
+  ProjectionReport,
+  ProjectionStatus,
+} from './projections/types';
+export {
   BACKUP_DIRNAME,
   DATABASE_FILENAME,
   DEFAULT_BACKUP_RETENTION,

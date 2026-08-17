@@ -70,4 +70,21 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX blob_refs_owner_idx ON blob_refs (ref_kind, ref_id);
     `,
   },
+  {
+    version: 4,
+    name: 'projection_state',
+    up: `
+      -- Bookkeeping for derived tables: how far each projection has replayed,
+      -- and which shape it was built with. The projected tables themselves are
+      -- created by the projection that owns them, not by a migration — they
+      -- hold nothing the event log does not, so they can be dropped and rebuilt
+      -- at will, and a shape change is a rebuild rather than a schema upgrade.
+      CREATE TABLE projection_state (
+        name        TEXT PRIMARY KEY,
+        ddl_version INTEGER NOT NULL,
+        last_seq    INTEGER NOT NULL,
+        updated_at  TEXT NOT NULL
+      ) STRICT;
+    `,
+  },
 ];

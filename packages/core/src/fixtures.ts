@@ -30,7 +30,6 @@ export const ANTHROPIC_MODEL: ModelRef = {
   vendorId: 'anthropic',
   modelId: 'claude-opus-5',
   version: 'claude-opus-5-20260401',
-  displayName: 'Claude Opus 5',
 };
 
 export const OPENAI_MODEL: ModelRef = {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { idSchema, slugSchema, timestampSchema, titleSchema, usdSchema } from './primitives';
+import { idSchema, slugSchema, timestampSchema, usdSchema } from './primitives';
 
 /**
  * Which company's weights are answering.
@@ -25,6 +25,11 @@ export const modelIdSchema = z.string().min(1).max(200);
  * `version` is separate from `modelId` because providers move an alias like
  * `claude-opus-5` onto new weights; provenance needs whatever the response
  * actually reported.
+ *
+ * Every field here is provenance, and there is deliberately no display label:
+ * a name the user can rename has no business inside an immutable event, where
+ * it would freeze at whatever it happened to be. The UI joins the connection
+ * record for a label.
  */
 export const modelRefSchema = z.strictObject({
   /** The stored connection this model was reached through. */
@@ -32,7 +37,6 @@ export const modelRefSchema = z.strictObject({
   vendorId: vendorIdSchema,
   modelId: modelIdSchema,
   version: z.string().min(1).max(200).optional(),
-  displayName: titleSchema.optional(),
 });
 export type ModelRef = z.infer<typeof modelRefSchema>;
 
