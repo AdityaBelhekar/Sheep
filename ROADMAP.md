@@ -96,7 +96,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 
 ## Stage 1 — Core domain & storage `Phases 6–10`
 
-- [ ] **6. Domain types** — `packages/core`: sessions, phases, rounds, messages, claims, disputes as zod schemas + inferred TS types. Pure, no I/O.
+- [x] **6. Domain types** — `packages/core`: sessions, phases, rounds, messages, claims, disputes as zod schemas + inferred TS types. Pure, no I/O.
   *Done when:* every event type parses/round-trips in tests. → `feat(core): domain types and event schemas`
 
 - [ ] **7. Content-addressed store** — `.sheep/objects/<ab>/<sha256>`, put/get/has, streaming writes, reference counting, GC for unreferenced blobs.

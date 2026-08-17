@@ -1,6 +1,153 @@
 /**
  * @sheep/core — Pure domain types, schemas and rules. No I/O.
  *
- * Skeleton only; filled in by later roadmap phases.
+ * Everything Sheep stores or sends is described here first: the event log
+ * validates payloads against these schemas, projections rebuild rows from them,
+ * and the IPC layer re-uses them at the process boundary. One vocabulary, one
+ * definition of each shape, no drift between layers.
  */
 export const PACKAGE_NAME = '@sheep/core';
+
+export {
+  byteCountSchema,
+  confidenceSchema,
+  idSchema,
+  proseSchema,
+  sha256Schema,
+  slugSchema,
+  textSchema,
+  timestampSchema,
+  titleSchema,
+  tokenCountSchema,
+  usdSchema,
+  type Id,
+  type Sha256,
+  type Timestamp,
+} from './primitives';
+
+export {
+  modelIdSchema,
+  modelRefSchema,
+  rosterEntrySchema,
+  vendorIdSchema,
+  type ModelRef,
+  type RosterEntry,
+  type VendorId,
+} from './model';
+
+export {
+  isTerminalSessionStatus,
+  SESSION_STATUSES,
+  sessionBudgetSchema,
+  sessionSchema,
+  sessionStatusSchema,
+  TERMINAL_SESSION_STATUSES,
+  type Session,
+  type SessionBudget,
+  type SessionStatus,
+} from './session';
+
+export {
+  PARTICIPANT_ROLES,
+  PHASE_KINDS,
+  PHASE_OUTCOMES,
+  PHASE_STATUSES,
+  ROUND_MODES,
+  ROUND_OUTCOMES,
+  ROUND_STATUSES,
+  STANCES,
+  participantRoleSchema,
+  phaseKindSchema,
+  phaseOutcomeSchema,
+  phaseSchema,
+  phaseStatusSchema,
+  positionSchema,
+  roleAssignmentSchema,
+  roundModeSchema,
+  roundOutcomeSchema,
+  roundSchema,
+  roundStatusSchema,
+  stanceSchema,
+  type ParticipantRole,
+  type Phase,
+  type PhaseKind,
+  type PhaseOutcome,
+  type PhaseStatus,
+  type Position,
+  type RoleAssignment,
+  type Round,
+  type RoundMode,
+  type RoundOutcome,
+  type RoundStatus,
+  type Stance,
+} from './protocol';
+
+export {
+  messageAuthorSchema,
+  messageBodySchema,
+  messageSchema,
+  usageSchema,
+  type Message,
+  type MessageAuthor,
+  type MessageBody,
+  type Usage,
+} from './message';
+
+export {
+  CLAIM_STATUSES,
+  CLAIM_TYPES,
+  EVIDENCE_KINDS,
+  NON_ESTABLISHING_CLAIM_TYPES,
+  REQUIRED_EVIDENCE_KIND,
+  canEstablishAlone,
+  claimSchema,
+  claimStatusSchema,
+  claimTypeSchema,
+  evidenceKindSchema,
+  evidenceRefSchema,
+  type Claim,
+  type ClaimStatus,
+  type ClaimType,
+  type EvidenceKind,
+  type EvidenceRef,
+} from './claim';
+
+export {
+  CRITIQUE_AXES,
+  DISPUTE_OUTCOMES,
+  DISPUTE_SEVERITIES,
+  DISPUTE_STATUSES,
+  critiqueAxisSchema,
+  disputeOutcomeSchema,
+  disputeSchema,
+  disputeSeveritySchema,
+  disputeStatusSchema,
+  proposedTestSchema,
+  resolutionSchema,
+  type Dispute,
+  type DisputeOutcome,
+  type DisputeSeverity,
+  type DisputeStatus,
+  type CritiqueAxis,
+  type ProposedTest,
+  type Resolution,
+} from './dispute';
+
+export {
+  DOMAIN_EVENT_TYPES,
+  EVENT_PAYLOADS,
+  EventPayloadError,
+  UnknownEventTypeError,
+  domainEvent,
+  isDomainEventType,
+  isSessionScoped,
+  parseDomainEvent,
+  payloadSchemaFor,
+  safeParseDomainEvent,
+  sessionIdOf,
+  type DomainEvent,
+  type DomainEventType,
+  type EventPayload,
+  type EventPayloads,
+  type ParseEventResult,
+} from './events';
