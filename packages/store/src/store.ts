@@ -1,5 +1,6 @@
 import { copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { BlobStore, OBJECTS_DIRNAME } from './cas/blob-store';
 import type { Migration } from './migrations/definitions';
 import { runMigrations, type MigrationReport } from './migrations/runner';
 import { openDatabase, type DriverPreference } from './sqlite/open';
@@ -23,6 +24,8 @@ export interface SheepStore {
   readonly db: SqliteDatabase;
   readonly path: string;
   readonly dataDir: string;
+  /** Content-addressed blobs, indexed by the same database. */
+  readonly blobs: BlobStore;
   readonly driver: SqliteDriverName;
   readonly journalMode: string;
   /** Why the native driver was not used, when it was not. */
@@ -60,6 +63,7 @@ export function openSheepStore(options: SheepStoreOptions): SheepStore {
     db: opened.db,
     path,
     dataDir: options.dataDir,
+    blobs: new BlobStore(opened.db, join(options.dataDir, OBJECTS_DIRNAME)),
     driver: opened.driver,
     journalMode: opened.journalMode,
     ...(opened.fallbackReason === undefined ? {} : { fallbackReason: opened.fallbackReason }),

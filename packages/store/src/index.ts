@@ -57,6 +57,20 @@ export {
   type ReadEventsOptions,
 } from './events/log';
 export {
+  BlobNotFoundError,
+  BlobStore,
+  BlobStoreError,
+  DEFAULT_STALE_TEMP_MS,
+  OBJECTS_DIRNAME,
+  TEMP_DIRNAME,
+  type BlobInfo,
+  type BlobRef,
+  type BlobStat,
+  type BlobStoreOptions,
+  type GcOptions,
+  type GcReport,
+} from './cas/blob-store';
+export {
   BACKUP_DIRNAME,
   DATABASE_FILENAME,
   DEFAULT_BACKUP_RETENTION,

@@ -99,7 +99,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 - [x] **6. Domain types** — `packages/core`: sessions, phases, rounds, messages, claims, disputes as zod schemas + inferred TS types. Pure, no I/O.
   *Done when:* every event type parses/round-trips in tests. → `feat(core): domain types and event schemas`
 
-- [ ] **7. Content-addressed store** — `.sheep/objects/<ab>/<sha256>`, put/get/has, streaming writes, reference counting, GC for unreferenced blobs.
+- [x] **7. Content-addressed store** — `.sheep/objects/<ab>/<sha256>`, put/get/has, streaming writes, reference counting, GC for unreferenced blobs.
   *Done when:* identical content dedupes; GC removes only unreferenced objects. → `feat(store): content-addressed blob store with gc`
 
 - [ ] **8. Projections** — rebuild `sessions`/`messages` tables purely by replaying events; incremental catch-up on append.

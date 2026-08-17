@@ -46,4 +46,28 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX events_type_seq_idx    ON events (type, seq);
     `,
   },
+  {
+    version: 3,
+    name: 'blob_index',
+    up: `
+      CREATE TABLE blobs (
+        hash       TEXT PRIMARY KEY,
+        bytes      INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      ) STRICT;
+
+      -- One row per distinct holder rather than an integer counter: retaining
+      -- the same reference twice is then a no-op, which is what makes a
+      -- projection replay safe to run over an already-populated index.
+      CREATE TABLE blob_refs (
+        hash        TEXT NOT NULL REFERENCES blobs(hash) ON DELETE CASCADE,
+        ref_kind    TEXT NOT NULL,
+        ref_id      TEXT NOT NULL,
+        retained_at TEXT NOT NULL,
+        PRIMARY KEY (hash, ref_kind, ref_id)
+      ) STRICT;
+
+      CREATE INDEX blob_refs_owner_idx ON blob_refs (ref_kind, ref_id);
+    `,
+  },
 ];
