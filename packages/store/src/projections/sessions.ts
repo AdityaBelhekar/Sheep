@@ -1,4 +1,4 @@
-import type { DomainEvent, DomainEventType, Message, Session } from '@sheep/core';
+import type { DomainEvent, DomainEventType, Message, SessionSummary } from '@sheep/core';
 import type { EventRecord } from '../events/log';
 import type { SqliteDatabase } from '../sqlite/types';
 import type { Projection } from './types';
@@ -252,10 +252,7 @@ type MessageRow = {
   recorded_at: string;
 };
 
-/** A projected session row, plus the counts a list view wants. */
-export interface SessionSummary extends Session {
-  readonly messageCount: number;
-}
+export type { SessionSummary };
 
 const SESSION_COLUMNS =
   'session_id, title, question, status, budget_cap_usd, budget_spent_usd, message_count, created_at, updated_at';

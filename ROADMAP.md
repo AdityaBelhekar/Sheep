@@ -108,7 +108,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 - [x] **9. Keychain & settings** — keytar-backed credential storage, `credential_ref` indirection, app settings store, key redaction in logs.
   *Done when:* a secret saves to Windows Credential Manager; the DB contains only a reference; logs never leak it. → `feat(desktop): os keychain credentials and settings`
 
-- [ ] **10. App shell UI** — layout with the seven panes stubbed, routing, theme (light/dark), renderer reads a projection over IPC.
+- [x] **10. App shell UI** — layout with the seven panes stubbed, routing, theme (light/dark), renderer reads a projection over IPC.
   *Done when:* every pane is navigable and one pane renders real DB data. → `feat(ui): application shell and navigation`
 
 > **Stage gate:** data flows DB → projection → IPC → React, and secrets never touch SQLite.

@@ -1,8 +1,11 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { APP_NAME } from '../shared/product';
 import { openVault, runCredentialSelfTest } from './credentials';
 import { bindIpcRegistry, createIpcRegistry } from './ipc';
-import { logError } from './log';
+import { logError, logInfo } from './log';
 import { applyRendererSecurityPolicy } from './security';
 import { beginSmokeRun, expectSmokeCheck, isSmokeRun, recordSmokeCheck } from './smoke';
 import { closeStore, openStore, recordLaunch } from './store';
@@ -11,18 +14,36 @@ import { createMainWindow, rendererDevServerUrl } from './window';
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('dev.sheep.app');
 
+let smokeDataDir: string | undefined;
+
 if (isSmokeRun) {
-  expectSmokeCheck('store-ready');
-  expectSmokeCheck('event-log');
-  expectSmokeCheck('projections');
-  expectSmokeCheck('credential-vault');
-  expectSmokeCheck('credential-isolation');
-  expectSmokeCheck('log-redaction');
-  expectSmokeCheck('window-ready');
-  expectSmokeCheck('renderer-mounted');
-  expectSmokeCheck('ipc-ping');
-  expectSmokeCheck('ipc-channel-guard');
-  expectSmokeCheck('renderer-chain-status');
+  // A launch check that creates sessions and credentials must not do it in the
+  // user's own data directory. A throwaway one also makes every run start from a
+  // fresh database, so migrations are exercised from scratch and the counts the
+  // checks assert are deterministic.
+  smokeDataDir = mkdtempSync(join(tmpdir(), 'sheep-smoke-'));
+  app.setPath('userData', smokeDataDir);
+  app.setPath('sessionData', smokeDataDir);
+
+  for (const check of [
+    'store-ready',
+    'event-log',
+    'projections',
+    'credential-vault',
+    'credential-isolation',
+    'log-redaction',
+    'window-ready',
+    'renderer-mounted',
+    'ipc-ping',
+    'renderer-chain-status',
+    'renderer-navigation',
+    'renderer-projection',
+    'renderer-theme',
+    'ipc-channel-guard',
+  ]) {
+    expectSmokeCheck(check);
+  }
+
   beginSmokeRun((exitCode) => {
     app.exit(exitCode);
   });
@@ -83,5 +104,9 @@ if (!hasInstanceLock) {
 
   app.on('will-quit', () => {
     closeStore();
+    if (smokeDataDir) {
+      rmSync(smokeDataDir, { recursive: true, force: true });
+      logInfo(`smoke data directory removed: ${smokeDataDir}`);
+    }
   });
 }

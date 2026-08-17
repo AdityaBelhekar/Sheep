@@ -107,7 +107,7 @@ export function openSheepStore(options: SheepStoreOptions): SheepStore {
     schemaVersion: migrations.finalVersion,
     record(inputs) {
       return opened.db.transaction(() => {
-        const written = events.appendAll(inputs);
+        const written = events.appendAll(inputs.map(withPayloadSessionId));
         projections.catchUp();
         return written;
       });
@@ -117,6 +117,26 @@ export function openSheepStore(options: SheepStoreOptions): SheepStore {
     },
   };
   return store;
+}
+
+/**
+ * Mirrors a payload's own `sessionId` into the log's indexed column.
+ *
+ * Domain payloads are self-contained and name the session they belong to; the
+ * `events.session_id` column exists so that reading one session's history does
+ * not mean parsing every payload in the log. Deriving it here keeps the two from
+ * ever disagreeing, which they would if each caller had to remember to pass it.
+ */
+function withPayloadSessionId(input: AppendEventInput): AppendEventInput {
+  if (input.sessionId !== undefined) return input;
+
+  const payload = input.payload;
+  const sessionId =
+    typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+      ? payload['sessionId']
+      : undefined;
+
+  return { ...input, sessionId: typeof sessionId === 'string' ? sessionId : null };
 }
 
 /**

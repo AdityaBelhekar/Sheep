@@ -1,50 +1,58 @@
-import { useEffect, useState, type ReactElement } from 'react';
-import { createIpcClient, type IpcClient, type IpcResponse } from '@sheep/ipc';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { defaultSettings, type Theme } from '@sheep/core';
+import type { IpcClient, IpcResponse } from '@sheep/ipc';
 import logoUrl from '@resources/sheep.png';
-import { APP_NAME, APP_TAGLINE } from '@shared/product';
-
-type PingState =
-  | { kind: 'pending' }
-  | { kind: 'ok'; reply: IpcResponse<'sheep:ping'> & { roundTripMs: number } }
-  | { kind: 'error'; message: string };
+import { APP_NAME } from '@shared/product';
+import { PaneIcon } from './components/PaneIcon';
+import { ThemeToggle } from './components/ThemeToggle';
+import { useIpcClient, useRoute, useSystemPrefersDark } from './hooks';
+import { PANES, PANE_IDS } from '@shared/panes';
+import { SessionsPane } from './panes/SessionsPane';
+import { StubPane } from './panes/StubPane';
 
 type LogState =
   | { kind: 'pending' }
   | { kind: 'ok'; summary: IpcResponse<'sheep:event-log-summary'> }
   | { kind: 'error'; message: string };
 
-function useSheepClient(): IpcClient | undefined {
-  const [client] = useState(() => {
-    const bridge = window.sheep;
-    if (!bridge) return undefined;
-    return createIpcClient({ invoke: (channel, payload) => bridge.invoke(channel, payload) });
-  });
-  return client;
-}
+type PingState =
+  | { kind: 'pending' }
+  | { kind: 'ok'; roundTripMs: number; version: string }
+  | { kind: 'error'; message: string };
 
 export function App(): ReactElement {
-  const versions = window.sheep?.versions;
-  const client = useSheepClient();
-  const [ping, setPing] = useState<PingState>({ kind: 'pending' });
+  const client = useIpcClient();
+  const { paneId, navigate } = useRoute();
   const [log, setLog] = useState<LogState>({ kind: 'pending' });
+  const [ping, setPing] = useState<PingState>({ kind: 'pending' });
+  const { theme, resolved, setTheme, ready: themeReady } = useTheme(client);
+
+  /**
+   * Re-reads the log summary.
+   *
+   * Exposed to the panes because anything that appends events changes what the
+   * status bar is reporting, and a status bar that lags behind the store is
+   * worse than none — it invites trusting a number that is no longer true.
+   */
+  const refreshLog = useCallback(() => {
+    if (!client) return;
+    client
+      .invoke('sheep:event-log-summary', {})
+      .then((summary) => {
+        setLog({ kind: 'ok', summary });
+      })
+      .catch((error: unknown) => {
+        setLog({ kind: 'error', message: String(error) });
+      });
+  }, [client]);
 
   useEffect(() => {
     if (!client) {
-      setPing({ kind: 'error', message: 'preload bridge unavailable' });
       setLog({ kind: 'error', message: 'preload bridge unavailable' });
+      setPing({ kind: 'error', message: 'preload bridge unavailable' });
       return;
     }
-
     let cancelled = false;
-
-    client
-      .ping()
-      .then((reply) => {
-        if (!cancelled) setPing({ kind: 'ok', reply });
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) setPing({ kind: 'error', message: String(error) });
-      });
 
     client
       .invoke('sheep:event-log-summary', {})
@@ -55,60 +63,155 @@ export function App(): ReactElement {
         if (!cancelled) setLog({ kind: 'error', message: String(error) });
       });
 
+    client
+      .ping()
+      .then((reply) => {
+        if (!cancelled) {
+          setPing({ kind: 'ok', roundTripMs: reply.roundTripMs, version: reply.version });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setPing({ kind: 'error', message: String(error) });
+      });
+
     return () => {
       cancelled = true;
     };
   }, [client]);
 
   const chainState =
-    log.kind === 'ok'
-      ? log.summary.chain.ok
-        ? 'ok'
-        : 'error'
-      : log.kind === 'error'
-        ? 'error'
-        : 'pending';
+    log.kind === 'ok' ? (log.summary.chain.ok ? 'ok' : 'error') : (log.kind as 'pending' | 'error');
 
   return (
-    <main
+    <div
       className="shell"
       data-sheep-ready="true"
-      data-sheep-ping={ping.kind}
+      data-sheep-pane={paneId}
+      data-sheep-panes={PANE_IDS.join(',')}
       data-sheep-chain={chainState}
+      data-sheep-ping={ping.kind}
+      data-sheep-theme={theme}
     >
-      <img
-        className="shell__logo"
-        src={logoUrl}
-        alt={`${APP_NAME} logo`}
-        width={160}
-        height={160}
-      />
-      <h1 className="shell__title">{APP_NAME}</h1>
-      <p className="shell__tagline">{APP_TAGLINE}</p>
+      <header className="titlebar">
+        <div className="brand">
+          <img className="brand__logo" src={logoUrl} alt="" width={26} height={26} />
+          <span className="brand__name">{APP_NAME}</span>
+        </div>
+        <ThemeToggle theme={theme} resolved={resolved} onChange={setTheme} disabled={!themeReady} />
+      </header>
 
-      <p className="shell__status" data-status={ping.kind}>
-        {ping.kind === 'pending' && 'contacting main process…'}
-        {ping.kind === 'ok' &&
-          `main process replied in ${String(ping.reply.roundTripMs)} ms — ${ping.reply.app} ${ping.reply.version}`}
-        {ping.kind === 'error' && `IPC failed: ${ping.message}`}
-      </p>
+      <div className="body">
+        <nav className="nav" aria-label="Work surfaces">
+          {PANES.map((pane) => (
+            <button
+              key={pane.id}
+              type="button"
+              className="nav__item"
+              aria-current={pane.id === paneId ? 'page' : undefined}
+              data-sheep-nav={pane.id}
+              onClick={() => {
+                navigate(pane.id);
+              }}
+            >
+              <PaneIcon pane={pane.id} />
+              <span className="nav__label">{pane.label}</span>
+            </button>
+          ))}
+        </nav>
 
-      <p className="shell__status" data-status={chainState}>
-        {log.kind === 'pending' && 'verifying the event log…'}
-        {log.kind === 'ok' &&
-          `${String(log.summary.count)} event${log.summary.count === 1 ? '' : 's'} · chain ${
-            log.summary.chain.ok
-              ? `verified to seq ${String(log.summary.head?.seq ?? 0)}`
-              : `BROKEN (${String(log.summary.chain.failures.length)} failure${log.summary.chain.failures.length === 1 ? '' : 's'})`
-          } · ${log.summary.driver} ${log.summary.journalMode} · schema v${String(log.summary.schemaVersion)}`}
-        {log.kind === 'error' && `event log unavailable: ${log.message}`}
-      </p>
+        <main className="content">
+          {paneId === 'sessions' ? (
+            <SessionsPane client={client} onStoreChanged={refreshLog} />
+          ) : (
+            <StubPane paneId={paneId} />
+          )}
+        </main>
+      </div>
 
-      <footer className="shell__footer">
-        {versions
-          ? `Electron ${versions.electron} · Chromium ${versions.chrome} · Node ${versions.node}`
-          : 'preload bridge unavailable'}
+      <footer className="statusbar">
+        <span className="statusbar__item" data-status={chainState}>
+          {log.kind === 'pending' && 'verifying the event log…'}
+          {log.kind === 'ok' &&
+            `chain ${
+              log.summary.chain.ok
+                ? `verified to seq ${String(log.summary.head?.seq ?? 0)}`
+                : `BROKEN (${String(log.summary.chain.failures.length)})`
+            }`}
+          {log.kind === 'error' && `event log unavailable: ${log.message}`}
+        </span>
+        {log.kind === 'ok' && (
+          <>
+            <span className="statusbar__item">
+              {log.summary.count} event{log.summary.count === 1 ? '' : 's'}
+            </span>
+            <span className="statusbar__item">
+              {log.summary.driver} · {log.summary.journalMode} · schema v{log.summary.schemaVersion}
+            </span>
+          </>
+        )}
+        <span className="statusbar__spacer" />
+        <span className="statusbar__item" data-status={ping.kind}>
+          {ping.kind === 'pending' && 'contacting main…'}
+          {ping.kind === 'ok' && `main ${ping.version} · ${String(ping.roundTripMs)} ms`}
+          {ping.kind === 'error' && 'main process unreachable'}
+        </span>
+        <span className="statusbar__item statusbar__item--muted">local-first · no telemetry</span>
       </footer>
-    </main>
+    </div>
   );
+}
+
+/**
+ * Theme state, persisted through the settings store.
+ *
+ * The stored preference is the source of truth, so it survives a restart; the
+ * chosen value is applied to `document.documentElement` rather than passed down,
+ * because CSS custom properties are what actually do the theming.
+ */
+function useTheme(client: IpcClient | undefined): {
+  theme: Theme;
+  resolved: 'light' | 'dark';
+  setTheme: (theme: Theme) => void;
+  ready: boolean;
+} {
+  const [theme, setThemeState] = useState<Theme>(defaultSettings()['ui.theme']);
+  const [ready, setReady] = useState(false);
+  const prefersDark = useSystemPrefersDark();
+  const resolved: 'light' | 'dark' = theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme;
+
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+
+    client
+      .invoke('sheep:settings-read', {})
+      .then((reply) => {
+        if (cancelled) return;
+        setThemeState(reply.settings['ui.theme']);
+        setReady(true);
+      })
+      .catch(() => {
+        // A settings read that fails leaves the default in place; the app is
+        // still usable, it simply will not remember the choice.
+        if (!cancelled) setReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  useEffect(() => {
+    document.documentElement.dataset['theme'] = resolved;
+    document.documentElement.style.colorScheme = resolved;
+  }, [resolved]);
+
+  const setTheme = (next: Theme): void => {
+    setThemeState(next);
+    void client?.invoke('sheep:settings-write', { key: 'ui.theme', value: next }).catch(() => {
+      // Already applied locally; failing to persist is not worth interrupting for.
+    });
+  };
+
+  return { theme, resolved, setTheme, ready };
 }

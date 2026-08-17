@@ -57,3 +57,14 @@ export const sessionSchema = z.strictObject({
   updatedAt: timestampSchema,
 });
 export type Session = z.infer<typeof sessionSchema>;
+
+/**
+ * A session plus the counts a list view needs.
+ *
+ * Denormalised deliberately: the projection can maintain the count as it
+ * replays, which spares every list render a second query.
+ */
+export const sessionSummarySchema = sessionSchema.extend({
+  messageCount: z.number().int().nonnegative(),
+});
+export type SessionSummary = z.infer<typeof sessionSummarySchema>;

@@ -41,10 +41,12 @@ export {
   sessionBudgetSchema,
   sessionSchema,
   sessionStatusSchema,
+  sessionSummarySchema,
   TERMINAL_SESSION_STATUSES,
   type Session,
   type SessionBudget,
   type SessionStatus,
+  type SessionSummary,
 } from './session';
 
 export {

@@ -2,8 +2,12 @@ import { z } from 'zod';
 import {
   credentialKindSchema,
   credentialRefSchema,
+  idSchema,
+  proseSchema,
+  sessionSummarySchema,
   settingUpdateSchema,
   settingsSchema,
+  titleSchema,
   vaultBackendSchema,
 } from '@sheep/core';
 import type { IpcChannel } from './channels';
@@ -89,6 +93,28 @@ export const IPC_CONTRACTS = {
           lastVerifiedAt: z.string().nullable(),
         }),
       ),
+    }),
+  },
+  /**
+   * A read straight off the `sessions` projection.
+   *
+   * The renderer is given projected rows, never a query — it has no idea SQLite
+   * exists, and could not reach it if it wanted to.
+   */
+  'sheep:sessions-list': {
+    request: z.object({ limit: z.number().int().positive().max(500).optional() }),
+    response: z.object({
+      sessions: z.array(sessionSummarySchema),
+      /** How far the projection has replayed, for the status bar. */
+      projectedThroughSeq: z.number().int().nonnegative(),
+    }),
+  },
+  'sheep:session-create': {
+    request: z.object({ title: titleSchema, question: proseSchema }),
+    response: z.object({
+      sessionId: idSchema,
+      sessions: z.array(sessionSummarySchema),
+      projectedThroughSeq: z.number().int().nonnegative(),
     }),
   },
 } as const satisfies Record<IpcChannel, IpcContract>;

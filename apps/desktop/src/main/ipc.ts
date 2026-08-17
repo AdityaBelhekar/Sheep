@@ -1,5 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { app, ipcMain } from 'electron';
+import { domainEvent } from '@sheep/core';
 import { IpcError, IpcRegistry } from '@sheep/ipc';
+import { listSessions } from '@sheep/store';
 import { APP_NAME } from '../shared/product';
 import { getVault } from './credentials';
 import { getEventLog, getStore } from './store';
@@ -59,7 +62,41 @@ export function createIpcRegistry(): IpcRegistry {
             lastVerifiedAt: record.lastVerifiedAt,
           })),
       };
+    })
+    .register('sheep:sessions-list', (request) => readSessions(request.limit))
+    .register('sheep:session-create', (request) => {
+      const store = getStore();
+      const sessionId = randomUUID();
+
+      // Both events land in one transaction with the projection they feed, so
+      // the reply below cannot describe a state the log does not yet contain.
+      store.record([
+        domainEvent('session.created', {
+          sessionId,
+          title: request.title,
+          question: request.question,
+        }),
+        domainEvent('session.budget-set', {
+          sessionId,
+          capUsd: store.settings.get('budget.defaultCapUsd'),
+        }),
+      ]);
+
+      return { sessionId, ...readSessions() };
     });
+}
+
+/** The projected session list, with how far the projection has replayed. */
+function readSessions(limit?: number): {
+  sessions: ReturnType<typeof listSessions>;
+  projectedThroughSeq: number;
+} {
+  const store = getStore();
+  const status = store.projections.status().find((entry) => entry.name === 'sessions');
+  return {
+    sessions: limit === undefined ? listSessions(store.db) : listSessions(store.db, limit),
+    projectedThroughSeq: status?.lastSeq ?? 0,
+  };
 }
 
 /**
