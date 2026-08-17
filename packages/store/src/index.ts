@@ -71,6 +71,13 @@ export {
   type GcReport,
 } from './cas/blob-store';
 export {
+  CredentialRegistry,
+  CredentialRegistryError,
+  newCredentialRef,
+  type RegisterCredentialInput,
+} from './credentials';
+export { SettingsStore } from './settings';
+export {
   PROJECTIONS,
   ProjectionRunner,
   type EnsureResult,

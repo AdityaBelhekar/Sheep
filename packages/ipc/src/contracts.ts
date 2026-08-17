@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import {
+  credentialKindSchema,
+  credentialRefSchema,
+  settingUpdateSchema,
+  settingsSchema,
+  vaultBackendSchema,
+} from '@sheep/core';
 import type { IpcChannel } from './channels';
 
 /** A request/response pair of schemas for one channel. */
@@ -51,6 +58,37 @@ export const IPC_CONTRACTS = {
           }),
         ),
       }),
+    }),
+  },
+  'sheep:settings-read': {
+    request: z.object({}),
+    response: z.object({ settings: settingsSchema }),
+  },
+  'sheep:settings-write': {
+    // Typed per key, so a theme update cannot carry a number.
+    request: settingUpdateSchema,
+    response: z.object({ settings: settingsSchema }),
+  },
+  /**
+   * Which credentials exist and where they are kept — never what they are.
+   * There is no channel that returns a secret, and no place in this contract a
+   * secret could travel: the renderer's job is to say which credential to use,
+   * and the main process resolves it.
+   */
+  'sheep:credential-summary': {
+    request: z.object({}),
+    response: z.object({
+      backend: z.union([vaultBackendSchema, z.literal('none')]),
+      description: z.string().min(1),
+      credentials: z.array(
+        z.object({
+          credentialRef: credentialRefSchema,
+          label: z.string().min(1),
+          vendorId: z.string().min(1),
+          kind: credentialKindSchema,
+          lastVerifiedAt: z.string().nullable(),
+        }),
+      ),
     }),
   },
 } as const satisfies Record<IpcChannel, IpcContract>;

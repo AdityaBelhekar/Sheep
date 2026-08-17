@@ -105,7 +105,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 - [x] **8. Projections** — rebuild `sessions`/`messages` tables purely by replaying events; incremental catch-up on append.
   *Done when:* dropping all projection tables and replaying reproduces identical state. → `feat(store): event replay projections`
 
-- [ ] **9. Keychain & settings** — keytar-backed credential storage, `credential_ref` indirection, app settings store, key redaction in logs.
+- [x] **9. Keychain & settings** — keytar-backed credential storage, `credential_ref` indirection, app settings store, key redaction in logs.
   *Done when:* a secret saves to Windows Credential Manager; the DB contains only a reference; logs never leak it. → `feat(desktop): os keychain credentials and settings`
 
 - [ ] **10. App shell UI** — layout with the seven panes stubbed, routing, theme (light/dark), renderer reads a projection over IPC.

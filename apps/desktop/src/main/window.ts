@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { BrowserWindow, nativeImage, shell } from 'electron';
 import { APP_NAME } from '../shared/product';
+import { logInfo, logWarn } from './log';
 import { bundlePath, resourcePath } from './paths';
 import { isSmokeRun, recordSmokeCheck } from './smoke';
 
@@ -147,10 +148,8 @@ async function captureScreenshot(window: BrowserWindow): Promise<void> {
   try {
     const image = await window.webContents.capturePage();
     await writeFile(target, image.toPNG());
-    process.stdout.write(`sheep-smoke: screenshot ${target}\n`);
+    logInfo(`smoke screenshot written to ${target}`);
   } catch (error) {
-    process.stderr.write(
-      `sheep-smoke: screenshot failed - ${error instanceof Error ? error.message : String(error)}\n`,
-    );
+    logWarn('smoke screenshot failed -', error);
   }
 }

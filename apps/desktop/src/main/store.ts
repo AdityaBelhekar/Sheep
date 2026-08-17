@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { domainEvent } from '@sheep/core';
 import { openSheepStore, type EventLog, type SheepStore } from '@sheep/store';
+import { logWarn } from './log';
 import { recordSmokeCheck } from './smoke';
 
 let store: SheepStore | undefined;
@@ -28,7 +29,7 @@ export function openStore(): SheepStore {
   reportProjections(opened);
 
   if (opened.fallbackReason !== undefined) {
-    process.stdout.write(`sheep: sqlite fell back to wasm - ${opened.fallbackReason}\n`);
+    logWarn('sqlite fell back to the wasm driver -', opened.fallbackReason);
   }
   return opened;
 }
@@ -65,8 +66,9 @@ function reportProjections(opened: SheepStore): void {
 
   const failures = opened.projectionState.flatMap((result) => result.report.failures);
   for (const failure of failures.slice(0, 5)) {
-    process.stderr.write(
-      `sheep: projection could not read event ${String(failure.seq)} (${failure.type}) - ${failure.detail}\n`,
+    logWarn(
+      `projection could not read event ${String(failure.seq)} (${failure.type}) -`,
+      failure.detail,
     );
   }
   recordSmokeCheck('projections', failures.length === 0, detail);
@@ -99,8 +101,9 @@ export function recordLaunch(): void {
 
   if (!verification.ok) {
     for (const failure of verification.failures.slice(0, 5)) {
-      process.stderr.write(
-        `sheep: event log integrity failure at seq ${String(failure.seq)} - ${failure.reason}: ${failure.detail}\n`,
+      logWarn(
+        `event log integrity failure at seq ${String(failure.seq)} - ${failure.reason}:`,
+        failure.detail,
       );
     }
   }

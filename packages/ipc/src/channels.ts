@@ -8,7 +8,13 @@
  */
 import { UnknownChannelError } from './errors';
 
-export const IPC_CHANNELS = ['sheep:ping', 'sheep:event-log-summary'] as const;
+export const IPC_CHANNELS = [
+  'sheep:ping',
+  'sheep:event-log-summary',
+  'sheep:settings-read',
+  'sheep:settings-write',
+  'sheep:credential-summary',
+] as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number];
 

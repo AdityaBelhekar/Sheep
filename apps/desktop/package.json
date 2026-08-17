@@ -26,5 +26,8 @@
     "electron": "^43.4.0",
     "electron-vite": "^5.0.0",
     "vite": "^7.3.6"
+  },
+  "optionalDependencies": {
+    "keytar": "^7.9.0"
   }
 }

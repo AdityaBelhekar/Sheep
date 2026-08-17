@@ -87,4 +87,32 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 5,
+    name: 'settings_and_credential_refs',
+    up: `
+      CREATE TABLE settings (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      -- Credentials by reference only. There is no column here a secret could
+      -- occupy: what is stored is a handle naming an entry in the operating
+      -- system's own credential store, so this file can be copied, backed up or
+      -- attached to a bug report without carrying anybody's API key.
+      CREATE TABLE credentials (
+        credential_ref   TEXT PRIMARY KEY,
+        label            TEXT NOT NULL,
+        vendor_id        TEXT NOT NULL,
+        kind             TEXT NOT NULL,
+        backend          TEXT NOT NULL,
+        created_at       TEXT NOT NULL,
+        updated_at       TEXT NOT NULL,
+        last_verified_at TEXT
+      ) STRICT;
+
+      CREATE INDEX credentials_vendor_idx ON credentials (vendor_id, label);
+    `,
+  },
 ];

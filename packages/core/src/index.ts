@@ -134,6 +134,42 @@ export {
 } from './dispute';
 
 export {
+  CREDENTIAL_KINDS,
+  CREDENTIAL_REF_PREFIX,
+  CREDENTIAL_SERVICE,
+  VAULT_BACKENDS,
+  credentialKindSchema,
+  credentialRecordSchema,
+  credentialRefSchema,
+  isCredentialRef,
+  vaultBackendSchema,
+  type CredentialKind,
+  type CredentialRecord,
+  type CredentialRef,
+  type VaultBackend,
+} from './credential';
+
+export { MINIMUM_SECRET_LENGTH, REDACTED, Redactor, SECRET_PATTERN_NAMES } from './redact';
+
+export {
+  SETTING_DEFAULTS,
+  SETTING_KEYS,
+  SettingError,
+  THEMES,
+  defaultSettings,
+  isSettingKey,
+  parseSetting,
+  settingSchemaFor,
+  settingUpdateSchema,
+  settingsSchema,
+  themeSchema,
+  type SettingKey,
+  type SettingUpdate,
+  type Settings,
+  type Theme,
+} from './settings';
+
+export {
   DOMAIN_EVENT_TYPES,
   EVENT_PAYLOADS,
   EventPayloadError,

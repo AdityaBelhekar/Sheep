@@ -1,10 +1,12 @@
 import { copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { BlobStore, OBJECTS_DIRNAME } from './cas/blob-store';
+import { CredentialRegistry } from './credentials';
 import { EventLog, type AppendEventInput, type EventRecord } from './events/log';
 import type { Migration } from './migrations/definitions';
 import { runMigrations, type MigrationReport } from './migrations/runner';
 import { ProjectionRunner, type EnsureResult } from './projections/runner';
+import { SettingsStore } from './settings';
 import { openDatabase, type DriverPreference } from './sqlite/open';
 import type { SqliteDatabase, SqliteDriverName } from './sqlite/types';
 
@@ -33,6 +35,9 @@ export interface SheepStore {
   /** Derived tables, brought up to date on open. */
   readonly projections: ProjectionRunner;
   readonly projectionState: readonly EnsureResult[];
+  readonly settings: SettingsStore;
+  /** Credential handles. Never the credentials themselves. */
+  readonly credentials: CredentialRegistry;
   readonly driver: SqliteDriverName;
   readonly journalMode: string;
   /** Why the native driver was not used, when it was not. */
@@ -74,9 +79,12 @@ export function openSheepStore(options: SheepStoreOptions): SheepStore {
   const events = new EventLog(opened.db);
   const projections = new ProjectionRunner(opened.db, events);
 
+  const settings = new SettingsStore(opened.db);
+
   let projectionState: EnsureResult[];
   try {
     projectionState = projections.ensure();
+    settings.pruneUnknown();
   } catch (error) {
     opened.db.close();
     throw error;
@@ -90,6 +98,8 @@ export function openSheepStore(options: SheepStoreOptions): SheepStore {
     blobs: new BlobStore(opened.db, join(options.dataDir, OBJECTS_DIRNAME)),
     projections,
     projectionState,
+    settings,
+    credentials: new CredentialRegistry(opened.db),
     driver: opened.driver,
     journalMode: opened.journalMode,
     ...(opened.fallbackReason === undefined ? {} : { fallbackReason: opened.fallbackReason }),

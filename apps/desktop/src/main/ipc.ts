@@ -1,6 +1,7 @@
 import { app, ipcMain } from 'electron';
 import { IpcError, IpcRegistry } from '@sheep/ipc';
 import { APP_NAME } from '../shared/product';
+import { getVault } from './credentials';
 import { getEventLog, getStore } from './store';
 
 /** Builds the main-process registry with every handler this app serves. */
@@ -36,6 +37,27 @@ export function createIpcRegistry(): IpcRegistry {
             detail: failure.detail,
           })),
         },
+      };
+    })
+    .register('sheep:settings-read', () => ({ settings: getStore().settings.getAll() }))
+    .register('sheep:settings-write', (request) => ({
+      settings: getStore().settings.apply(request),
+    }))
+    .register('sheep:credential-summary', () => {
+      const vault = getVault();
+      return {
+        backend: vault.backend,
+        description: vault.description,
+        // Handles and labels only. No channel in this app returns a secret.
+        credentials: getStore()
+          .credentials.list()
+          .map((record) => ({
+            credentialRef: record.credentialRef,
+            label: record.label,
+            vendorId: record.vendorId,
+            kind: record.kind,
+            lastVerifiedAt: record.lastVerifiedAt,
+          })),
       };
     });
 }

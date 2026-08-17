@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@sheep/core": "*",
     "zod": "^4.4.3"
   }
 }

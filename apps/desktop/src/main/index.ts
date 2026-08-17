@@ -1,6 +1,8 @@
 import { app, BrowserWindow } from 'electron';
 import { APP_NAME } from '../shared/product';
+import { openVault, runCredentialSelfTest } from './credentials';
 import { bindIpcRegistry, createIpcRegistry } from './ipc';
+import { logError } from './log';
 import { applyRendererSecurityPolicy } from './security';
 import { beginSmokeRun, expectSmokeCheck, isSmokeRun, recordSmokeCheck } from './smoke';
 import { closeStore, openStore, recordLaunch } from './store';
@@ -13,6 +15,9 @@ if (isSmokeRun) {
   expectSmokeCheck('store-ready');
   expectSmokeCheck('event-log');
   expectSmokeCheck('projections');
+  expectSmokeCheck('credential-vault');
+  expectSmokeCheck('credential-isolation');
+  expectSmokeCheck('log-redaction');
   expectSmokeCheck('window-ready');
   expectSmokeCheck('renderer-mounted');
   expectSmokeCheck('ipc-ping');
@@ -38,17 +43,30 @@ if (!hasInstanceLock) {
   void app.whenReady().then(() => {
     applyRendererSecurityPolicy(Boolean(rendererDevServerUrl));
 
+    let storeOpened = false;
     try {
       openStore();
       recordLaunch();
+      storeOpened = true;
     } catch (error) {
       // A broken store is worth surfacing loudly, but the window still opens
       // so the failure can be shown rather than the app vanishing.
       const message = error instanceof Error ? error.message : String(error);
-      process.stderr.write(`sheep: could not open the store - ${message}\n`);
-      recordSmokeCheck('store-ready', false, message);
-      recordSmokeCheck('event-log', false, message);
-      recordSmokeCheck('projections', false, message);
+      logError('could not open the store -', error);
+      for (const check of ['store-ready', 'event-log', 'projections']) {
+        recordSmokeCheck(check, false, message);
+      }
+    }
+
+    openVault();
+    if (isSmokeRun) {
+      if (storeOpened) {
+        void runCredentialSelfTest();
+      } else {
+        for (const check of ['credential-vault', 'credential-isolation', 'log-redaction']) {
+          recordSmokeCheck(check, false, 'the store did not open');
+        }
+      }
     }
 
     bindIpcRegistry(createIpcRegistry());
