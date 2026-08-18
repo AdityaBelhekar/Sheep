@@ -212,35 +212,54 @@ describe.each(TESTABLE_DRIVERS)('CredentialRegistry on %s', (driver) => {
     }
   });
 
-  it('leaves no trace of a secret in the database file', () => {
+  // A scan for absence proves nothing unless the scan is known to be capable of
+  // finding the thing. This is the positive control for the test that follows.
+  it('detects a secret written into the database file', () => {
     const store = openStore(driver);
     const path = store.path;
     try {
-      // The realistic path: a secret goes to the OS keychain (not modelled here),
-      // and only the handle it was filed under reaches the database.
-      const record = store.credentials.register({
+      store.db.exec('CREATE TABLE leaky (value TEXT NOT NULL) STRICT');
+      store.db.run('INSERT INTO leaky (value) VALUES (?)', [SECRET]);
+      store.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    } finally {
+      store.close();
+    }
+    expect(databaseFilesContain(path, SECRET)).toBe(true);
+  });
+
+  it('leaves no trace of a secret in the database file when a credential is saved', () => {
+    const store = openStore(driver);
+    const path = store.path;
+    try {
+      // The real flow, with a Map standing in for the OS credential store: the
+      // secret goes to the vault, and only the handle it was filed under is
+      // ever handed to the database.
+      const vault = new Map<string, string>();
+      const credentialRef = newCredentialRef();
+      vault.set(credentialRef, SECRET);
+
+      store.credentials.register({
         label: 'Anthropic (personal)',
         vendorId: 'anthropic',
         kind: 'api-key',
         backend: 'os-keychain',
+        credentialRef,
       });
       store.settings.set('ui.theme', 'dark');
-      store.credentials.markVerified(record.credentialRef);
+      store.credentials.markVerified(credentialRef);
 
-      // Flush the WAL so everything written is actually in the file.
+      // The secret really does exist in this process, and really is retrievable
+      // by its handle — so its absence from the file below is a fact about the
+      // registry rather than about the test never having had a secret.
+      expect(vault.get(credentialRef)).toBe(SECRET);
+      expect(store.credentials.get(credentialRef)?.lastVerifiedAt).not.toBeNull();
+
       store.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-      expect(store.credentials.get(record.credentialRef)?.lastVerifiedAt).not.toBeNull();
     } finally {
       store.close();
     }
 
-    const needle = Buffer.from(SECRET, 'utf8');
-    for (const file of [path, `${path}-wal`, `${path}-shm`]) {
-      if (!existsSync(file)) continue;
-      expect(readFileSync(file).includes(needle), `${file} must not contain the secret`).toBe(
-        false,
-      );
-    }
+    expect(databaseFilesContain(path, SECRET)).toBe(false);
   });
 
   it('rejects a handle that is not a credential reference', () => {
@@ -327,3 +346,11 @@ describe.each(TESTABLE_DRIVERS)('CredentialRegistry on %s', (driver) => {
     }
   });
 });
+
+/** True when the database, its WAL or its shared-memory file holds `needle`. */
+function databaseFilesContain(databasePath: string, needle: string): boolean {
+  const bytes = Buffer.from(needle, 'utf8');
+  return [databasePath, `${databasePath}-wal`, `${databasePath}-shm`]
+    .filter((file) => existsSync(file))
+    .some((file) => readFileSync(file).includes(bytes));
+}
