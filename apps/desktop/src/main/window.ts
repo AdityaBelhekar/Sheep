@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { BrowserWindow, nativeImage, shell } from 'electron';
+import { BrowserWindow, nativeImage, nativeTheme, shell } from 'electron';
 import { PANE_IDS } from '../shared/panes';
 import { APP_NAME } from '../shared/product';
 import { logInfo, logWarn } from './log';
@@ -20,7 +20,10 @@ export function createMainWindow(): BrowserWindow {
     minHeight: 640,
     show: false,
     title: APP_NAME,
-    backgroundColor: '#0b0d10',
+    // The colour Electron paints before any HTML exists. Hardcoding the dark
+    // one made a light-theme launch flash black; matching the OS gets the first
+    // frame close enough that the stylesheet's own first paint is continuous.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0d10' : '#f6f7f9',
     autoHideMenuBar: true,
     icon: nativeImage.createFromPath(resourcePath('sheep.png')),
     webPreferences: {

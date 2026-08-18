@@ -6,6 +6,14 @@
  *
  * Light is the base declaration and dark is the override, so a missing token
  * falls back to something legible rather than to nothing.
+ *
+ * The dark palette is declared twice, on purpose. `data-theme` cannot be set
+ * until React has mounted and read the stored preference over IPC, and the
+ * window is on screen well before that — so without a `prefers-color-scheme`
+ * rule to paint against first, a dark-theme user watches the app flash white
+ * for the length of an IPC round-trip. The media query is what the first paint
+ * uses; the attribute rule is what a stored preference that disagrees with the
+ * OS overrides it with afterwards.
  */
 :root {
   --bg: #f6f7f9;
@@ -31,6 +39,30 @@
   color-scheme: light;
 }
 
+/* First paint, before the stored preference is known. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0b0d10;
+    --surface: #14171c;
+    --surface-raised: #1a1e24;
+    --border: #262b33;
+    --border-strong: #363d47;
+    --fg: #e8eaed;
+    --fg-muted: #9aa3b0;
+    --fg-faint: #6f7885;
+    --accent: #7ee7a8;
+    --accent-fg: #08130d;
+    --accent-soft: #16241c;
+    --ok: #7ee7a8;
+    --warn: #e8c37e;
+    --error: #ff8a8a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
+
+    color-scheme: dark;
+  }
+}
+
+/* An explicit choice, which wins over the OS preference. */
 :root[data-theme='dark'] {
   --bg: #0b0d10;
   --surface: #14171c;
