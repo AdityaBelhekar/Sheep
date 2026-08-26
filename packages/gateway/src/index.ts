@@ -92,6 +92,44 @@ export { AdapterRegistry, type AdapterRegistryOptions, type ModelHandle } from '
 export { resolveSecret, type SecretProvider } from './credentials';
 
 export {
+  computeBackoffMs,
+  DEFAULT_BACKOFF,
+  isRetryable,
+  retryDelayMs,
+  sleep,
+  type BackoffOptions,
+  type Sleep,
+} from './resilience/backoff';
+
+export { TokenBucket, type TokenBucketOptions } from './resilience/token-bucket';
+
+export {
+  CIRCUIT_STATES,
+  CircuitBreaker,
+  type CircuitBreakerOptions,
+  type CircuitState,
+} from './resilience/circuit-breaker';
+
+export {
+  canonicalJson,
+  ExchangeRecorder,
+  hashOf,
+  memoryBlobStore,
+  replayDeltas,
+  replayTranscript,
+  type BlobPut,
+  type ExchangeRecord,
+  type RecordedRequest,
+} from './resilience/recorder';
+
+export {
+  ResilientAdapter,
+  withResilience,
+  type ResilienceOptions,
+  type RetryOptions,
+} from './resilience/resilient-adapter';
+
+export {
   HttpClient,
   type FetchLike,
   type HeaderProvider,

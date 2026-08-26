@@ -132,7 +132,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 - [x] **15. Local models** — Ollama, llama.cpp server, LM Studio; localhost autodetect; graceful absence (none are installed on this machine).
   *Done when:* Sheep detects a running Ollama, and shows a clean "not found" state when it isn't. → `feat(gateway): local model adapters with autodetect`
 
-- [ ] **16. Resilience layer** — per-provider token-bucket rate limiting, jittered exponential backoff, circuit breaker, full request/response recording to CAS by hash.
+- [x] **16. Resilience layer** — per-provider token-bucket rate limiting, jittered exponential backoff, circuit breaker, full request/response recording to CAS by hash.
   *Done when:* a 429-injecting mock provider is survived without data loss and the exchange replays from CAS. → `feat(gateway): rate limiting, retry and circuit breaker`
 
 - [ ] **17. Cost accounting & budget governor** — per-model pricing table, pre-run estimate, live spend, hard caps with halt-and-resume.
