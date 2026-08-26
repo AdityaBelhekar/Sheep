@@ -18,6 +18,12 @@ export const GATEWAY_ERROR_CODES = {
   streamProtocol: 'GATEWAY_STREAM_PROTOCOL',
   pricingUnknown: 'GATEWAY_PRICING_UNKNOWN',
   cancelled: 'GATEWAY_CANCELLED',
+  provider: 'GATEWAY_PROVIDER_ERROR',
+  transport: 'GATEWAY_TRANSPORT_ERROR',
+  rateLimited: 'GATEWAY_RATE_LIMITED',
+  circuitOpen: 'GATEWAY_CIRCUIT_OPEN',
+  budgetExceeded: 'GATEWAY_BUDGET_EXCEEDED',
+  credential: 'GATEWAY_CREDENTIAL_ERROR',
 } as const;
 
 export type GatewayErrorCode = (typeof GATEWAY_ERROR_CODES)[keyof typeof GATEWAY_ERROR_CODES];
@@ -127,5 +133,118 @@ export class StreamCancelledError extends GatewayError {
 
   constructor(readonly adapterId: string) {
     super(`Stream cancelled by the caller on adapter: ${adapterId}`);
+  }
+}
+
+/**
+ * The provider answered, and the answer was a failure.
+ *
+ * `retryable` is decided once, here, from the status and the vendor's own error
+ * type — so the resilience layer never has to know which vendor it is wrapping,
+ * and a new adapter inherits correct retry behaviour by constructing this
+ * correctly rather than by being added to a list somewhere else.
+ */
+export class ProviderError extends GatewayError {
+  readonly code = GATEWAY_ERROR_CODES.provider;
+  /** The vendor's machine-readable error type, when it sends one. */
+  readonly providerType: string | undefined;
+  readonly retryable: boolean;
+  /** From `retry-after`, in milliseconds. Honoured before any backoff. */
+  readonly retryAfterMs: number | undefined;
+  /** The raw body, kept for the CAS record. Never contains credentials. */
+  readonly body: string | undefined;
+
+  constructor(
+    readonly adapterId: string,
+    readonly status: number,
+    readonly providerMessage: string,
+    options: {
+      readonly providerType?: string;
+      readonly retryable?: boolean;
+      readonly retryAfterMs?: number;
+      readonly body?: string;
+    } = {},
+  ) {
+    super(`${adapterId} returned ${String(status)}: ${providerMessage}`);
+    this.providerType = options.providerType;
+    this.retryable = options.retryable ?? isRetryableStatus(status);
+    this.retryAfterMs = options.retryAfterMs;
+    this.body = options.body;
+  }
+}
+
+/**
+ * 408 request timeout, 409 conflict, 425 too early, 429 too many requests, and
+ * anything the server admits is its own fault.
+ */
+export function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+/** The request never got an answer: DNS, TLS, socket, or a timeout of our own. */
+export class TransportError extends GatewayError {
+  readonly code = GATEWAY_ERROR_CODES.transport;
+  /** Always true: a request that never reached the provider cost nothing. */
+  readonly retryable = true;
+
+  constructor(
+    readonly adapterId: string,
+    reason: string,
+    options?: ErrorOptions,
+  ) {
+    super(`${adapterId} could not be reached: ${reason}`, options);
+  }
+}
+
+/** A local token bucket refused the call before it left the machine. */
+export class RateLimitedError extends GatewayError {
+  readonly code = GATEWAY_ERROR_CODES.rateLimited;
+
+  constructor(
+    readonly adapterId: string,
+    readonly waitMs: number,
+  ) {
+    super(`${adapterId} is rate limited locally; ${String(Math.ceil(waitMs))}ms until a slot`);
+  }
+}
+
+/** The breaker is open: this provider is failing and is being left alone. */
+export class CircuitOpenError extends GatewayError {
+  readonly code = GATEWAY_ERROR_CODES.circuitOpen;
+
+  constructor(
+    readonly adapterId: string,
+    readonly retryAfterMs: number,
+  ) {
+    super(`${adapterId} circuit is open; retrying in ${String(Math.ceil(retryAfterMs))}ms`);
+  }
+}
+
+/** The call would have taken the session past a spend cap. */
+export class BudgetExceededError extends GatewayError {
+  readonly code = GATEWAY_ERROR_CODES.budgetExceeded;
+
+  constructor(
+    readonly scope: string,
+    readonly spentUsd: number,
+    readonly capUsd: number,
+    readonly wouldCostUsd: number,
+  ) {
+    super(
+      `${scope} would exceed its cap: $${spentUsd.toFixed(4)} spent + ` +
+        `$${wouldCostUsd.toFixed(4)} estimated > $${capUsd.toFixed(4)}`,
+    );
+  }
+}
+
+/** No usable credential: none stored, or the stored one was rejected. */
+export class CredentialError extends GatewayError {
+  readonly code = GATEWAY_ERROR_CODES.credential;
+
+  constructor(
+    readonly adapterId: string,
+    reason: string,
+  ) {
+    super(`${adapterId} has no usable credential: ${reason}`);
   }
 }

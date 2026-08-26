@@ -120,7 +120,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 - [x] **11. Adapter interface** — `ModelAdapter`, `NormalizedRequest`, `Delta`, `ModelDescriptor`, `CostEstimate`, adapter registry, capability flags.
   *Done when:* a mock adapter streams deltas through the registry. → `feat(gateway): model adapter interface and registry`
 
-- [ ] **12. Anthropic adapter** — messages API, streaming, tool-calling normalisation, token accounting.
+- [x] **12. Anthropic adapter** — messages API, streaming, tool-calling normalisation, token accounting.
   *Done when:* a real key streams a completion; usage and cost are recorded. → `feat(gateway): anthropic adapter`
 
 - [ ] **13. OpenAI + OpenAI-compatible adapter** — the generic base-URL adapter covers Groq/Together/DeepSeek/OpenRouter/xAI/Azure in one implementation.

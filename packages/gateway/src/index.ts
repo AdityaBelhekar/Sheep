@@ -89,17 +89,45 @@ export {
 
 export { AdapterRegistry, type AdapterRegistryOptions, type ModelHandle } from './registry';
 
+export { resolveSecret, type SecretProvider } from './credentials';
+
 export {
+  HttpClient,
+  type FetchLike,
+  type HeaderProvider,
+  type HttpClientOptions,
+  type HttpRequest,
+} from './http/client';
+
+export { toJsonLines, toLines, toSseEvents, type SseEvent } from './http/sse';
+
+export {
+  ANTHROPIC_API_VERSION,
+  ANTHROPIC_BASE_URL,
+  ANTHROPIC_MODELS,
+  ANTHROPIC_VENDOR_ID,
+  AnthropicAdapter,
+  type AnthropicAdapterOptions,
+} from './adapters/anthropic';
+
+export {
+  BudgetExceededError,
+  CircuitOpenError,
+  CredentialError,
   DuplicateAdapterError,
   GATEWAY_ERROR_CODES,
   GatewayError,
   InvalidDeltaError,
   InvalidRequestError,
+  isRetryableStatus,
   PricingUnknownError,
+  ProviderError,
+  RateLimitedError,
   StreamCancelledError,
   StreamProtocolError,
   UnknownAdapterError,
   UnknownModelError,
+  TransportError,
   UnsupportedCapabilityError,
   type GatewayErrorCode,
 } from './errors';
