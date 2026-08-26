@@ -117,7 +117,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 
 ## Stage 2 — Model gateway `Phases 11–17`
 
-- [ ] **11. Adapter interface** — `ModelAdapter`, `NormalizedRequest`, `Delta`, `ModelDescriptor`, `CostEstimate`, adapter registry, capability flags.
+- [x] **11. Adapter interface** — `ModelAdapter`, `NormalizedRequest`, `Delta`, `ModelDescriptor`, `CostEstimate`, adapter registry, capability flags.
   *Done when:* a mock adapter streams deltas through the registry. → `feat(gateway): model adapter interface and registry`
 
 - [ ] **12. Anthropic adapter** — messages API, streaming, tool-calling normalisation, token accounting.
