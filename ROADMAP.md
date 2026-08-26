@@ -123,7 +123,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 - [x] **12. Anthropic adapter** — messages API, streaming, tool-calling normalisation, token accounting.
   *Done when:* a real key streams a completion; usage and cost are recorded. → `feat(gateway): anthropic adapter`
 
-- [ ] **13. OpenAI + OpenAI-compatible adapter** — the generic base-URL adapter covers Groq/Together/DeepSeek/OpenRouter/xAI/Azure in one implementation.
+- [x] **13. OpenAI + OpenAI-compatible adapter** — the generic base-URL adapter covers Groq/Together/DeepSeek/OpenRouter/xAI/Azure in one implementation.
   *Done when:* one code path drives two different providers from config alone. → `feat(gateway): openai and openai-compatible adapters`
 
 - [ ] **14. Google: API key + OAuth** — Gemini via API key, plus real "Google login" (loopback redirect + PKCE, refresh token in keychain).

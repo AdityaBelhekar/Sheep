@@ -111,6 +111,19 @@ export {
 } from './adapters/anthropic';
 
 export {
+  createAzureOpenAiAdapter,
+  createOpenAiAdapter,
+  OPENAI_BASE_URL,
+  OPENAI_COMPATIBLE_PRESETS,
+  OPENAI_DEFAULT_CAPABILITIES,
+  OPENAI_VENDOR_ID,
+  OpenAiCompatibleAdapter,
+  type OpenAiCompatibleOptions,
+  type OpenAiCompatiblePreset,
+  type OpenAiPresetName,
+} from './adapters/openai';
+
+export {
   BudgetExceededError,
   CircuitOpenError,
   CredentialError,
