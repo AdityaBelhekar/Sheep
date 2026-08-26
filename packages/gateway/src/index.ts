@@ -91,6 +91,23 @@ export { AdapterRegistry, type AdapterRegistryOptions, type ModelHandle } from '
 
 export { resolveSecret, type SecretProvider } from './credentials';
 
+export { estimateInputTokens, PricingTable, pricingKey } from './budget/pricing';
+
+export {
+  BudgetGovernor,
+  type BudgetEvent,
+  type BudgetGovernorOptions,
+  type BudgetScopeOptions,
+  type BudgetScopeState,
+  type BudgetStatus,
+} from './budget/governor';
+
+export {
+  BudgetedAdapter,
+  withBudget,
+  type BudgetedAdapterOptions,
+} from './budget/budgeted-adapter';
+
 export {
   computeBackoffMs,
   DEFAULT_BACKOFF,

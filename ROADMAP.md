@@ -135,7 +135,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 - [x] **16. Resilience layer** — per-provider token-bucket rate limiting, jittered exponential backoff, circuit breaker, full request/response recording to CAS by hash.
   *Done when:* a 429-injecting mock provider is survived without data loss and the exchange replays from CAS. → `feat(gateway): rate limiting, retry and circuit breaker`
 
-- [ ] **17. Cost accounting & budget governor** — per-model pricing table, pre-run estimate, live spend, hard caps with halt-and-resume.
+- [x] **17. Cost accounting & budget governor** — per-model pricing table, pre-run estimate, live spend, hard caps with halt-and-resume.
   *Done when:* a session stops cleanly at its USD cap and resumes on confirmation. → `feat(gateway): cost accounting and budget governor`
 
 > **Stage gate:** a cloud model, a local model, and a custom endpoint all stream, with spend tracked and capped.
