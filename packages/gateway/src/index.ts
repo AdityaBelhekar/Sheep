@@ -111,6 +111,25 @@ export {
 } from './adapters/anthropic';
 
 export {
+  createLlamaCppAdapter,
+  createLmStudioAdapter,
+  createLocalAdapter,
+  detectLocalProviders,
+  LLAMA_CPP_BASE_URL,
+  LM_STUDIO_BASE_URL,
+  LOCAL_CAPABILITIES,
+  LOCAL_HOST,
+  LOCAL_PROVIDERS,
+  OLLAMA_BASE_URL,
+  OllamaAdapter,
+  probeLocalProvider,
+  type DetectOptions,
+  type LocalProviderId,
+  type LocalProviderStatus,
+  type OllamaAdapterOptions,
+} from './adapters/local';
+
+export {
   createGoogleOAuthAdapter,
   createGoogleOAuthClient,
   GEMINI_DEFAULT_CAPABILITIES,

@@ -129,7 +129,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 - [x] **14. Google: API key + OAuth** — Gemini via API key, plus real "Google login" (loopback redirect + PKCE, refresh token in keychain).
   *Done when:* signing in with Google yields a working Gemini connection with no key pasted. → `feat(gateway): google adapter with oauth pkce login`
 
-- [ ] **15. Local models** — Ollama, llama.cpp server, LM Studio; localhost autodetect; graceful absence (none are installed on this machine).
+- [x] **15. Local models** — Ollama, llama.cpp server, LM Studio; localhost autodetect; graceful absence (none are installed on this machine).
   *Done when:* Sheep detects a running Ollama, and shows a clean "not found" state when it isn't. → `feat(gateway): local model adapters with autodetect`
 
 - [ ] **16. Resilience layer** — per-provider token-bucket rate limiting, jittered exponential backoff, circuit breaker, full request/response recording to CAS by hash.
