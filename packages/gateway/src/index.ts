@@ -111,6 +111,40 @@ export {
 } from './adapters/anthropic';
 
 export {
+  createGoogleOAuthAdapter,
+  createGoogleOAuthClient,
+  GEMINI_DEFAULT_CAPABILITIES,
+  GOOGLE_AUTHORIZATION_PARAMS,
+  GOOGLE_BASE_URL,
+  GOOGLE_DEFAULT_SCOPES,
+  GOOGLE_OAUTH_ENDPOINTS,
+  GOOGLE_VENDOR_ID,
+  GoogleAdapter,
+  type GoogleAdapterOptions,
+  type GoogleCredentials,
+} from './adapters/google';
+
+export {
+  accessTokenProvider,
+  memoryTokenStore,
+  OAuthClient,
+  type OAuthClientOptions,
+  type OAuthEndpoints,
+  type SignInOptions,
+  type TokenSet,
+  type TokenStore,
+} from './auth/oauth';
+
+export { challengeFor, createPkcePair, createState, type PkcePair } from './auth/pkce';
+
+export {
+  startLoopbackServer,
+  type LoopbackOptions,
+  type LoopbackResult,
+  type LoopbackServer,
+} from './auth/loopback';
+
+export {
   createAzureOpenAiAdapter,
   createOpenAiAdapter,
   OPENAI_BASE_URL,

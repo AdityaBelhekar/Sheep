@@ -126,7 +126,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 - [x] **13. OpenAI + OpenAI-compatible adapter** — the generic base-URL adapter covers Groq/Together/DeepSeek/OpenRouter/xAI/Azure in one implementation.
   *Done when:* one code path drives two different providers from config alone. → `feat(gateway): openai and openai-compatible adapters`
 
-- [ ] **14. Google: API key + OAuth** — Gemini via API key, plus real "Google login" (loopback redirect + PKCE, refresh token in keychain).
+- [x] **14. Google: API key + OAuth** — Gemini via API key, plus real "Google login" (loopback redirect + PKCE, refresh token in keychain).
   *Done when:* signing in with Google yields a working Gemini connection with no key pasted. → `feat(gateway): google adapter with oauth pkce login`
 
 - [ ] **15. Local models** — Ollama, llama.cpp server, LM Studio; localhost autodetect; graceful absence (none are installed on this machine).

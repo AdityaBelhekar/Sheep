@@ -80,7 +80,7 @@ export function fakeFetch(
       url,
       method: init.method ?? 'GET',
       headers: normaliseHeaders(init.headers),
-      body: typeof init.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined,
+      body: parseBody(init.body),
     };
     const index = calls.length;
     calls.push(call);
@@ -99,6 +99,16 @@ export function fakeFetch(
   };
 
   return { fetch, calls };
+}
+
+/** JSON where it is JSON, the raw string where it is a form post. */
+function parseBody(body: RequestInit['body']): unknown {
+  if (typeof body !== 'string') return undefined;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return body;
+  }
 }
 
 function normaliseHeaders(headers: RequestInit['headers']): Record<string, string> {
