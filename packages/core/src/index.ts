@@ -85,13 +85,16 @@ export {
 } from './protocol';
 
 export {
+  MESSAGE_FINISH_REASONS,
   messageAuthorSchema,
   messageBodySchema,
+  messageFinishReasonSchema,
   messageSchema,
   usageSchema,
   type Message,
   type MessageAuthor,
   type MessageBody,
+  type MessageFinishReason,
   type Usage,
 } from './message';
 

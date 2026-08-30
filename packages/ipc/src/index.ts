@@ -4,7 +4,24 @@
  */
 export const PACKAGE_NAME = '@sheep/ipc';
 
-export { IPC_CHANNELS, assertKnownChannel, isKnownChannel, type IpcChannel } from './channels';
+export {
+  IPC_CHANNELS,
+  IPC_EVENT_CHANNELS,
+  assertKnownChannel,
+  assertKnownEventChannel,
+  isKnownChannel,
+  isKnownEventChannel,
+  type IpcChannel,
+  type IpcEventChannel,
+} from './channels';
+export {
+  IPC_EVENT_CONTRACTS,
+  eventContractFor,
+  streamEventSchema,
+  type IpcEventContracts,
+  type IpcEventPayload,
+  type StreamEvent,
+} from './events';
 export {
   IPC_CONTRACTS,
   contractFor,

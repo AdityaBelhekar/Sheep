@@ -41,6 +41,7 @@ if (isSmokeRun) {
     'renderer-projection',
     'renderer-connections',
     'renderer-roster',
+    'renderer-chat',
     'renderer-theme',
     'ipc-channel-guard',
   ]) {

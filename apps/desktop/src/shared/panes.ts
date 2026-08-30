@@ -37,7 +37,7 @@ export const RESEARCH_PANES = [
     summary: 'The turns themselves: proposals, critiques, referee rulings.',
     detail:
       'Phases open blind-parallel, so a model cannot see another model’s answer before committing its own. This surface shows what each said, once revealing is allowed.',
-    arriving: 'Phases 20 and 25',
+    arriving: 'Blind-parallel rounds arrive in Phase 25',
   },
   {
     id: 'ledger',

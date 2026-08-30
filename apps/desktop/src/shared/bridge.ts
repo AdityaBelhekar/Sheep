@@ -15,4 +15,12 @@ export interface SheepBridge {
    * channel that is not on the allowlist.
    */
   invoke(channel: string, payload: unknown): Promise<unknown>;
+  /**
+   * Listens on a one-way channel, main → renderer. Returns the unsubscribe.
+   *
+   * A separate allowlist from `invoke`'s: the two run in opposite directions,
+   * and one list would let the renderer send on a channel only main may speak
+   * on.
+   */
+  subscribe(channel: string, listener: (payload: unknown) => void): () => void;
 }

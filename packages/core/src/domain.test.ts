@@ -77,6 +77,7 @@ const message: Message = {
   role: 'CRITIC',
   body: { kind: 'text', text: 'The baseline is missing.' },
   usage: { inputTokens: 900, outputTokens: 120, costUsd: 0.02 },
+  finish: 'stop',
   promptHash: 'c'.repeat(64),
   recordedAt: NOW,
 };

@@ -139,6 +139,7 @@ export const EVENT_FIXTURES: EventFixtures = {
     role: 'PROPOSER',
     body: { kind: 'text', text: 'Perplexity degrades by 0.3 nats beyond 64k tokens.' },
     usage: { inputTokens: 1_204, outputTokens: 318, cachedInputTokens: 900, costUsd: 0.0412 },
+    finish: 'stop',
     promptHash: PROMPT_HASH,
   },
 

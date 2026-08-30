@@ -478,6 +478,92 @@ select.field__input {
   color: var(--fg-faint);
 }
 
+/* ── Conversation ─────────────────────────────────────────────────────── */
+
+.chat__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.chat__turn {
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.chat__turn[data-author='HUMAN'] {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.chat__turn--live {
+  border-color: var(--accent);
+}
+
+.chat__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.chat__who {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.chat__usage {
+  color: var(--fg-faint);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat__body {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* Visible thinking, kept apart from the answer so it never becomes one. */
+.chat__reasoning {
+  margin: 0 0 0.5rem;
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--border-strong);
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.chat__composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
 /* ── Roster ───────────────────────────────────────────────────────────── */
 
 .session[data-sheep-selected='true'] {

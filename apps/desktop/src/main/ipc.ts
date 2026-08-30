@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { app, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { domainEvent, type Connection, type RosterEntry, type SessionSummary } from '@sheep/core';
 import type { ModelDescriptor } from '@sheep/gateway';
 import { IpcError, IpcRegistry } from '@sheep/ipc';
-import { getSession, listParticipants, listSessions } from '@sheep/store';
+import { getSession, listMessages, listParticipants, listSessions } from '@sheep/store';
 import { APP_NAME } from '../shared/product';
 import {
   createConnection,
@@ -16,6 +16,7 @@ import {
   testConnection,
   updateConnection,
 } from './connections';
+import { cancelChat, sendChat } from './chat';
 import { getVault } from './credentials';
 import { logError } from './log';
 import { getEventLog, getStore } from './store';
@@ -189,6 +190,16 @@ export function createIpcRegistry(): IpcRegistry {
         failures,
       };
     })
+    .register('sheep:messages-list', (request) => ({
+      messages: listMessages(getStore().db, request.sessionId, {
+        ...(request.limit === undefined ? {} : { limit: request.limit }),
+      }),
+    }))
+    .register('sheep:chat-send', async (request, context) => {
+      const window = windowFor(context.senderId);
+      return await sendChat(window, request);
+    })
+    .register('sheep:chat-cancel', (request) => ({ cancelled: cancelChat(request.runId) }))
     .register('sheep:connections-list', () => readConnections())
     .register('sheep:connection-create', async (request) => {
       const connection = await createConnection({
@@ -275,6 +286,20 @@ function readSessionDetail(sessionId: string): {
     roster: listParticipants(store.db, sessionId),
     projectedThroughSeq: status?.lastSeq ?? 0,
   };
+}
+
+/**
+ * The window a call came from.
+ *
+ * A run streams back to whoever started it, not to whatever window happens to
+ * be focused when the first delta lands — so the sender is resolved once, here,
+ * and the run holds it for its lifetime.
+ */
+function windowFor(senderId: number | undefined): BrowserWindow {
+  const sender = senderId === undefined ? undefined : BrowserWindow.fromId(senderId);
+  const window = sender ?? BrowserWindow.getAllWindows()[0];
+  if (!window) throw new Error('there is no window to stream to');
+  return window;
 }
 
 /** Confirms a model exists on a connection, and says so precisely when it does not. */

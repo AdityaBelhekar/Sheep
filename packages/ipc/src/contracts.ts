@@ -6,6 +6,7 @@ import {
   credentialRefSchema,
   idSchema,
   localProviderIdSchema,
+  messageSchema,
   modelIdSchema,
   participantRoleSchema,
   proseSchema,
@@ -231,6 +232,43 @@ export const IPC_CONTRACTS = {
       ),
       failures: z.array(z.object({ adapterId: z.string().min(1), detail: z.string() })),
     }),
+  },
+
+  /** The session's turns, in log order — the only total order two share. */
+  'sheep:messages-list': {
+    request: z.object({
+      sessionId: idSchema,
+      limit: z.number().int().positive().max(1_000).optional(),
+    }),
+    response: z.object({ messages: z.array(messageSchema) }),
+  },
+  /**
+   * Start one turn.
+   *
+   * Returns as soon as the run is accepted, not when it finishes: the answer
+   * arrives on `sheep:stream-event`, keyed by the `runId` returned here. The
+   * user's message is already recorded by the time this replies, so a crash
+   * mid-stream loses the answer and never the question.
+   */
+  'sheep:chat-send': {
+    request: z.object({
+      sessionId: idSchema,
+      participantId: idSchema,
+      text: z.string().min(1).max(32_768),
+    }),
+    response: z.object({
+      runId: idSchema,
+      userMessageId: idSchema,
+      /** The id the answer will be recorded under, known before it exists. */
+      assistantMessageId: idSchema,
+      /** What the call is expected to cost, priced at the worst case. */
+      estimatedCostUsd: usdSchema.nullable(),
+    }),
+  },
+  'sheep:chat-cancel': {
+    request: z.object({ runId: idSchema }),
+    /** False when the run had already finished — not an error, just late. */
+    response: z.object({ cancelled: z.boolean() }),
   },
 
   /**

@@ -51,6 +51,27 @@ export const messageBodySchema = z.discriminatedUnion('kind', [
 ]);
 export type MessageBody = z.infer<typeof messageBodySchema>;
 
+/**
+ * How a turn stopped.
+ *
+ * The first six mirror the gateway's stop reasons; `error` is the seventh, and
+ * is why this list lives here rather than being imported. A stream that dies
+ * halfway still produced text, and that text is still recorded — so the record
+ * needs a way to say "this is what survived", which a vendor's own vocabulary
+ * has no word for. Null means the message did not come from a model at all.
+ */
+export const MESSAGE_FINISH_REASONS = [
+  'stop',
+  'max_tokens',
+  'stop_sequence',
+  'tool_use',
+  'content_filter',
+  'cancelled',
+  'error',
+] as const;
+export const messageFinishReasonSchema = z.enum(MESSAGE_FINISH_REASONS);
+export type MessageFinishReason = z.infer<typeof messageFinishReasonSchema>;
+
 /** What one model call actually cost. Populated by the gateway (Phase 17). */
 export const usageSchema = z.strictObject({
   inputTokens: tokenCountSchema,
@@ -77,6 +98,8 @@ export const messageSchema = z.strictObject({
   role: participantRoleSchema.nullable(),
   body: messageBodySchema,
   usage: usageSchema.nullable(),
+  /** How the turn stopped. Null for anything a model did not produce. */
+  finish: messageFinishReasonSchema.nullable(),
   /** Hash of the exact prompt that produced this, for reproducibility (P5). */
   promptHash: sha256Schema.nullable(),
   recordedAt: timestampSchema,

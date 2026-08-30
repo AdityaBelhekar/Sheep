@@ -1,5 +1,5 @@
-import { contextBridge, ipcRenderer } from 'electron';
-import { assertKnownChannel } from '@sheep/ipc/channels';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { assertKnownChannel, assertKnownEventChannel } from '@sheep/ipc/channels';
 import type { SheepBridge } from '../shared/bridge';
 
 /**
@@ -19,6 +19,22 @@ const sheep: SheepBridge = {
   invoke(channel: string, payload: unknown): Promise<unknown> {
     assertKnownChannel(channel);
     return ipcRenderer.invoke(channel, payload);
+  },
+
+  subscribe(channel: string, listener: (payload: unknown) => void): () => void {
+    assertKnownEventChannel(channel);
+
+    // The Electron event object is dropped rather than forwarded: it carries a
+    // `sender` with methods, and handing the renderer a live handle on the
+    // main process through the context bridge would defeat the point of having
+    // one.
+    const wrapped = (_event: IpcRendererEvent, payload: unknown): void => {
+      listener(payload);
+    };
+    ipcRenderer.on(channel, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channel, wrapped);
+    };
   },
 };
 

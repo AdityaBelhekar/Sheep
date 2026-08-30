@@ -103,7 +103,7 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
       expect(result?.created).toBe(true);
       expect(result?.rebuilt).toBe(true);
       expect(h.runner.status()).toEqual([
-        { name: 'sessions', lastSeq: 0, ddlVersion: 2, behind: 0, ready: true },
+        { name: 'sessions', lastSeq: 0, ddlVersion: 3, behind: 0, ready: true },
       ]);
       expect(listSessions(h.db)).toEqual([]);
     } finally {
@@ -160,6 +160,7 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
         role: fixture.role,
         body: fixture.body,
         usage: fixture.usage,
+        finish: fixture.finish,
         promptHash: fixture.promptHash,
         recordedAt: '2026-08-17T09:00:02.000Z',
       });
@@ -311,13 +312,13 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
       expect(h.runner.status()[0]?.lastSeq).toBe(1);
 
       // A later build ships the same tables under a new version number.
-      const reshaped: Projection = { ...SESSIONS_PROJECTION, ddlVersion: 3 };
+      const reshaped: Projection = { ...SESSIONS_PROJECTION, ddlVersion: 4 };
       const later = new ProjectionRunner(h.db, h.log, { projections: [reshaped] });
 
       const [result] = later.ensure();
       expect(result).toMatchObject({ created: false, rebuilt: true });
       expect(later.status()).toEqual([
-        { name: 'sessions', lastSeq: 1, ddlVersion: 3, behind: 0, ready: true },
+        { name: 'sessions', lastSeq: 1, ddlVersion: 4, behind: 0, ready: true },
       ]);
       expect(getSession(h.db, SESSION_ID)).toBeDefined();
     } finally {

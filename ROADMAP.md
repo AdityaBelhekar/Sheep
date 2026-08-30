@@ -148,7 +148,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   → `feat(ui): model connection management`
 - [x] **19. Session roster** — attach models to a session, assign roles, set per-model budget and weight.
   → `feat(ui): per-session model roster`
-- [ ] **20. Single-model chat** — a plain streaming chat surface. Not a product feature; it proves the whole pipe end to end.
+- [x] **20. Single-model chat** — a plain streaming chat surface. Not a product feature; it proves the whole pipe end to end.
   → `feat(ui): single-model streaming chat surface`
 - [ ] **21. Streaming hardening** — ~30fps delta batching to the renderer, cancellation, partial-response persistence, error surfacing.
   → `feat(desktop): streaming backpressure and cancellation`

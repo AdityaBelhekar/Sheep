@@ -6,7 +6,12 @@ import {
   disputeSeveritySchema,
   proposedTestSchema,
 } from './dispute';
-import { messageAuthorSchema, messageBodySchema, usageSchema } from './message';
+import {
+  messageAuthorSchema,
+  messageBodySchema,
+  messageFinishReasonSchema,
+  usageSchema,
+} from './message';
 import { modelRefSchema } from './model';
 import {
   confidenceSchema,
@@ -149,6 +154,15 @@ export const EVENT_PAYLOADS = {
     role: participantRoleSchema.optional(),
     body: messageBodySchema,
     usage: usageSchema.optional(),
+    /**
+     * How the turn stopped, when a model produced it.
+     *
+     * `cancelled` and `error` mean the body is what survived rather than what
+     * the model finished — which is exactly why a partial response is recorded
+     * rather than discarded: the tokens were paid for, and a run that vanished
+     * without trace is not reproducible (P5).
+     */
+    finish: messageFinishReasonSchema.optional(),
     promptHash: sha256Schema.optional(),
   }),
 

@@ -13,7 +13,10 @@ export function useIpcClient(): IpcClient | undefined {
   return useMemo(() => {
     const bridge = window.sheep;
     if (!bridge) return undefined;
-    return createIpcClient({ invoke: (channel, payload) => bridge.invoke(channel, payload) });
+    return createIpcClient({
+      invoke: (channel, payload) => bridge.invoke(channel, payload),
+      subscribe: (channel, listener) => bridge.subscribe(channel, listener),
+    });
   }, []);
 }
 

@@ -76,6 +76,9 @@ export const SESSIONS_DDL = `
     output_tokens  INTEGER,
     cached_tokens  INTEGER,
     cost_usd       REAL,
+    -- How the turn stopped: 'cancelled' and 'error' mark a body that is what
+    -- survived rather than what the model finished.
+    finish         TEXT,
     prompt_hash    TEXT,
     recorded_at    TEXT NOT NULL
   ) STRICT;
@@ -111,7 +114,7 @@ const HANDLED = new Set<DomainEventType>([
  */
 export const SESSIONS_PROJECTION: Projection = {
   name: 'sessions',
-  ddlVersion: 2,
+  ddlVersion: 3,
   // Children first: these are the tables a future foreign key would depend on.
   tables: ['participants', 'messages', 'sessions'],
   ddl: SESSIONS_DDL,
@@ -193,8 +196,8 @@ export const SESSIONS_PROJECTION: Projection = {
              message_id, session_id, phase_id, round_id, seq, author_kind, participant_id,
              connection_id, vendor_id, model_id, model_version, role, body_kind, body_text,
              body_hash, body_bytes, media_type, input_tokens, output_tokens, cached_tokens,
-             cost_usd, prompt_hash, recorded_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             cost_usd, finish, prompt_hash, recorded_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(message_id) DO UPDATE SET
              seq = excluded.seq,
              recorded_at = excluded.recorded_at`,
@@ -220,6 +223,7 @@ export const SESSIONS_PROJECTION: Projection = {
             usage?.outputTokens ?? null,
             usage?.cachedInputTokens ?? null,
             usage?.costUsd ?? null,
+            event.payload.finish ?? null,
             event.payload.promptHash ?? null,
             at,
           ],
@@ -374,6 +378,7 @@ type MessageRow = {
   output_tokens: number | null;
   cached_tokens: number | null;
   cost_usd: number | null;
+  finish: string | null;
   prompt_hash: string | null;
   recorded_at: string;
 };
@@ -391,7 +396,8 @@ const PARTICIPANT_COLUMNS =
 const MESSAGE_COLUMNS =
   'message_id, session_id, phase_id, round_id, seq, author_kind, participant_id, connection_id, ' +
   'vendor_id, model_id, model_version, role, body_kind, body_text, body_hash, body_bytes, ' +
-  'media_type, input_tokens, output_tokens, cached_tokens, cost_usd, prompt_hash, recorded_at';
+  'media_type, input_tokens, output_tokens, cached_tokens, cost_usd, finish, prompt_hash, ' +
+  'recorded_at';
 
 /** Newest first — what a session list shows. */
 export function listSessions(db: SqliteDatabase, limit = 100): SessionSummary[] {
@@ -519,6 +525,7 @@ function toMessage(row: MessageRow): Message {
             ...(row.cached_tokens === null ? {} : { cachedInputTokens: row.cached_tokens }),
             costUsd: row.cost_usd,
           },
+    finish: row.finish as Message['finish'],
     promptHash: row.prompt_hash,
     recordedAt: row.recorded_at,
   };

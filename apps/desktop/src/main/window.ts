@@ -9,7 +9,7 @@ import { createConnection } from './connections';
 import { logInfo, logWarn, redactor } from './log';
 import { bundlePath, resourcePath } from './paths';
 import { isSmokeRun, recordSmokeCheck } from './smoke';
-import { SMOKE_MODEL_ID, startSmokeProvider } from './smoke-provider';
+import { SMOKE_MODEL_ID, SMOKE_REPLY, startSmokeProvider } from './smoke-provider';
 import { getStore } from './store';
 
 /** What the navigability check expects to find, taken from the shared list. */
@@ -287,6 +287,82 @@ const ROSTER_EXPRESSION = (sessionId: string, connectionId: string, modelId: str
   };
 })()`;
 
+/**
+ * Sends one turn and watches the answer arrive on the event channel.
+ *
+ * Driven through the pane's own controls rather than by calling IPC directly,
+ * so what is proved is that the surface works — the composer, the subscription,
+ * the live turn, and the projected message that replaces it when the run ends.
+ */
+const CHAT_EXPRESSION = (sessionId: string, expected: string): string => `(async () => {
+  await window.sheep.invoke('sheep:settings-write', {
+    key: 'ui.lastSessionId',
+    value: ${JSON.stringify(sessionId)},
+  });
+
+  window.location.hash = '#/conversation';
+  const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  await settle(200);
+
+  const pane = () => document.querySelector('[data-pane="conversation"]');
+  const composer = pane()?.querySelector('textarea');
+  if (!composer) return { error: 'no composer: ' + (pane()?.getAttribute('data-sheep-conversation') ?? 'no pane') };
+
+  // Type through React's own setter, so the change event it listens for fires.
+  const setValue = window.Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype,
+    'value',
+  ).set;
+  setValue.call(composer, 'What makes a blind-parallel round worth the trouble?');
+  composer.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(60);
+
+  pane().querySelector('[data-sheep-send]').click();
+
+  // Watch for the live turn appearing, so streaming is observed rather than
+  // merely inferred from the finished message.
+  let sawStreaming = false;
+  let frames = 0;
+  let lastLength = -1;
+  const deadline = Date.now() + 20000;
+  while (Date.now() < deadline) {
+    await settle(20);
+    const root = document.querySelector('[data-sheep-ready]');
+    if (pane()?.getAttribute('data-sheep-streaming') === 'streaming') {
+      sawStreaming = true;
+      const live = pane().querySelector('.chat__turn--live .chat__body');
+      const length = live ? live.textContent.length : -1;
+      if (length !== lastLength) {
+        frames += 1;
+        lastLength = length;
+      }
+    } else if (sawStreaming) {
+      break;
+    }
+  }
+
+  await settle(300);
+  const messages = await window.sheep.invoke('sheep:messages-list', {
+    sessionId: ${JSON.stringify(sessionId)},
+  });
+  const answer = messages.messages[messages.messages.length - 1];
+  const question = messages.messages[messages.messages.length - 2];
+
+  return {
+    sawStreaming,
+    frames,
+    total: messages.messages.length,
+    questionAuthor: question?.author.kind ?? null,
+    answerAuthor: answer?.author.kind ?? null,
+    answerVendor: answer?.author.kind === 'MODEL' ? answer.author.model.vendorId : null,
+    finish: answer?.finish ?? null,
+    text: answer?.body.kind === 'text' ? answer.body.text : '',
+    matches: answer?.body.kind === 'text' && answer.body.text === ${JSON.stringify(expected)},
+    hasPromptHash: typeof answer?.promptHash === 'string',
+    rendered: (pane()?.textContent ?? '').includes(${JSON.stringify(expected.slice(0, 40))}),
+  };
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -355,7 +431,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
   await checkNavigation(window);
   await checkProjection(window);
   await checkConnections(window);
-  await checkRoster(window);
+  await checkLocalModel(window);
   await checkTheme(window);
 
   if (window.isDestroyed()) return;
@@ -447,7 +523,7 @@ type RosterResult =
  * socket is the shipping path: a stored connection, the Ollama adapter, the
  * resilience wrapper, the event log and the projection.
  */
-async function checkRoster(window: BrowserWindow): Promise<void> {
+async function checkLocalModel(window: BrowserWindow): Promise<void> {
   const store = getStore();
   const provider = await startSmokeProvider();
 
@@ -459,20 +535,39 @@ async function checkRoster(window: BrowserWindow): Promise<void> {
 
     const [session] = listSessions(store.db, 1);
     if (!session) {
-      recordSmokeCheck('renderer-roster', false, 'no session to attach a model to');
+      const detail = 'no session to attach a model to';
+      recordSmokeCheck('renderer-roster', false, detail);
+      recordSmokeCheck('renderer-chat', false, detail);
       return;
     }
 
-    const result = (await evaluate(
-      window,
-      ROSTER_EXPRESSION(session.sessionId, connection.connectionId, SMOKE_MODEL_ID),
-    )) as RosterResult;
+    await checkRoster(window, session.sessionId, connection.connectionId);
+    await checkChat(window, session.sessionId, connection.connectionId);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    recordSmokeCheck('renderer-roster', false, detail);
+    recordSmokeCheck('renderer-chat', false, detail);
+  } finally {
+    await provider.close();
+  }
+}
 
-    if (!result || 'error' in result) {
-      recordSmokeCheck('renderer-roster', false, result?.error ?? 'no result');
-      return;
-    }
+async function checkRoster(
+  window: BrowserWindow,
+  sessionId: string,
+  connectionId: string,
+): Promise<void> {
+  const result = (await evaluate(
+    window,
+    ROSTER_EXPRESSION(sessionId, connectionId, SMOKE_MODEL_ID),
+  )) as RosterResult;
 
+  if (!result || 'error' in result) {
+    recordSmokeCheck('renderer-roster', false, result?.error ?? 'no result');
+    return;
+  }
+
+  {
     const ok =
       result.beforeCount === 0 &&
       result.attachedCount === 1 &&
@@ -495,15 +590,83 @@ async function checkRoster(window: BrowserWindow): Promise<void> {
         `role ${String(result.roleAfter)} · still listed=${String(result.stillListed)} · ` +
         `unknown model refused=${String(result.refusedUnknownModel)}`,
     );
-  } catch (error) {
-    recordSmokeCheck(
-      'renderer-roster',
-      false,
-      error instanceof Error ? error.message : String(error),
-    );
-  } finally {
-    await provider.close();
   }
+}
+
+type ChatResult =
+  | {
+      sawStreaming: boolean;
+      frames: number;
+      total: number;
+      questionAuthor: string | null;
+      answerAuthor: string | null;
+      answerVendor: string | null;
+      finish: string | null;
+      text: string;
+      matches: boolean;
+      hasPromptHash: boolean;
+      rendered: boolean;
+    }
+  | { error: string }
+  | undefined;
+
+/**
+ * Sends one turn from the conversation pane and checks the answer arrived.
+ *
+ * The model is re-attached first: the roster check ends by detaching it, and a
+ * chat surface must refuse to talk to a model that is not on the roster — which
+ * makes attaching it here part of what is being tested.
+ */
+async function checkChat(
+  window: BrowserWindow,
+  sessionId: string,
+  connectionId: string,
+): Promise<void> {
+  const attached = (await evaluate(
+    window,
+    `window.sheep.invoke('sheep:roster-attach', {
+       sessionId: ${JSON.stringify(sessionId)},
+       connectionId: ${JSON.stringify(connectionId)},
+       modelId: ${JSON.stringify(SMOKE_MODEL_ID)},
+       weight: 1,
+       budgetCapUsd: null,
+       preferredRole: null,
+     })`,
+  )) as { participantId?: string } | { error: string } | undefined;
+
+  if (!attached || 'error' in attached) {
+    recordSmokeCheck('renderer-chat', false, attached?.error ?? 'could not attach a model');
+    return;
+  }
+
+  const result = (await evaluate(window, CHAT_EXPRESSION(sessionId, SMOKE_REPLY))) as ChatResult;
+  if (!result || 'error' in result) {
+    recordSmokeCheck('renderer-chat', false, result?.error ?? 'no result');
+    return;
+  }
+
+  const ok =
+    result.sawStreaming &&
+    // More than one frame means the text grew on screen rather than appearing
+    // whole: this surface streams, it does not wait and then paste.
+    result.frames > 1 &&
+    result.questionAuthor === 'HUMAN' &&
+    result.answerAuthor === 'MODEL' &&
+    result.answerVendor === 'ollama' &&
+    result.finish === 'stop' &&
+    result.matches &&
+    result.hasPromptHash &&
+    result.rendered;
+
+  recordSmokeCheck(
+    'renderer-chat',
+    ok,
+    `streamed=${String(result.sawStreaming)} in ${String(result.frames)} frames · ` +
+      `${String(result.total)} messages · ${result.questionAuthor ?? 'none'} → ` +
+      `${result.answerAuthor ?? 'none'}/${result.answerVendor ?? 'none'} · ` +
+      `finish=${result.finish ?? 'none'} · text matches=${String(result.matches)} · ` +
+      `prompt hash=${String(result.hasPromptHash)} · rendered=${String(result.rendered)}`,
+  );
 }
 
 type ConnectionsResult =
