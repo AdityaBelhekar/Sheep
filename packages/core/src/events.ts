@@ -83,6 +83,22 @@ export const EVENT_PAYLOADS = {
     model: modelRefSchema,
     weight: z.number().min(0).max(10),
     budgetCapUsd: usdSchema.optional(),
+    preferredRole: participantRoleSchema.optional(),
+  }),
+  /**
+   * A participant's settings, restated in full.
+   *
+   * A full restatement rather than a patch, because the log's convention is
+   * that an absent optional field means "not applicable" — so a payload that
+   * used absence to mean "unchanged" would be unreadable to a projector
+   * replaying it in isolation, which is the one thing a projector must not be.
+   */
+  'roster.model-reconfigured': z.strictObject({
+    ...sessionScope,
+    participantId: idSchema,
+    weight: z.number().min(0).max(10),
+    budgetCapUsd: usdSchema.optional(),
+    preferredRole: participantRoleSchema.optional(),
   }),
   'roster.model-detached': z.strictObject({
     ...sessionScope,

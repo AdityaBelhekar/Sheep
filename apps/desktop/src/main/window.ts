@@ -2,11 +2,14 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { BrowserWindow, nativeImage, nativeTheme, shell } from 'electron';
+import { listSessions } from '@sheep/store';
 import { PANE_IDS } from '../shared/panes';
 import { APP_NAME } from '../shared/product';
+import { createConnection } from './connections';
 import { logInfo, logWarn, redactor } from './log';
 import { bundlePath, resourcePath } from './paths';
 import { isSmokeRun, recordSmokeCheck } from './smoke';
+import { SMOKE_MODEL_ID, startSmokeProvider } from './smoke-provider';
 import { getStore } from './store';
 
 /** What the navigability check expects to find, taken from the shared list. */
@@ -216,6 +219,74 @@ const deleteConnectionExpression = (connectionId: string): string => `(async () 
   return { removed: reply.removed, remaining: reply.connections.length };
 })()`;
 
+/**
+ * Attaches, reconfigures and detaches a model on a session's roster.
+ *
+ * Driven against a local runtime connection with a stubbed catalogue, so the
+ * check exercises the whole path — IPC, event log, projection, IPC — without
+ * needing a key or a network.
+ */
+const ROSTER_EXPRESSION = (sessionId: string, connectionId: string, modelId: string): string => `
+(async () => {
+  const before = await window.sheep.invoke('sheep:session-get', {
+    sessionId: ${JSON.stringify(sessionId)},
+  });
+
+  const attached = await window.sheep.invoke('sheep:roster-attach', {
+    sessionId: ${JSON.stringify(sessionId)},
+    connectionId: ${JSON.stringify(connectionId)},
+    modelId: ${JSON.stringify(modelId)},
+    weight: 1,
+    budgetCapUsd: 2.5,
+    preferredRole: 'PROPOSER',
+  });
+
+  const reconfigured = await window.sheep.invoke('sheep:roster-reconfigure', {
+    sessionId: ${JSON.stringify(sessionId)},
+    participantId: attached.participantId,
+    weight: 0.5,
+    budgetCapUsd: null,
+    preferredRole: null,
+  });
+  const entry = reconfigured.roster.find((r) => r.participantId === attached.participantId);
+
+  const detached = await window.sheep.invoke('sheep:roster-detach', {
+    sessionId: ${JSON.stringify(sessionId)},
+    participantId: attached.participantId,
+    reason: 'smoke check',
+  });
+
+  // A model the connection does not serve must be refused before anything is
+  // written down, not discovered at the first call.
+  let refusedUnknownModel = false;
+  try {
+    await window.sheep.invoke('sheep:roster-attach', {
+      sessionId: ${JSON.stringify(sessionId)},
+      connectionId: ${JSON.stringify(connectionId)},
+      modelId: 'not-a-real-model',
+      weight: 1,
+      budgetCapUsd: null,
+      preferredRole: null,
+    });
+  } catch {
+    refusedUnknownModel = true;
+  }
+
+  return {
+    beforeCount: before.session.participantCount,
+    attachedCount: attached.session.participantCount,
+    vendorId: attached.roster[0]?.model.vendorId ?? null,
+    foundEntry: Boolean(entry),
+    weightAfter: entry ? entry.weight : null,
+    // Read directly, not through ??: null is the value under test here.
+    capAfter: entry ? entry.budgetCapUsd : 'missing',
+    roleAfter: entry ? entry.preferredRole : 'missing',
+    detachedCount: detached.session.participantCount,
+    stillListed: detached.roster.length,
+    refusedUnknownModel,
+  };
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -284,6 +355,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
   await checkNavigation(window);
   await checkProjection(window);
   await checkConnections(window);
+  await checkRoster(window);
   await checkTheme(window);
 
   if (window.isDestroyed()) return;
@@ -350,6 +422,88 @@ async function checkProjection(window: BrowserWindow): Promise<void> {
       result.projectedThroughSeq,
     )} · default cap ${result.capUsd === null ? 'none' : `$${String(result.capUsd)}`}`,
   );
+}
+
+type RosterResult =
+  | {
+      beforeCount: number;
+      attachedCount: number;
+      vendorId: string | null;
+      foundEntry: boolean;
+      weightAfter: number | null;
+      capAfter: number | null | string;
+      roleAfter: string | null;
+      detachedCount: number;
+      stillListed: number;
+      refusedUnknownModel: boolean;
+    }
+  | { error: string }
+  | undefined;
+
+/**
+ * Drives one session's roster from the renderer against a real local provider.
+ *
+ * The provider is ours (see `smoke-provider.ts`), but everything above the
+ * socket is the shipping path: a stored connection, the Ollama adapter, the
+ * resilience wrapper, the event log and the projection.
+ */
+async function checkRoster(window: BrowserWindow): Promise<void> {
+  const store = getStore();
+  const provider = await startSmokeProvider();
+
+  try {
+    const connection = await createConnection({
+      label: 'Smoke local runtime',
+      config: { kind: 'local', provider: 'ollama', baseUrl: provider.baseUrl },
+    });
+
+    const [session] = listSessions(store.db, 1);
+    if (!session) {
+      recordSmokeCheck('renderer-roster', false, 'no session to attach a model to');
+      return;
+    }
+
+    const result = (await evaluate(
+      window,
+      ROSTER_EXPRESSION(session.sessionId, connection.connectionId, SMOKE_MODEL_ID),
+    )) as RosterResult;
+
+    if (!result || 'error' in result) {
+      recordSmokeCheck('renderer-roster', false, result?.error ?? 'no result');
+      return;
+    }
+
+    const ok =
+      result.beforeCount === 0 &&
+      result.attachedCount === 1 &&
+      result.vendorId === 'ollama' &&
+      result.foundEntry &&
+      result.weightAfter === 0.5 &&
+      result.capAfter === null &&
+      result.roleAfter === null &&
+      result.detachedCount === 0 &&
+      // Detaching removes it from the count, never from the record.
+      result.stillListed === 1 &&
+      result.refusedUnknownModel;
+
+    recordSmokeCheck(
+      'renderer-roster',
+      ok,
+      `roster ${String(result.beforeCount)} → ${String(result.attachedCount)} → ` +
+        `${String(result.detachedCount)} · vendor=${result.vendorId ?? 'none'} · ` +
+        `reconfigured to weight ${String(result.weightAfter)} / cap ${String(result.capAfter)} / ` +
+        `role ${String(result.roleAfter)} · still listed=${String(result.stillListed)} · ` +
+        `unknown model refused=${String(result.refusedUnknownModel)}`,
+    );
+  } catch (error) {
+    recordSmokeCheck(
+      'renderer-roster',
+      false,
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    await provider.close();
+  }
 }
 
 type ConnectionsResult =

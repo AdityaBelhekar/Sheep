@@ -48,6 +48,22 @@ describe('buildAdapter', () => {
     expect(adapter.vendorId).toBe('ollama');
   });
 
+  /**
+   * Two Ollama servers on one machine is a legitimate setup, and the registry
+   * is keyed by adapter id — so a local adapter that named itself after its
+   * runtime rather than its connection would make the second one unregistrable.
+   */
+  it('gives every local connection its own registry key', () => {
+    const ids = (['ollama', 'llamacpp', 'lmstudio'] as const).map(
+      (provider) =>
+        buildAdapter({
+          adapterId: `${provider}-abc123`,
+          config: { kind: 'local', provider },
+        }).adapterId,
+    );
+    expect(ids).toEqual(['ollama-abc123', 'llamacpp-abc123', 'lmstudio-abc123']);
+  });
+
   it('builds a custom endpoint under the vendor it declares', () => {
     const adapter = buildAdapter({
       adapterId: 'mistral-1',

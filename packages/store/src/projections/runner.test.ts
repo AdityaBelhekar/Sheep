@@ -69,10 +69,15 @@ function harness(driver: SqliteDriverName, projections?: readonly Projection[]):
 }
 
 /** Everything in the projected tables, as plain rows, for comparison. */
-function snapshot(db: SqliteDatabase): { sessions: SqlRow[]; messages: SqlRow[] } {
+function snapshot(db: SqliteDatabase): {
+  sessions: SqlRow[];
+  messages: SqlRow[];
+  participants: SqlRow[];
+} {
   return {
     sessions: db.all('SELECT * FROM sessions ORDER BY session_id'),
     messages: db.all('SELECT * FROM messages ORDER BY seq'),
+    participants: db.all('SELECT * FROM participants ORDER BY seq'),
   };
 }
 
@@ -98,7 +103,7 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
       expect(result?.created).toBe(true);
       expect(result?.rebuilt).toBe(true);
       expect(h.runner.status()).toEqual([
-        { name: 'sessions', lastSeq: 0, ddlVersion: 1, behind: 0, ready: true },
+        { name: 'sessions', lastSeq: 0, ddlVersion: 2, behind: 0, ready: true },
       ]);
       expect(listSessions(h.db)).toEqual([]);
     } finally {
@@ -113,10 +118,10 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
       buildSession(h);
       const report = h.catchUp();
 
-      expect(report.applied).toBe(6);
-      // app.started, roster.model-attached and dispute.opened are not this
-      // projection's business, and are counted rather than silently dropped.
-      expect(report.ignored).toBe(3);
+      expect(report.applied).toBe(7);
+      // app.started and dispute.opened are not this projection's business, and
+      // are counted rather than silently dropped.
+      expect(report.ignored).toBe(2);
       expect(report.unknown).toBe(0);
       expect(report.failures).toEqual([]);
       expect(report.lastSeq).toBe(9);
@@ -306,13 +311,13 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
       expect(h.runner.status()[0]?.lastSeq).toBe(1);
 
       // A later build ships the same tables under a new version number.
-      const reshaped: Projection = { ...SESSIONS_PROJECTION, ddlVersion: 2 };
+      const reshaped: Projection = { ...SESSIONS_PROJECTION, ddlVersion: 3 };
       const later = new ProjectionRunner(h.db, h.log, { projections: [reshaped] });
 
       const [result] = later.ensure();
       expect(result).toMatchObject({ created: false, rebuilt: true });
       expect(later.status()).toEqual([
-        { name: 'sessions', lastSeq: 1, ddlVersion: 2, behind: 0, ready: true },
+        { name: 'sessions', lastSeq: 1, ddlVersion: 3, behind: 0, ready: true },
       ]);
       expect(getSession(h.db, SESSION_ID)).toBeDefined();
     } finally {

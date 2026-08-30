@@ -6,11 +6,15 @@ import {
   credentialRefSchema,
   idSchema,
   localProviderIdSchema,
+  modelIdSchema,
+  participantRoleSchema,
   proseSchema,
+  rosterEntrySchema,
   sessionSummarySchema,
   settingUpdateSchema,
   settingsSchema,
   titleSchema,
+  usdSchema,
   vaultBackendSchema,
 } from '@sheep/core';
 import type { IpcChannel } from './channels';
@@ -35,12 +39,19 @@ const epochMillis = z.number().int().nonnegative();
 const secretSchema = z.string().min(1).max(8_192);
 
 /**
- * The connection list, returned by every connection write as well as the read.
+ * A session and its roster, returned by every roster write as well as the read.
  *
  * One shape for all of them so the renderer never has to merge a partial reply
- * into its own copy — the list it renders is always the list main just derived
- * from the database, not a guess about what the write did.
+ * into its own copy — what it draws is always what main just read back out of
+ * the projection, not a local guess about what a write did.
  */
+const sessionDetailReply = z.object({
+  session: sessionSummarySchema,
+  roster: z.array(rosterEntrySchema),
+  projectedThroughSeq: z.number().int().nonnegative(),
+});
+
+/** The connection list, on the same principle, for every connection channel. */
 const connectionsReply = z.object({
   connections: z.array(connectionSchema),
   /** Where secrets go on this machine, or `none` if nowhere safe does. */
@@ -143,6 +154,82 @@ export const IPC_CONTRACTS = {
       sessionId: idSchema,
       sessions: z.array(sessionSummarySchema),
       projectedThroughSeq: z.number().int().nonnegative(),
+    }),
+  },
+
+  /**
+   * One session with its roster.
+   *
+   * The roster comes back with the session rather than on a channel of its own,
+   * because a roster without the session it belongs to is not a thing anything
+   * wants — and two calls would let the renderer render one against the other.
+   */
+  'sheep:session-get': {
+    request: z.object({ sessionId: idSchema }),
+    response: sessionDetailReply,
+  },
+  'sheep:session-budget-set': {
+    request: z.object({ sessionId: idSchema, capUsd: usdSchema }),
+    response: sessionDetailReply,
+  },
+  'sheep:roster-attach': {
+    request: z.object({
+      sessionId: idSchema,
+      /** The connection to reach this model through, and the model on it. */
+      connectionId: idSchema,
+      modelId: modelIdSchema,
+      weight: z.number().min(0).max(10),
+      budgetCapUsd: usdSchema.nullable(),
+      preferredRole: participantRoleSchema.nullable(),
+    }),
+    response: sessionDetailReply.extend({ participantId: idSchema }),
+  },
+  /** The participant's settings, restated in full — never a patch. */
+  'sheep:roster-reconfigure': {
+    request: z.object({
+      sessionId: idSchema,
+      participantId: idSchema,
+      weight: z.number().min(0).max(10),
+      budgetCapUsd: usdSchema.nullable(),
+      preferredRole: participantRoleSchema.nullable(),
+    }),
+    response: sessionDetailReply,
+  },
+  'sheep:roster-detach': {
+    request: z.object({
+      sessionId: idSchema,
+      participantId: idSchema,
+      reason: proseSchema.optional(),
+    }),
+    response: sessionDetailReply,
+  },
+  /**
+   * The catalogue across every enabled connection.
+   *
+   * `failures` is part of the answer rather than an error: one unreachable
+   * provider must not make the roster unusable, and a list that silently
+   * omitted its models would be lying about what is available.
+   */
+  'sheep:models-list': {
+    request: z.object({ refresh: z.boolean().optional() }),
+    response: z.object({
+      models: z.array(
+        z.object({
+          connectionId: idSchema,
+          connectionLabel: titleSchema,
+          adapterId: z.string().min(1),
+          vendorId: z.string().min(1),
+          modelId: modelIdSchema,
+          displayName: z.string().min(1),
+          contextWindowTokens: z.number().int().nonnegative(),
+          maxOutputTokens: z.number().int().nonnegative(),
+          local: z.boolean(),
+          /** Null means the cost cannot be predicted, which is not the same as free. */
+          inputPerMTokUsd: usdSchema.nullable(),
+          outputPerMTokUsd: usdSchema.nullable(),
+        }),
+      ),
+      failures: z.array(z.object({ adapterId: z.string().min(1), detail: z.string() })),
     }),
   },
 

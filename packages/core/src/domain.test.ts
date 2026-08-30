@@ -41,6 +41,8 @@ const rosterEntry: RosterEntry = {
   sessionId: SESSION_ID,
   model: ANTHROPIC_MODEL,
   weight: 1,
+  budgetCapUsd: null,
+  preferredRole: 'PROPOSER',
   attachedAt: NOW,
   detachedAt: null,
 };

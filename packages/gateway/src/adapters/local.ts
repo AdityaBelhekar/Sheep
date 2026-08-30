@@ -366,7 +366,7 @@ function modelNamesFrom(payload: unknown): string[] {
 /** Builds the adapter for whatever a probe found running. */
 export function createLocalAdapter(
   id: LocalProviderId,
-  options: { baseUrl?: string; fetch?: FetchLike } = {},
+  options: { adapterId?: AdapterId; baseUrl?: string; fetch?: FetchLike } = {},
 ): ModelAdapter {
   switch (id) {
     case 'ollama':

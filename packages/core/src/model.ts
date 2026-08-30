@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { idSchema, slugSchema, timestampSchema, usdSchema } from './primitives';
+import { participantRoleSchema } from './protocol';
 
 /**
  * Which company's weights are answering.
@@ -45,6 +46,9 @@ export type ModelRef = z.infer<typeof modelRefSchema>;
  *
  * The same model may join twice (two participants, one vendor) — role
  * assignment constrains on `vendorId`, never on participant identity.
+ *
+ * A projected shape, so "not set" is `null` rather than an absent key: these
+ * rows come out of a table, where a column has to hold something.
  */
 export const rosterEntrySchema = z.strictObject({
   participantId: idSchema,
@@ -52,8 +56,17 @@ export const rosterEntrySchema = z.strictObject({
   model: modelRefSchema,
   /** Relative say in collective steps. 1 is neutral; 0 makes an observer. */
   weight: z.number().min(0).max(10),
-  /** Optional per-model spend ceiling, independent of the session cap. */
-  budgetCapUsd: usdSchema.optional(),
+  /** Per-model spend ceiling, independent of the session cap. */
+  budgetCapUsd: usdSchema.nullable(),
+  /**
+   * The role this participant is meant for, when the user has an opinion.
+   *
+   * A preference, not an assignment: the solver in Phase 24 issues the actual
+   * per-round roles and its hard constraints — no self-critique, critic vendor
+   * ≠ author vendor — outrank anything expressed here. Null means "no
+   * preference", which is the state that lets the solver do its best work.
+   */
+  preferredRole: participantRoleSchema.nullable(),
   attachedAt: timestampSchema,
   detachedAt: timestampSchema.nullable(),
 });

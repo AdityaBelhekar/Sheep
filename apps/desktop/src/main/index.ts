@@ -40,6 +40,7 @@ if (isSmokeRun) {
     'renderer-navigation',
     'renderer-projection',
     'renderer-connections',
+    'renderer-roster',
     'renderer-theme',
     'ipc-channel-guard',
   ]) {

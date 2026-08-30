@@ -79,6 +79,14 @@ export const EVENT_FIXTURES: EventFixtures = {
     model: ANTHROPIC_MODEL,
     weight: 1,
     budgetCapUsd: 10,
+    preferredRole: 'PROPOSER',
+  },
+  'roster.model-reconfigured': {
+    sessionId: SESSION_ID,
+    participantId: PARTICIPANT_A,
+    weight: 1.5,
+    budgetCapUsd: 4,
+    preferredRole: 'CRITIC',
   },
   'roster.model-detached': {
     sessionId: SESSION_ID,

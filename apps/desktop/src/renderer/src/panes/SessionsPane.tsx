@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import type { SessionSummary } from '@sheep/core';
 import type { IpcClient } from '@sheep/ipc';
 import { paneById } from '@shared/panes';
+import { RosterPanel } from './RosterPanel';
 
 type ListState =
   | { kind: 'loading' }
@@ -29,6 +30,7 @@ export function SessionsPane({
   const [title, setTitle] = useState('');
   const [question, setQuestion] = useState('');
   const [creating, setCreating] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
 
   const load = useCallback(
     (signal?: { cancelled: boolean }) => {
@@ -62,6 +64,39 @@ export function SessionsPane({
     };
   }, [load]);
 
+  /**
+   * Reopens the session the user was last looking at.
+   *
+   * Stored rather than remembered in component state, so closing the window and
+   * coming back lands where the work was left rather than at the top of a list.
+   */
+  useEffect(() => {
+    if (!client) return;
+    const signal = { cancelled: false };
+    client
+      .invoke('sheep:settings-read', {})
+      .then((reply) => {
+        if (!signal.cancelled) setSelected(reply.settings['ui.lastSessionId']);
+      })
+      .catch(() => {
+        // A settings read that fails simply means no session is preselected.
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [client]);
+
+  const select = useCallback(
+    (sessionId: string | null) => {
+      setSelected(sessionId);
+      void client?.invoke('sheep:settings-write', {
+        key: 'ui.lastSessionId',
+        value: sessionId,
+      });
+    },
+    [client],
+  );
+
   const canCreate = client !== undefined && title.trim() !== '' && question.trim() !== '';
 
   const create = (): void => {
@@ -77,6 +112,7 @@ export function SessionsPane({
         });
         setTitle('');
         setQuestion('');
+        select(reply.sessionId);
         onStoreChanged();
       })
       .catch((error: unknown) => {
@@ -166,7 +202,11 @@ export function SessionsPane({
       {state.kind === 'ready' && state.sessions.length > 0 && (
         <ul className="session-list">
           {state.sessions.map((session) => (
-            <li className="session" key={session.sessionId}>
+            <li
+              className="session"
+              key={session.sessionId}
+              data-sheep-selected={session.sessionId === selected ? 'true' : undefined}
+            >
               <div className="session__head">
                 <h2 className="session__title">{session.title}</h2>
                 <span className="badge" data-status={session.status}>
@@ -178,6 +218,10 @@ export function SessionsPane({
                 <div>
                   <dt>Created</dt>
                   <dd>{formatTimestamp(session.createdAt)}</dd>
+                </div>
+                <div>
+                  <dt>Roster</dt>
+                  <dd>{session.participantCount}</dd>
                 </div>
                 <div>
                   <dt>Messages</dt>
@@ -193,6 +237,33 @@ export function SessionsPane({
                   </dd>
                 </div>
               </dl>
+
+              <div className="button-row">
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  data-sheep-open-session={session.sessionId}
+                  onClick={() => {
+                    select(session.sessionId === selected ? null : session.sessionId);
+                  }}
+                >
+                  {session.sessionId === selected ? 'Hide roster' : 'Roster'}
+                </button>
+              </div>
+
+              {session.sessionId === selected && (
+                <RosterPanel
+                  client={client}
+                  sessionId={session.sessionId}
+                  onStoreChanged={() => {
+                    load();
+                    onStoreChanged();
+                  }}
+                  onClose={() => {
+                    select(null);
+                  }}
+                />
+              )}
             </li>
           ))}
         </ul>

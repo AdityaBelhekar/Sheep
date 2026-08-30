@@ -94,9 +94,12 @@ export {
   SESSIONS_DDL,
   SESSIONS_PROJECTION,
   countSessions,
+  getParticipant,
   getSession,
   listMessages,
+  listParticipants,
   listSessions,
+  type RosterEntry,
   type SessionSummary,
 } from './projections/sessions';
 export type {

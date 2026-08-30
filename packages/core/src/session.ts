@@ -66,5 +66,7 @@ export type Session = z.infer<typeof sessionSchema>;
  */
 export const sessionSummarySchema = sessionSchema.extend({
   messageCount: z.number().int().nonnegative(),
+  /** Models currently attached — detached ones stay in the log, not the count. */
+  participantCount: z.number().int().nonnegative(),
 });
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;

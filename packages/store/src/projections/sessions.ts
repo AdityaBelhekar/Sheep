@@ -1,4 +1,10 @@
-import type { DomainEvent, DomainEventType, Message, SessionSummary } from '@sheep/core';
+import type {
+  DomainEvent,
+  DomainEventType,
+  Message,
+  RosterEntry,
+  SessionSummary,
+} from '@sheep/core';
 import type { EventRecord } from '../events/log';
 import type { SqliteDatabase } from '../sqlite/types';
 import type { Projection } from './types';
@@ -19,9 +25,32 @@ export const SESSIONS_DDL = `
     budget_cap_usd   REAL,
     budget_spent_usd REAL NOT NULL,
     message_count    INTEGER NOT NULL,
+    -- Attached models. Detaching decrements it; the log still remembers.
+    participant_count INTEGER NOT NULL,
     created_at       TEXT NOT NULL,
     updated_at       TEXT NOT NULL
   ) STRICT;
+
+  -- One row per model attached to a session. A model may join a session twice,
+  -- so the participant, not the model, is what a role is assigned to.
+  CREATE TABLE IF NOT EXISTS participants (
+    participant_id TEXT PRIMARY KEY,
+    session_id     TEXT NOT NULL,
+    -- The connection this model was reached through, snapshotted: deleting the
+    -- connection later must not orphan what it was attached to.
+    connection_id  TEXT NOT NULL,
+    vendor_id      TEXT NOT NULL,
+    model_id       TEXT NOT NULL,
+    model_version  TEXT,
+    weight         REAL NOT NULL,
+    budget_cap_usd REAL,
+    preferred_role TEXT,
+    seq            INTEGER NOT NULL,
+    attached_at    TEXT NOT NULL,
+    detached_at    TEXT
+  ) STRICT;
+
+  CREATE INDEX IF NOT EXISTS participants_session_seq_idx ON participants (session_id, seq);
 
   CREATE TABLE IF NOT EXISTS messages (
     message_id     TEXT PRIMARY KEY,
@@ -62,6 +91,9 @@ const HANDLED = new Set<DomainEventType>([
   'session.budget-set',
   'session.spend-recorded',
   'message.recorded',
+  'roster.model-attached',
+  'roster.model-reconfigured',
+  'roster.model-detached',
 ]);
 
 /**
@@ -79,9 +111,9 @@ const HANDLED = new Set<DomainEventType>([
  */
 export const SESSIONS_PROJECTION: Projection = {
   name: 'sessions',
-  ddlVersion: 1,
-  // Child first: `messages` is the table a future foreign key would depend on.
-  tables: ['messages', 'sessions'],
+  ddlVersion: 2,
+  // Children first: these are the tables a future foreign key would depend on.
+  tables: ['participants', 'messages', 'sessions'],
   ddl: SESSIONS_DDL,
 
   handles(type: DomainEventType): boolean {
@@ -96,8 +128,8 @@ export const SESSIONS_PROJECTION: Projection = {
         db.run(
           `INSERT INTO sessions (
              session_id, title, question, status, budget_cap_usd, budget_spent_usd,
-             message_count, created_at, updated_at
-           ) VALUES (?, ?, ?, 'draft', NULL, 0, 0, ?, ?)
+             message_count, participant_count, created_at, updated_at
+           ) VALUES (?, ?, ?, 'draft', NULL, 0, 0, 0, ?, ?)
            ON CONFLICT(session_id) DO UPDATE SET
              title = excluded.title,
              question = excluded.question,
@@ -205,6 +237,67 @@ export const SESSIONS_PROJECTION: Projection = {
         return;
       }
 
+      case 'roster.model-attached': {
+        const { model } = event.payload;
+        db.run(
+          `INSERT INTO participants (
+             participant_id, session_id, connection_id, vendor_id, model_id, model_version,
+             weight, budget_cap_usd, preferred_role, seq, attached_at, detached_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+           ON CONFLICT(participant_id) DO UPDATE SET
+             weight = excluded.weight,
+             budget_cap_usd = excluded.budget_cap_usd,
+             preferred_role = excluded.preferred_role,
+             seq = excluded.seq,
+             attached_at = excluded.attached_at,
+             -- Re-attaching is how a detached model comes back.
+             detached_at = NULL`,
+          [
+            event.payload.participantId,
+            event.payload.sessionId,
+            model.connectionId,
+            model.vendorId,
+            model.modelId,
+            model.version ?? null,
+            event.payload.weight,
+            event.payload.budgetCapUsd ?? null,
+            event.payload.preferredRole ?? null,
+            record.seq,
+            at,
+          ],
+        );
+        countParticipants(db, event.payload.sessionId, at);
+        return;
+      }
+
+      case 'roster.model-reconfigured': {
+        db.run(
+          `UPDATE participants
+             SET weight = ?, budget_cap_usd = ?, preferred_role = ?
+           WHERE participant_id = ?`,
+          [
+            event.payload.weight,
+            event.payload.budgetCapUsd ?? null,
+            event.payload.preferredRole ?? null,
+            event.payload.participantId,
+          ],
+        );
+        db.run('UPDATE sessions SET updated_at = ? WHERE session_id = ?', [
+          at,
+          event.payload.sessionId,
+        ]);
+        return;
+      }
+
+      case 'roster.model-detached': {
+        db.run('UPDATE participants SET detached_at = ? WHERE participant_id = ?', [
+          at,
+          event.payload.participantId,
+        ]);
+        countParticipants(db, event.payload.sessionId, at);
+        return;
+      }
+
       default: {
         throw new Error(
           `sessions projection was handed an event it does not handle: ${event.type}`,
@@ -214,6 +307,24 @@ export const SESSIONS_PROJECTION: Projection = {
   },
 };
 
+/**
+ * Recomputed rather than incremented, for the same reason `message_count` is:
+ * a replay must land on the same number whether it is seeing these events for
+ * the first time or folding them over rows that already reflect them.
+ */
+function countParticipants(db: SqliteDatabase, sessionId: string, at: string): void {
+  db.run(
+    `UPDATE sessions
+       SET participant_count = (
+             SELECT COUNT(*) FROM participants
+             WHERE session_id = ? AND detached_at IS NULL
+           ),
+           updated_at = ?
+     WHERE session_id = ?`,
+    [sessionId, at, sessionId],
+  );
+}
+
 type SessionRow = {
   session_id: string;
   title: string;
@@ -222,8 +333,23 @@ type SessionRow = {
   budget_cap_usd: number | null;
   budget_spent_usd: number;
   message_count: number;
+  participant_count: number;
   created_at: string;
   updated_at: string;
+};
+
+type ParticipantRow = {
+  participant_id: string;
+  session_id: string;
+  connection_id: string;
+  vendor_id: string;
+  model_id: string;
+  model_version: string | null;
+  weight: number;
+  budget_cap_usd: number | null;
+  preferred_role: string | null;
+  attached_at: string;
+  detached_at: string | null;
 };
 
 type MessageRow = {
@@ -252,10 +378,15 @@ type MessageRow = {
   recorded_at: string;
 };
 
-export type { SessionSummary };
+export type { RosterEntry, SessionSummary };
 
 const SESSION_COLUMNS =
-  'session_id, title, question, status, budget_cap_usd, budget_spent_usd, message_count, created_at, updated_at';
+  'session_id, title, question, status, budget_cap_usd, budget_spent_usd, message_count, ' +
+  'participant_count, created_at, updated_at';
+
+const PARTICIPANT_COLUMNS =
+  'participant_id, session_id, connection_id, vendor_id, model_id, model_version, weight, ' +
+  'budget_cap_usd, preferred_role, attached_at, detached_at';
 
 const MESSAGE_COLUMNS =
   'message_id, session_id, phase_id, round_id, seq, author_kind, participant_id, connection_id, ' +
@@ -298,6 +429,36 @@ export function listMessages(
     .map(toMessage);
 }
 
+/**
+ * A session's roster, in the order models were attached.
+ *
+ * Detached participants are included by default: they authored messages that
+ * are still in the record, and a UI that could not name their author would be
+ * hiding provenance rather than tidying a list.
+ */
+export function listParticipants(
+  db: SqliteDatabase,
+  sessionId: string,
+  options: { attachedOnly?: boolean } = {},
+): RosterEntry[] {
+  const clause = options.attachedOnly ? ' AND detached_at IS NULL' : '';
+  return db
+    .all<ParticipantRow>(
+      `SELECT ${PARTICIPANT_COLUMNS} FROM participants
+       WHERE session_id = ?${clause} ORDER BY seq`,
+      [sessionId],
+    )
+    .map(toRosterEntry);
+}
+
+export function getParticipant(db: SqliteDatabase, participantId: string): RosterEntry | undefined {
+  const row = db.get<ParticipantRow>(
+    `SELECT ${PARTICIPANT_COLUMNS} FROM participants WHERE participant_id = ?`,
+    [participantId],
+  );
+  return row ? toRosterEntry(row) : undefined;
+}
+
 function toSessionSummary(row: SessionRow): SessionSummary {
   return {
     sessionId: row.session_id,
@@ -308,8 +469,27 @@ function toSessionSummary(row: SessionRow): SessionSummary {
     status: row.status as SessionSummary['status'],
     budget: { capUsd: row.budget_cap_usd, spentUsd: row.budget_spent_usd },
     messageCount: row.message_count,
+    participantCount: row.participant_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function toRosterEntry(row: ParticipantRow): RosterEntry {
+  return {
+    participantId: row.participant_id,
+    sessionId: row.session_id,
+    model: {
+      connectionId: row.connection_id,
+      vendorId: row.vendor_id,
+      modelId: row.model_id,
+      ...(row.model_version === null ? {} : { version: row.model_version }),
+    },
+    weight: row.weight,
+    budgetCapUsd: row.budget_cap_usd,
+    preferredRole: row.preferred_role as RosterEntry['preferredRole'],
+    attachedAt: row.attached_at,
+    detachedAt: row.detached_at,
   };
 }
 

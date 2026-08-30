@@ -146,7 +146,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 
 - [x] **18. Connections UI** — add/edit/delete/test a connection per adapter category; keychain write; connection health badge.
   → `feat(ui): model connection management`
-- [ ] **19. Session roster** — attach models to a session, assign roles, set per-model budget and weight.
+- [x] **19. Session roster** — attach models to a session, assign roles, set per-model budget and weight.
   → `feat(ui): per-session model roster`
 - [ ] **20. Single-model chat** — a plain streaming chat surface. Not a product feature; it proves the whole pipe end to end.
   → `feat(ui): single-model streaming chat surface`

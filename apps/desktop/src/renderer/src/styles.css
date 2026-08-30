@@ -478,6 +478,123 @@ select.field__input {
   color: var(--fg-faint);
 }
 
+/* ── Roster ───────────────────────────────────────────────────────────── */
+
+.session[data-sheep-selected='true'] {
+  border-color: var(--accent);
+}
+
+.roster {
+  margin-top: 0.95rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.roster__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.roster__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.roster__question {
+  margin: 0.2rem 0 0;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.roster__budget {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.roster__spent {
+  color: var(--fg-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.roster__vendors {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+}
+
+.roster__vendors--warn {
+  color: var(--warn);
+}
+
+.roster__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.roster__entry {
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.roster__entry-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.roster__model {
+  font-weight: 600;
+  user-select: text;
+}
+
+.roster__controls {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.roster__attach {
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.roster__price {
+  margin: 0;
+  color: var(--fg-faint);
+  font-size: 0.78rem;
+}
+
+.field--inline {
+  width: auto;
+}
+
+.field__input--narrow {
+  width: 8.5rem;
+}
+
 /* ── Connections ──────────────────────────────────────────────────────── */
 
 .session__detail {

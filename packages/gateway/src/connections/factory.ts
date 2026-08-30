@@ -116,7 +116,10 @@ export function buildAdapter(options: BuildAdapterOptions): ModelAdapter {
     }
 
     case 'local':
+      // The connection's own id, not the runtime's name: two Ollama servers on
+      // one machine are a legitimate setup, and both must be registrable.
       return createLocalAdapter(config.provider, {
+        adapterId: options.adapterId,
         ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
         ...(options.fetch ? { fetch: options.fetch } : {}),
       });

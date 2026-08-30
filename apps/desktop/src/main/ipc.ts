@@ -1,18 +1,23 @@
 import { randomUUID } from 'node:crypto';
 import { app, ipcMain } from 'electron';
-import { domainEvent, type Connection } from '@sheep/core';
+import { domainEvent, type Connection, type RosterEntry, type SessionSummary } from '@sheep/core';
+import type { ModelDescriptor } from '@sheep/gateway';
 import { IpcError, IpcRegistry } from '@sheep/ipc';
-import { listSessions } from '@sheep/store';
+import { getSession, listParticipants, listSessions } from '@sheep/store';
 import { APP_NAME } from '../shared/product';
 import {
   createConnection,
   deleteConnection,
   detectLocal,
+  getAdapterRegistry,
+  listAvailableModels,
   signInConnection,
+  syncConnections,
   testConnection,
   updateConnection,
 } from './connections';
 import { getVault } from './credentials';
+import { logError } from './log';
 import { getEventLog, getStore } from './store';
 
 /** Builds the main-process registry with every handler this app serves. */
@@ -92,6 +97,98 @@ export function createIpcRegistry(): IpcRegistry {
 
       return { sessionId, ...readSessions() };
     })
+    .register('sheep:session-get', (request) => readSessionDetail(request.sessionId))
+    .register('sheep:session-budget-set', (request) => {
+      getStore().record([
+        domainEvent('session.budget-set', {
+          sessionId: request.sessionId,
+          capUsd: request.capUsd,
+        }),
+      ]);
+      return readSessionDetail(request.sessionId);
+    })
+    .register('sheep:roster-attach', async (request) => {
+      const store = getStore();
+      const connection = store.connections.get(request.connectionId);
+      if (!connection) throw new Error(`unknown connection: ${request.connectionId}`);
+
+      // The model is confirmed to exist on that connection before anything is
+      // written down: a roster entry naming a model the provider does not serve
+      // is a failure that would only surface at the first call.
+      const descriptor = await describeModel(connection.adapterId, request.modelId);
+      const participantId = randomUUID();
+
+      store.record([
+        domainEvent('roster.model-attached', {
+          sessionId: request.sessionId,
+          participantId,
+          model: {
+            connectionId: connection.connectionId,
+            vendorId: descriptor.vendorId,
+            modelId: descriptor.modelId,
+          },
+          weight: request.weight,
+          ...(request.budgetCapUsd === null ? {} : { budgetCapUsd: request.budgetCapUsd }),
+          ...(request.preferredRole === null ? {} : { preferredRole: request.preferredRole }),
+        }),
+      ]);
+
+      return { participantId, ...readSessionDetail(request.sessionId) };
+    })
+    .register('sheep:roster-reconfigure', (request) => {
+      getStore().record([
+        domainEvent('roster.model-reconfigured', {
+          sessionId: request.sessionId,
+          participantId: request.participantId,
+          weight: request.weight,
+          ...(request.budgetCapUsd === null ? {} : { budgetCapUsd: request.budgetCapUsd }),
+          ...(request.preferredRole === null ? {} : { preferredRole: request.preferredRole }),
+        }),
+      ]);
+      return readSessionDetail(request.sessionId);
+    })
+    .register('sheep:roster-detach', (request) => {
+      getStore().record([
+        domainEvent('roster.model-detached', {
+          sessionId: request.sessionId,
+          participantId: request.participantId,
+          ...(request.reason === undefined ? {} : { reason: request.reason }),
+        }),
+      ]);
+      return readSessionDetail(request.sessionId);
+    })
+    .register('sheep:models-list', async (request) => {
+      const store = getStore();
+      const byAdapter = new Map(
+        store.connections.list().map((connection) => [connection.adapterId, connection]),
+      );
+      const { handles, failures } = await listAvailableModels(
+        request.refresh === undefined ? {} : { refresh: request.refresh },
+      );
+
+      return {
+        models: handles.flatMap((handle) => {
+          const connection = byAdapter.get(handle.adapterId);
+          if (!connection) return [];
+          return [
+            {
+              connectionId: connection.connectionId,
+              connectionLabel: connection.label,
+              adapterId: handle.adapterId,
+              vendorId: handle.descriptor.vendorId,
+              modelId: handle.descriptor.modelId,
+              displayName: handle.descriptor.displayName,
+              contextWindowTokens: handle.descriptor.contextWindowTokens,
+              maxOutputTokens: handle.descriptor.maxOutputTokens,
+              local: handle.descriptor.local,
+              inputPerMTokUsd: handle.descriptor.pricing?.inputPerMTokUsd ?? null,
+              outputPerMTokUsd: handle.descriptor.pricing?.outputPerMTokUsd ?? null,
+            },
+          ];
+        }),
+        failures,
+      };
+    })
     .register('sheep:connections-list', () => readConnections())
     .register('sheep:connection-create', async (request) => {
       const connection = await createConnection({
@@ -157,6 +254,41 @@ function readConnections(): {
   };
 }
 
+/**
+ * One session and its roster, straight off the projection.
+ *
+ * Reads after the write in every handler above, so the reply describes the
+ * state the log actually produced rather than the state the caller asked for.
+ */
+function readSessionDetail(sessionId: string): {
+  session: SessionSummary;
+  roster: RosterEntry[];
+  projectedThroughSeq: number;
+} {
+  const store = getStore();
+  const session = getSession(store.db, sessionId);
+  if (!session) throw new Error(`unknown session: ${sessionId}`);
+
+  const status = store.projections.status().find((entry) => entry.name === 'sessions');
+  return {
+    session,
+    roster: listParticipants(store.db, sessionId),
+    projectedThroughSeq: status?.lastSeq ?? 0,
+  };
+}
+
+/** Confirms a model exists on a connection, and says so precisely when it does not. */
+async function describeModel(adapterId: string, modelId: string): Promise<ModelDescriptor> {
+  await syncConnections();
+  const registry = getAdapterRegistry();
+  if (!registry.has(adapterId)) {
+    throw new Error(`this connection is not available; test it first`);
+  }
+  const descriptor = await registry.get(adapterId).describeModel(modelId);
+  if (!descriptor) throw new Error(`this connection does not serve model: ${modelId}`);
+  return descriptor;
+}
+
 /** The projected session list, with how far the projection has replayed. */
 function readSessions(limit?: number): {
   sessions: ReturnType<typeof listSessions>;
@@ -185,10 +317,17 @@ export function bindIpcRegistry(registry: IpcRegistry): void {
       try {
         return await registry.dispatch(channel, payload, { senderId: event.sender.id });
       } catch (error) {
-        // Electron flattens rejections to a string; keep the code readable.
-        throw error instanceof IpcError
-          ? new Error(`${error.code}: ${error.message}`)
-          : new Error(`IPC_HANDLER_FAILED: ${channel}`, { cause: error });
+        // Electron flattens a rejection to its message, so anything the user
+        // needs in order to act has to be *in* the message. A handler failure
+        // that reached the renderer as a bare code was a dead end for whoever
+        // hit it; the reason travels, and the stack stays here in the log.
+        if (error instanceof IpcError) {
+          throw new Error(`${error.code}: ${error.message}`, { cause: error });
+        }
+
+        logError(`ipc handler failed on ${channel} -`, error);
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`IPC_HANDLER_FAILED: ${channel}: ${reason}`, { cause: error });
       }
     });
   }
