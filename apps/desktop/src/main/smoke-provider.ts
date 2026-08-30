@@ -17,6 +17,18 @@ import type { AddressInfo } from 'node:net';
 
 export const SMOKE_MODEL_ID = 'sheep-smoke:1b';
 
+/**
+ * A model that answers slowly and at length, so a cancellation has something to
+ * interrupt. Same wire format; only the pacing differs.
+ */
+export const SMOKE_SLOW_MODEL_ID = 'sheep-smoke:slow';
+
+/** Word gap for the slow model, in milliseconds. */
+const SLOW_DELAY_MS = 40;
+
+/** How many words the slow model emits before it would finish on its own. */
+export const SLOW_WORD_COUNT = 400;
+
 /** Long enough to arrive in several deltas, so batching is actually exercised. */
 export const SMOKE_REPLY =
   'A blind-parallel round keeps each model out of the others contexts until every ' +
@@ -39,7 +51,10 @@ interface ChatRequest {
  * Ollama does — including the final `done` row that carries the token counts.
  */
 function chatChunks(model: string, prompt: string): string[] {
-  const words = SMOKE_REPLY.split(' ');
+  const words =
+    model === SMOKE_SLOW_MODEL_ID
+      ? Array.from({ length: SLOW_WORD_COUNT }, (_unused, index) => `word${String(index)}`)
+      : SMOKE_REPLY.split(' ');
   const rows = words.map((word, index) =>
     JSON.stringify({
       model,
@@ -72,7 +87,12 @@ export async function startSmokeProvider(): Promise<SmokeProvider> {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(
         JSON.stringify({
-          models: [{ name: SMOKE_MODEL_ID, model: SMOKE_MODEL_ID, size: 1, digest: 'smoke' }],
+          models: [SMOKE_MODEL_ID, SMOKE_SLOW_MODEL_ID].map((id) => ({
+            name: id,
+            model: id,
+            size: 1,
+            digest: 'smoke',
+          })),
         }),
       );
       return;
@@ -93,16 +113,26 @@ export async function startSmokeProvider(): Promise<SmokeProvider> {
 
           // One chunk per tick, so the renderer sees a stream rather than a
           // single flush — which is the only way the batcher is under any load.
-          const chunks = chatChunks(body.model ?? SMOKE_MODEL_ID, prompt);
+          const model = body.model ?? SMOKE_MODEL_ID;
+          const chunks = chatChunks(model, prompt);
+          const gap = model === SMOKE_SLOW_MODEL_ID ? SLOW_DELAY_MS : 2;
+
           let index = 0;
+          let stopped = false;
+          // A client that hangs up mid-answer must stop the writer too, or the
+          // process holds a timer for a socket nobody is reading.
+          request.on('close', () => {
+            stopped = true;
+          });
+
           const tick = (): void => {
-            if (index >= chunks.length) {
-              response.end();
+            if (stopped || index >= chunks.length) {
+              if (!stopped) response.end();
               return;
             }
             response.write(chunks[index]);
             index += 1;
-            setTimeout(tick, 2);
+            setTimeout(tick, gap);
           };
           tick();
         })

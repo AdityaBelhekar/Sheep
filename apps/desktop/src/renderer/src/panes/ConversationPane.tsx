@@ -45,6 +45,7 @@ export function ConversationPane({
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [live, setLive] = useState<LiveRun | null>(null);
+  const [stopping, setStopping] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
 
@@ -137,10 +138,13 @@ export function ConversationPane({
               // The message is in the log now; re-reading the projection is
               // what makes it real on screen, so the live copy goes away.
               return null;
+            default:
+              return current;
           }
         });
 
         if (event.kind === 'end') {
+          setStopping(false);
           void load();
           onStoreChanged();
         }
@@ -187,8 +191,18 @@ export function ConversationPane({
   };
 
   const cancel = (): void => {
-    if (!client || !live) return;
-    void client.invoke('sheep:chat-cancel', { runId: live.runId });
+    if (!client || !live || stopping) return;
+    setStopping(true);
+    void client
+      .invoke('sheep:chat-cancel', { runId: live.runId })
+      .catch((error: unknown) => {
+        setProblem(describe(error));
+      })
+      .finally(() => {
+        // The button stays disabled until the run's `end` clears `live`: a
+        // second press would cancel nothing and only look like it failed.
+        setStopping(false);
+      });
   };
 
   return (
@@ -278,7 +292,17 @@ export function ConversationPane({
                       )}
                     </div>
                     <p className="chat__body">
-                      {message.body.kind === 'text' ? message.body.text : '(stored as a blob)'}
+                      {message.body.kind !== 'text' ? (
+                        '(stored as a blob)'
+                      ) : message.body.text === '' ? (
+                        <span className="chat__empty">
+                          {message.finish === 'cancelled'
+                            ? 'stopped before the model said anything'
+                            : 'no text'}
+                        </span>
+                      ) : (
+                        message.body.text
+                      )}
                     </p>
                   </li>
                 ))}
@@ -372,9 +396,10 @@ export function ConversationPane({
                       className="button button--danger"
                       type="button"
                       data-sheep-cancel="true"
+                      disabled={stopping}
                       onClick={cancel}
                     >
-                      Stop
+                      {stopping ? 'Stopping…' : 'Stop'}
                     </button>
                   )}
                 </div>

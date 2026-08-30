@@ -9,7 +9,12 @@ import { createConnection } from './connections';
 import { logInfo, logWarn, redactor } from './log';
 import { bundlePath, resourcePath } from './paths';
 import { isSmokeRun, recordSmokeCheck } from './smoke';
-import { SMOKE_MODEL_ID, SMOKE_REPLY, startSmokeProvider } from './smoke-provider';
+import {
+  SMOKE_MODEL_ID,
+  SMOKE_REPLY,
+  SMOKE_SLOW_MODEL_ID,
+  startSmokeProvider,
+} from './smoke-provider';
 import { getStore } from './store';
 
 /** What the navigability check expects to find, taken from the shared list. */
@@ -363,6 +368,133 @@ const CHAT_EXPRESSION = (sessionId: string, expected: string): string => `(async
   };
 })()`;
 
+/**
+ * Starts a long answer, stops it, and checks what survived.
+ *
+ * The claim under test is "cancel mid-stream loses nothing": the text that had
+ * already arrived is in the log, marked `cancelled`, and the renderer shows the
+ * same thing the log does.
+ */
+const CANCEL_EXPRESSION = (sessionId: string, participantId: string): string => `(async () => {
+  const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const seen = [];
+  const stop = window.sheep.subscribe('sheep:stream-event', (event) => { seen.push(event); });
+
+  try {
+    const run = await window.sheep.invoke('sheep:chat-send', {
+      sessionId: ${JSON.stringify(sessionId)},
+      participantId: ${JSON.stringify(participantId)},
+      text: 'Say a great deal, slowly.',
+    });
+
+    // Wait for real text, so there is something for cancelling to preserve.
+    const deadline = Date.now() + 10000;
+    let received = '';
+    while (Date.now() < deadline) {
+      await settle(20);
+      received = seen
+        .filter((e) => e.runId === run.runId && e.kind === 'text')
+        .map((e) => e.text)
+        .join('');
+      if (received.length > 40) break;
+    }
+
+    const cancel = await window.sheep.invoke('sheep:chat-cancel', { runId: run.runId });
+
+    let end = null;
+    const endBy = Date.now() + 10000;
+    while (Date.now() < endBy && !end) {
+      await settle(20);
+      end = seen.find((e) => e.runId === run.runId && e.kind === 'end') ?? null;
+    }
+
+    await settle(200);
+    const messages = await window.sheep.invoke('sheep:messages-list', {
+      sessionId: ${JSON.stringify(sessionId)},
+    });
+    const stored = messages.messages.find((m) => m.messageId === run.assistantMessageId);
+    const streamed = seen
+      .filter((e) => e.runId === run.runId && e.kind === 'text')
+      .map((e) => e.text)
+      .join('');
+
+    return {
+      cancelAccepted: cancel.cancelled,
+      sawEnd: Boolean(end),
+      endFinish: end ? end.finish : null,
+      endPartial: end ? end.partial : null,
+      streamedChars: streamed.length,
+      storedFinish: stored ? stored.finish : null,
+      storedChars: stored && stored.body.kind === 'text' ? stored.body.text.length : -1,
+      // Nothing that reached the screen may be missing from the record.
+      storedKeptEverything: Boolean(stored && stored.body.kind === 'text' && stored.body.text === streamed),
+      // The model would have said far more had it not been stopped.
+      stoppedEarly: streamed.length > 0 && streamed.length < 3000,
+    };
+  } finally {
+    stop();
+  }
+})()`;
+
+/**
+ * Six models answering at once, counting deltas against IPC messages.
+ *
+ * "Does not stutter" is not directly observable from here, but the thing that
+ * causes it is: one IPC message per token per run. The batcher's job is to make
+ * the message count a fraction of the delta count, and that ratio is checkable.
+ */
+const CONCURRENCY_EXPRESSION = (sessionId: string, participantIds: string[]): string => `
+(async () => {
+  const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const ids = ${JSON.stringify(participantIds)};
+  const textEvents = new Map();
+  const chars = new Map();
+  const ended = new Set();
+
+  const stop = window.sheep.subscribe('sheep:stream-event', (event) => {
+    if (event.kind === 'text') {
+      textEvents.set(event.runId, (textEvents.get(event.runId) ?? 0) + 1);
+      chars.set(event.runId, (chars.get(event.runId) ?? 0) + event.text.length);
+    }
+    if (event.kind === 'end') ended.add(event.runId);
+  });
+
+  try {
+    const started = Date.now();
+    const runs = await Promise.all(
+      ids.map((participantId) =>
+        window.sheep.invoke('sheep:chat-send', {
+          sessionId: ${JSON.stringify(sessionId)},
+          participantId,
+          text: 'Answer briefly, all of you at once.',
+        }),
+      ),
+    );
+
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline && ended.size < runs.length) await settle(25);
+
+    let events = 0;
+    let characters = 0;
+    for (const run of runs) {
+      events += textEvents.get(run.runId) ?? 0;
+      characters += chars.get(run.runId) ?? 0;
+    }
+
+    return {
+      runs: runs.length,
+      finished: ended.size,
+      textEvents: events,
+      characters,
+      // Every run must have produced text, not just most of them.
+      allSpoke: runs.every((run) => (chars.get(run.runId) ?? 0) > 0),
+      elapsedMs: Date.now() - started,
+    };
+  } finally {
+    stop();
+  }
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -543,13 +675,162 @@ async function checkLocalModel(window: BrowserWindow): Promise<void> {
 
     await checkRoster(window, session.sessionId, connection.connectionId);
     await checkChat(window, session.sessionId, connection.connectionId);
+    await checkCancellation(window, session.sessionId, connection.connectionId);
+    await checkConcurrency(window, session.sessionId, connection.connectionId);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    recordSmokeCheck('renderer-roster', false, detail);
-    recordSmokeCheck('renderer-chat', false, detail);
+    for (const name of [
+      'renderer-roster',
+      'renderer-chat',
+      'stream-cancel',
+      'stream-concurrency',
+    ]) {
+      recordSmokeCheck(name, false, detail);
+    }
   } finally {
     await provider.close();
   }
+}
+
+/** Attaches a model and returns its participant id, or null with the reason. */
+async function attachModel(
+  window: BrowserWindow,
+  sessionId: string,
+  connectionId: string,
+  modelId: string,
+): Promise<{ participantId: string } | { error: string }> {
+  const result = (await evaluate(
+    window,
+    `window.sheep.invoke('sheep:roster-attach', {
+       sessionId: ${JSON.stringify(sessionId)},
+       connectionId: ${JSON.stringify(connectionId)},
+       modelId: ${JSON.stringify(modelId)},
+       weight: 1,
+       budgetCapUsd: null,
+       preferredRole: null,
+     }).then((reply) => ({ participantId: reply.participantId }))`,
+  )) as { participantId?: string } | { error: string } | undefined;
+
+  if (!result || 'error' in result) return { error: result?.error ?? 'could not attach a model' };
+  if (typeof result.participantId !== 'string') return { error: 'no participant id came back' };
+  return { participantId: result.participantId };
+}
+
+type CancelResult =
+  | {
+      cancelAccepted: boolean;
+      sawEnd: boolean;
+      endFinish: string | null;
+      endPartial: boolean | null;
+      streamedChars: number;
+      storedFinish: string | null;
+      storedChars: number;
+      storedKeptEverything: boolean;
+      stoppedEarly: boolean;
+    }
+  | { error: string }
+  | undefined;
+
+async function checkCancellation(
+  window: BrowserWindow,
+  sessionId: string,
+  connectionId: string,
+): Promise<void> {
+  const attached = await attachModel(window, sessionId, connectionId, SMOKE_SLOW_MODEL_ID);
+  if ('error' in attached) {
+    recordSmokeCheck('stream-cancel', false, attached.error);
+    return;
+  }
+
+  const result = (await evaluate(
+    window,
+    CANCEL_EXPRESSION(sessionId, attached.participantId),
+  )) as CancelResult;
+
+  if (!result || 'error' in result) {
+    recordSmokeCheck('stream-cancel', false, result?.error ?? 'no result');
+    return;
+  }
+
+  const ok =
+    result.cancelAccepted &&
+    result.sawEnd &&
+    result.endFinish === 'cancelled' &&
+    result.endPartial === true &&
+    result.streamedChars > 0 &&
+    result.stoppedEarly &&
+    result.storedFinish === 'cancelled' &&
+    // The point of the whole check: what was shown is what was kept.
+    result.storedKeptEverything;
+
+  recordSmokeCheck(
+    'stream-cancel',
+    ok,
+    `accepted=${String(result.cancelAccepted)} · finish=${result.endFinish ?? 'none'}/` +
+      `${result.storedFinish ?? 'none'} · partial=${String(result.endPartial)} · ` +
+      `streamed ${String(result.streamedChars)} chars, stored ${String(result.storedChars)} · ` +
+      `kept everything=${String(result.storedKeptEverything)} · ` +
+      `stopped early=${String(result.stoppedEarly)}`,
+  );
+}
+
+type ConcurrencyResult =
+  | {
+      runs: number;
+      finished: number;
+      textEvents: number;
+      characters: number;
+      allSpoke: boolean;
+      elapsedMs: number;
+    }
+  | { error: string }
+  | undefined;
+
+/** Six models at once, and the batching ratio that keeps the UI usable. */
+async function checkConcurrency(
+  window: BrowserWindow,
+  sessionId: string,
+  connectionId: string,
+): Promise<void> {
+  const participantIds: string[] = [];
+  for (let index = 0; index < 6; index += 1) {
+    const attached = await attachModel(window, sessionId, connectionId, SMOKE_MODEL_ID);
+    if ('error' in attached) {
+      recordSmokeCheck('stream-concurrency', false, attached.error);
+      return;
+    }
+    participantIds.push(attached.participantId);
+  }
+
+  const result = (await evaluate(
+    window,
+    CONCURRENCY_EXPRESSION(sessionId, participantIds),
+  )) as ConcurrencyResult;
+
+  if (!result || 'error' in result) {
+    recordSmokeCheck('stream-concurrency', false, result?.error ?? 'no result');
+    return;
+  }
+
+  // Each answer is one delta per word from the provider; the batcher must turn
+  // those into materially fewer IPC messages or it is doing nothing.
+  const deltas = SMOKE_REPLY.split(' ').length * result.runs;
+  const ok =
+    result.runs === 6 &&
+    result.finished === 6 &&
+    result.allSpoke &&
+    result.characters > 0 &&
+    result.textEvents > 0 &&
+    result.textEvents < deltas;
+
+  recordSmokeCheck(
+    'stream-concurrency',
+    ok,
+    `${String(result.finished)}/${String(result.runs)} runs in ${String(result.elapsedMs)}ms · ` +
+      `${String(deltas)} deltas coalesced into ${String(result.textEvents)} messages ` +
+      `(${String(Math.round((deltas / Math.max(1, result.textEvents)) * 10) / 10)}x) · ` +
+      `${String(result.characters)} chars delivered`,
+  );
 }
 
 async function checkRoster(
@@ -622,20 +903,9 @@ async function checkChat(
   sessionId: string,
   connectionId: string,
 ): Promise<void> {
-  const attached = (await evaluate(
-    window,
-    `window.sheep.invoke('sheep:roster-attach', {
-       sessionId: ${JSON.stringify(sessionId)},
-       connectionId: ${JSON.stringify(connectionId)},
-       modelId: ${JSON.stringify(SMOKE_MODEL_ID)},
-       weight: 1,
-       budgetCapUsd: null,
-       preferredRole: null,
-     })`,
-  )) as { participantId?: string } | { error: string } | undefined;
-
-  if (!attached || 'error' in attached) {
-    recordSmokeCheck('renderer-chat', false, attached?.error ?? 'could not attach a model');
+  const attached = await attachModel(window, sessionId, connectionId, SMOKE_MODEL_ID);
+  if ('error' in attached) {
+    recordSmokeCheck('renderer-chat', false, attached.error);
     return;
   }
 

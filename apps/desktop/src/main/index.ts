@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { APP_NAME } from '../shared/product';
+import { cancelAllChats } from './chat';
 import { syncConnections } from './connections';
 import { openVault, runCredentialSelfTest } from './credentials';
 import { bindIpcRegistry, createIpcRegistry } from './ipc';
@@ -42,6 +43,8 @@ if (isSmokeRun) {
     'renderer-connections',
     'renderer-roster',
     'renderer-chat',
+    'stream-cancel',
+    'stream-concurrency',
     'renderer-theme',
     'ipc-channel-guard',
   ]) {
@@ -115,6 +118,10 @@ if (!hasInstanceLock) {
   });
 
   app.on('will-quit', () => {
+    // Runs are aborted before the store closes: a stream still writing into a
+    // closed database would fail at the one moment its partial answer is the
+    // only copy that exists.
+    cancelAllChats();
     closeStore();
     if (smokeDataDir) {
       rmSync(smokeDataDir, { recursive: true, force: true });

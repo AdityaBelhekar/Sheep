@@ -541,6 +541,12 @@ select.field__input {
   user-select: text;
 }
 
+/* A turn that produced no text still happened, and still says so. */
+.chat__empty {
+  color: var(--fg-faint);
+  font-style: italic;
+}
+
 /* Visible thinking, kept apart from the answer so it never becomes one. */
 .chat__reasoning {
   margin: 0 0 0.5rem;
