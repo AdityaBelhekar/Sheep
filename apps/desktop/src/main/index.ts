@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { APP_NAME } from '../shared/product';
+import { syncConnections } from './connections';
 import { openVault, runCredentialSelfTest } from './credentials';
 import { bindIpcRegistry, createIpcRegistry } from './ipc';
 import { logError, logInfo } from './log';
@@ -38,6 +39,7 @@ if (isSmokeRun) {
     'renderer-chain-status',
     'renderer-navigation',
     'renderer-projection',
+    'renderer-connections',
     'renderer-theme',
     'ipc-channel-guard',
   ]) {
@@ -88,6 +90,14 @@ if (!hasInstanceLock) {
           recordSmokeCheck(check, false, 'the store did not open');
         }
       }
+    }
+
+    // Adapters are materialised from the stored connections before the window
+    // opens, so the roster has something to offer the moment it is asked.
+    if (storeOpened) {
+      void syncConnections().catch((error: unknown) => {
+        logError('connections could not be synchronised -', error);
+      });
     }
 
     bindIpcRegistry(createIpcRegistry());

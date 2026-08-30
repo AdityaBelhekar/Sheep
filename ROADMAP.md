@@ -144,7 +144,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 
 ## Stage 3 — Roster & first conversation `Phases 18–21`
 
-- [ ] **18. Connections UI** — add/edit/delete/test a connection per adapter category; keychain write; connection health badge.
+- [x] **18. Connections UI** — add/edit/delete/test a connection per adapter category; keychain write; connection health badge.
   → `feat(ui): model connection management`
 - [ ] **19. Session roster** — attach models to a session, assign roles, set per-model budget and weight.
   → `feat(ui): per-session model roster`

@@ -76,6 +76,13 @@ export {
   newCredentialRef,
   type RegisterCredentialInput,
 } from './credentials';
+export {
+  ConnectionRegistry,
+  ConnectionRegistryError,
+  newAdapterId,
+  type AddConnectionInput,
+  type UpdateConnectionInput,
+} from './connections';
 export { SettingsStore } from './settings';
 export {
   PROJECTIONS,

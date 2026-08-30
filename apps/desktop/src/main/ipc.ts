@@ -1,9 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { app, ipcMain } from 'electron';
-import { domainEvent } from '@sheep/core';
+import { domainEvent, type Connection } from '@sheep/core';
 import { IpcError, IpcRegistry } from '@sheep/ipc';
 import { listSessions } from '@sheep/store';
 import { APP_NAME } from '../shared/product';
+import {
+  createConnection,
+  deleteConnection,
+  detectLocal,
+  signInConnection,
+  testConnection,
+  updateConnection,
+} from './connections';
 import { getVault } from './credentials';
 import { getEventLog, getStore } from './store';
 
@@ -83,7 +91,70 @@ export function createIpcRegistry(): IpcRegistry {
       ]);
 
       return { sessionId, ...readSessions() };
-    });
+    })
+    .register('sheep:connections-list', () => readConnections())
+    .register('sheep:connection-create', async (request) => {
+      const connection = await createConnection({
+        label: request.label,
+        config: request.config,
+        ...(request.secret === undefined ? {} : { secret: request.secret }),
+        ...(request.enabled === undefined ? {} : { enabled: request.enabled }),
+      });
+      return { connectionId: connection.connectionId, ...readConnections() };
+    })
+    .register('sheep:connection-update', async (request) => {
+      await updateConnection({
+        connectionId: request.connectionId,
+        ...(request.label === undefined ? {} : { label: request.label }),
+        ...(request.config === undefined ? {} : { config: request.config }),
+        ...(request.secret === undefined ? {} : { secret: request.secret }),
+        ...(request.enabled === undefined ? {} : { enabled: request.enabled }),
+      });
+      return readConnections();
+    })
+    .register('sheep:connection-delete', async (request) => {
+      const removed = await deleteConnection(request.connectionId);
+      return { removed, ...readConnections() };
+    })
+    .register('sheep:connection-test', async (request) => {
+      const connection = await testConnection(request.connectionId);
+      return { connection, ...readConnections() };
+    })
+    .register('sheep:connection-sign-in', async (request) => {
+      const connection = await signInConnection(request.connectionId);
+      return { connection, ...readConnections() };
+    })
+    .register('sheep:local-providers-detect', async () => ({
+      providers: (await detectLocal()).map((provider) => ({
+        id: provider.id,
+        displayName: provider.displayName,
+        baseUrl: provider.baseUrl,
+        status: provider.status,
+        models: [...provider.models],
+        install: provider.install,
+        ...(provider.detail === undefined ? {} : { detail: provider.detail }),
+      })),
+    }));
+}
+
+/**
+ * The connection list, plus where secrets go on this machine.
+ *
+ * Returned by every connection write as well as the read, so the renderer never
+ * merges a partial reply into its own copy — what it renders is what main just
+ * read back out of the database.
+ */
+function readConnections(): {
+  connections: Connection[];
+  vaultBackend: ReturnType<typeof getVault>['backend'];
+  vaultDescription: string;
+} {
+  const vault = getVault();
+  return {
+    connections: getStore().connections.list(),
+    vaultBackend: vault.backend,
+    vaultDescription: vault.description,
+  };
 }
 
 /** The projected session list, with how far the projection has replayed. */

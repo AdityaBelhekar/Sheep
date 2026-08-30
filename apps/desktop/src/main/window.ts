@@ -1,10 +1,13 @@
+import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { BrowserWindow, nativeImage, nativeTheme, shell } from 'electron';
 import { PANE_IDS } from '../shared/panes';
 import { APP_NAME } from '../shared/product';
-import { logInfo, logWarn } from './log';
+import { logInfo, logWarn, redactor } from './log';
 import { bundlePath, resourcePath } from './paths';
 import { isSmokeRun, recordSmokeCheck } from './smoke';
+import { getStore } from './store';
 
 /** What the navigability check expects to find, taken from the shared list. */
 const PANE_COUNT = PANE_IDS.length;
@@ -163,6 +166,56 @@ const applyThemeExpression = (option: string): string => `(async () => {
   };
 })()`;
 
+/**
+ * Adds, tests and removes a connection from the renderer.
+ *
+ * The interesting assertion is not that the list grew — it is that the secret
+ * typed into the form ends up somewhere the database is not, which the main
+ * process checks by reading the file after this returns.
+ */
+const CONNECTIONS_EXPRESSION = (secret: string): string => `(async () => {
+  window.location.hash = '#/connections';
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const created = await window.sheep.invoke('sheep:connection-create', {
+    label: 'Smoke connection',
+    config: { kind: 'anthropic' },
+    secret: ${JSON.stringify(secret)},
+  });
+  const connection = created.connections.find((c) => c.connectionId === created.connectionId);
+
+  const tested = await window.sheep.invoke('sheep:connection-test', {
+    connectionId: created.connectionId,
+  });
+
+  const renamed = await window.sheep.invoke('sheep:connection-update', {
+    connectionId: created.connectionId,
+    label: 'Smoke connection (renamed)',
+  });
+
+  const detected = await window.sheep.invoke('sheep:local-providers-detect', {});
+
+  return {
+    connectionId: created.connectionId,
+    count: created.connections.length,
+    vaultBackend: created.vaultBackend,
+    vendorId: connection?.vendorId ?? null,
+    hasCredentialRef: typeof connection?.credentialRef === 'string',
+    // No response on any channel may carry the secret back.
+    replyLeaksSecret: JSON.stringify(created).includes(${JSON.stringify(secret)}),
+    testedHealth: tested.connection.health,
+    renamedLabel: renamed.connections.find((c) => c.connectionId === created.connectionId)?.label,
+    localProviders: detected.providers.length,
+  };
+})()`;
+
+const deleteConnectionExpression = (connectionId: string): string => `(async () => {
+  const reply = await window.sheep.invoke('sheep:connection-delete', {
+    connectionId: ${JSON.stringify(connectionId)},
+  });
+  return { removed: reply.removed, remaining: reply.connections.length };
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -230,6 +283,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
 
   await checkNavigation(window);
   await checkProjection(window);
+  await checkConnections(window);
   await checkTheme(window);
 
   if (window.isDestroyed()) return;
@@ -296,6 +350,79 @@ async function checkProjection(window: BrowserWindow): Promise<void> {
       result.projectedThroughSeq,
     )} · default cap ${result.capUsd === null ? 'none' : `$${String(result.capUsd)}`}`,
   );
+}
+
+type ConnectionsResult =
+  | {
+      connectionId: string;
+      count: number;
+      vaultBackend: string;
+      vendorId: string | null;
+      hasCredentialRef: boolean;
+      replyLeaksSecret: boolean;
+      testedHealth: string;
+      renamedLabel?: string;
+      localProviders: number;
+    }
+  | { error: string }
+  | undefined;
+
+/**
+ * Round-trips a connection through the renderer, then checks the two things
+ * that matter about it: the key reached the vault, and no byte of it reached
+ * the database.
+ */
+async function checkConnections(window: BrowserWindow): Promise<void> {
+  const secret = `sk-sheep-smoke-${randomBytes(16).toString('hex')}`;
+  // Registered before the write, so the value is masked even if the write fails
+  // and something logs the failure.
+  redactor.register(secret);
+
+  try {
+    const result = (await evaluate(window, CONNECTIONS_EXPRESSION(secret))) as ConnectionsResult;
+    if (!result || 'error' in result) {
+      recordSmokeCheck('renderer-connections', false, result?.error ?? 'no result');
+      return;
+    }
+
+    const isolated = databaseFilesContaining(secret);
+    const removal = (await evaluate(window, deleteConnectionExpression(result.connectionId))) as
+      { removed: boolean; remaining: number } | { error: string } | undefined;
+    const removed = Boolean(removal && !('error' in removal) && removal.removed);
+
+    const ok =
+      result.count === 1 &&
+      result.vendorId === 'anthropic' &&
+      result.hasCredentialRef &&
+      !result.replyLeaksSecret &&
+      result.renamedLabel === 'Smoke connection (renamed)' &&
+      isolated.length === 0 &&
+      removed;
+
+    recordSmokeCheck(
+      'renderer-connections',
+      ok,
+      isolated.length > 0
+        ? `SECRET FOUND IN ${isolated.join(', ')}`
+        : `vault=${result.vaultBackend} · vendor=${result.vendorId ?? 'none'} · ` +
+            `test=${result.testedHealth} · local probes=${String(result.localProviders)} · ` +
+            `removed=${String(removed)}`,
+    );
+  } finally {
+    redactor.forget(secret);
+  }
+}
+
+/** The database and its sidecars, filtered to any that hold the given bytes. */
+function databaseFilesContaining(needle: string): string[] {
+  const store = getStore();
+  return [store.path, `${store.path}-wal`, `${store.path}-shm`].filter((path) => {
+    try {
+      return readFileSync(path).includes(Buffer.from(needle, 'utf8'));
+    } catch {
+      return false;
+    }
+  });
 }
 
 type ThemeResult = { applied: string | null; stored: string } | { error: string } | undefined;

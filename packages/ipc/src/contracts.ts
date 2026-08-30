@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import {
+  connectionConfigSchema,
+  connectionSchema,
   credentialKindSchema,
   credentialRefSchema,
   idSchema,
+  localProviderIdSchema,
   proseSchema,
   sessionSummarySchema,
   settingUpdateSchema,
@@ -19,6 +22,31 @@ export interface IpcContract<Request = unknown, Response = unknown> {
 }
 
 const epochMillis = z.number().int().nonnegative();
+
+/**
+ * A secret on its way to the vault.
+ *
+ * Bounded rather than free-form so a paste accident cannot push a megabyte of
+ * something else into the OS credential store, and never `.trim()`ed here — the
+ * main process decides what to do with surrounding whitespace, and a schema
+ * that silently rewrote the value would store something other than what was
+ * typed.
+ */
+const secretSchema = z.string().min(1).max(8_192);
+
+/**
+ * The connection list, returned by every connection write as well as the read.
+ *
+ * One shape for all of them so the renderer never has to merge a partial reply
+ * into its own copy — the list it renders is always the list main just derived
+ * from the database, not a guess about what the write did.
+ */
+const connectionsReply = z.object({
+  connections: z.array(connectionSchema),
+  /** Where secrets go on this machine, or `none` if nowhere safe does. */
+  vaultBackend: z.union([vaultBackendSchema, z.literal('none')]),
+  vaultDescription: z.string().min(1),
+});
 
 /**
  * Every channel's wire contract. Both sides validate: main rejects a bad
@@ -115,6 +143,69 @@ export const IPC_CONTRACTS = {
       sessionId: idSchema,
       sessions: z.array(sessionSummarySchema),
       projectedThroughSeq: z.number().int().nonnegative(),
+    }),
+  },
+
+  /**
+   * Connections.
+   *
+   * A secret travels renderer → main on create and update, and only there.
+   * That direction is unavoidable — a key has to be typed somewhere — but it is
+   * one-way: no response on any channel carries a secret back, and the reply to
+   * a write is the same redacted record the list returns.
+   */
+  'sheep:connections-list': {
+    request: z.object({}),
+    response: connectionsReply,
+  },
+  'sheep:connection-create': {
+    request: z.object({
+      label: titleSchema,
+      config: connectionConfigSchema,
+      /** Omitted for a local runtime, and for a connection that signs in. */
+      secret: secretSchema.optional(),
+      enabled: z.boolean().optional(),
+    }),
+    response: connectionsReply.extend({ connectionId: idSchema }),
+  },
+  'sheep:connection-update': {
+    request: z.object({
+      connectionId: idSchema,
+      label: titleSchema.optional(),
+      config: connectionConfigSchema.optional(),
+      /** Present only when the secret is being replaced; absent keeps it. */
+      secret: secretSchema.optional(),
+      enabled: z.boolean().optional(),
+    }),
+    response: connectionsReply,
+  },
+  'sheep:connection-delete': {
+    request: z.object({ connectionId: idSchema }),
+    response: connectionsReply.extend({ removed: z.boolean() }),
+  },
+  'sheep:connection-test': {
+    request: z.object({ connectionId: idSchema }),
+    response: connectionsReply.extend({ connection: connectionSchema }),
+  },
+  /** Runs the loopback PKCE flow in main and stores the refresh token. */
+  'sheep:connection-sign-in': {
+    request: z.object({ connectionId: idSchema }),
+    response: connectionsReply.extend({ connection: connectionSchema }),
+  },
+  'sheep:local-providers-detect': {
+    request: z.object({}),
+    response: z.object({
+      providers: z.array(
+        z.object({
+          id: localProviderIdSchema,
+          displayName: z.string().min(1),
+          baseUrl: z.string().min(1),
+          status: z.enum(['running', 'absent', 'unreachable']),
+          models: z.array(z.string()),
+          install: z.string().min(1),
+          detail: z.string().optional(),
+        }),
+      ),
     }),
   },
 } as const satisfies Record<IpcChannel, IpcContract>;

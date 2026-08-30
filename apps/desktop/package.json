@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@sheep/core": "*",
+    "@sheep/gateway": "*",
     "@sheep/ipc": "*",
     "@sheep/store": "*",
     "react": "^19.2.8",

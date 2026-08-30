@@ -151,6 +151,34 @@ export {
   type VaultBackend,
 } from './credential';
 
+export {
+  CONNECTION_HEALTH,
+  CONNECTION_KINDS,
+  LOCAL_PROVIDER_IDS,
+  OPENAI_PRESET_IDS,
+  adapterPrefixFor,
+  connectionCheckSchema,
+  connectionConfigIssues,
+  connectionConfigSchema,
+  connectionHealthSchema,
+  connectionKindSchema,
+  connectionSchema,
+  credentialKindForConfig,
+  httpUrlSchema,
+  localProviderIdSchema,
+  openAiPresetIdSchema,
+  requiresSecret,
+  usesInteractiveSignIn,
+  vendorIdForConfig,
+  type Connection,
+  type ConnectionCheck,
+  type ConnectionConfig,
+  type ConnectionHealth,
+  type ConnectionKind,
+  type LocalProviderId,
+  type OpenAiPresetId,
+} from './connection';
+
 export { MINIMUM_SECRET_LENGTH, REDACTED, Redactor, SECRET_PATTERN_NAMES } from './redact';
 
 export {

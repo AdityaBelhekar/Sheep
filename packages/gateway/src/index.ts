@@ -89,6 +89,13 @@ export {
 
 export { AdapterRegistry, type AdapterRegistryOptions, type ModelHandle } from './registry';
 
+export {
+  buildAdapter,
+  checkAdapter,
+  ConnectionConfigError,
+  type BuildAdapterOptions,
+} from './connections/factory';
+
 export { resolveSecret, type SecretProvider } from './credentials';
 
 export { estimateInputTokens, PricingTable, pricingKey } from './budget/pricing';

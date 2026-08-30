@@ -115,4 +115,37 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX credentials_vendor_idx ON credentials (vendor_id, label);
     `,
   },
+  {
+    version: 6,
+    name: 'connections',
+    up: `
+      -- Configuration, not history: a connection is something the user set up
+      -- and may rename or delete, while the event log records what happened.
+      -- Messages carry their own ModelRef snapshot, so deleting a connection
+      -- never orphans the provenance of anything it produced.
+      --
+      -- Like credentials, this table holds no secret — only the handle naming
+      -- one in the OS credential store.
+      CREATE TABLE connections (
+        connection_id  TEXT PRIMARY KEY,
+        label          TEXT NOT NULL,
+        -- The live adapter registry is keyed by this, so it must be unique.
+        adapter_id     TEXT NOT NULL UNIQUE,
+        kind           TEXT NOT NULL,
+        vendor_id      TEXT NOT NULL,
+        -- The kind-specific settings, as canonical JSON.
+        config         TEXT NOT NULL,
+        credential_ref TEXT,
+        enabled        INTEGER NOT NULL,
+        health         TEXT NOT NULL,
+        health_detail  TEXT,
+        model_count    INTEGER,
+        checked_at     TEXT,
+        created_at     TEXT NOT NULL,
+        updated_at     TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX connections_vendor_idx ON connections (vendor_id, label);
+    `,
+  },
 ];

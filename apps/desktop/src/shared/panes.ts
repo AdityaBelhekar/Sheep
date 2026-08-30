@@ -1,9 +1,13 @@
 /**
- * The seven work surfaces, in the order a session moves through them.
+ * The work surfaces.
  *
- * This list is the only place panes are declared: the navigation, the router's
- * notion of a valid route, and the smoke run's navigability check all read it,
- * so a pane cannot exist in one and be missing from another.
+ * Two groups. `RESEARCH_PANES` is the seven a session moves through, in order.
+ * `UTILITY_PANES` is app configuration — real surfaces, but not steps in a
+ * research session, and separated in the navigation so the seven stay seven.
+ *
+ * These lists are the only place panes are declared: the navigation, the
+ * router's notion of a valid route, and the smoke run's navigability check all
+ * read them, so a pane cannot exist in one and be missing from another.
  *
  * Each stub says which phase fills it in. A pane that claims to be empty on
  * purpose is more useful than one that looks broken.
@@ -18,7 +22,7 @@ export interface PaneDefinition {
   readonly arriving: string;
 }
 
-export const PANES = [
+export const RESEARCH_PANES = [
   {
     id: 'sessions',
     label: 'Sessions',
@@ -76,6 +80,19 @@ export const PANES = [
     arriving: 'Phases 60 to 65',
   },
 ] as const satisfies readonly PaneDefinition[];
+
+export const UTILITY_PANES = [
+  {
+    id: 'connections',
+    label: 'Connections',
+    summary: 'Providers Sheep can reach, and whether each one is answering.',
+    detail:
+      'A connection is configuration, not history: keys live in the OS credential store and only a reference is written down, so a connection can be renamed or deleted without disturbing the provenance of anything it produced.',
+    arriving: 'Roster attachment arrives in Phase 19',
+  },
+] as const satisfies readonly PaneDefinition[];
+
+export const PANES = [...RESEARCH_PANES, ...UTILITY_PANES] as const;
 
 export type PaneId = (typeof PANES)[number]['id'];
 

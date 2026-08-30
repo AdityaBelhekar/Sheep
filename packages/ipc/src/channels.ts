@@ -16,6 +16,13 @@ export const IPC_CHANNELS = [
   'sheep:credential-summary',
   'sheep:sessions-list',
   'sheep:session-create',
+  'sheep:connections-list',
+  'sheep:connection-create',
+  'sheep:connection-update',
+  'sheep:connection-delete',
+  'sheep:connection-test',
+  'sheep:connection-sign-in',
+  'sheep:local-providers-detect',
 ] as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number];

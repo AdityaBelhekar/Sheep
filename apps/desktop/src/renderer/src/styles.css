@@ -207,6 +207,12 @@ textarea {
   opacity: 0.9;
 }
 
+/* Pushes app configuration to the foot of the nav, away from the seven. */
+.nav__spacer {
+  flex: 1;
+  min-height: 1rem;
+}
+
 /* ── Content ──────────────────────────────────────────────────────────── */
 
 .content {
@@ -330,6 +336,31 @@ textarea {
   cursor: not-allowed;
 }
 
+.button--quiet {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.button--danger {
+  border-color: var(--error);
+  background: none;
+  color: var(--error);
+  font-weight: 500;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+select.field__input {
+  appearance: auto;
+}
+
 .theme-toggle {
   display: inline-flex;
   padding: 2px;
@@ -427,10 +458,66 @@ textarea {
   color: var(--ok);
 }
 
+.badge[data-status='running'],
+.badge[data-status='ok'] {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
 .badge[data-status='failed'],
-.badge[data-status='halted'] {
+.badge[data-status='halted'],
+.badge[data-status='unauthorized'],
+.badge[data-status='misconfigured'],
+.badge[data-status='unreachable'] {
   border-color: var(--error);
   color: var(--error);
+}
+
+.badge[data-status='absent'],
+.badge[data-status='unknown'] {
+  color: var(--fg-faint);
+}
+
+/* ── Connections ──────────────────────────────────────────────────────── */
+
+.session__detail {
+  margin: 0.35rem 0 0;
+  color: var(--fg-faint);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.session .button-row {
+  margin-top: 0.85rem;
+}
+
+.probe-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.probe {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.probe__name {
+  font-weight: 600;
+}
+
+.probe__detail {
+  color: var(--fg-muted);
+  font-size: 0.8rem;
 }
 
 .empty {

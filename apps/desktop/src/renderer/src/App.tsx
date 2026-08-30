@@ -6,7 +6,14 @@ import { APP_NAME } from '@shared/product';
 import { PaneIcon } from './components/PaneIcon';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useIpcClient, useRoute, useSystemPrefersDark } from './hooks';
-import { PANES, PANE_IDS } from '@shared/panes';
+import {
+  PANE_IDS,
+  RESEARCH_PANES,
+  UTILITY_PANES,
+  type PaneDefinition,
+  type PaneId,
+} from '@shared/panes';
+import { ConnectionsPane } from './panes/ConnectionsPane';
 import { SessionsPane } from './panes/SessionsPane';
 import { StubPane } from './panes/StubPane';
 
@@ -102,29 +109,15 @@ export function App(): ReactElement {
 
       <div className="body">
         <nav className="nav" aria-label="Work surfaces">
-          {PANES.map((pane) => (
-            <button
-              key={pane.id}
-              type="button"
-              className="nav__item"
-              aria-current={pane.id === paneId ? 'page' : undefined}
-              data-sheep-nav={pane.id}
-              onClick={() => {
-                navigate(pane.id);
-              }}
-            >
-              <PaneIcon pane={pane.id} />
-              <span className="nav__label">{pane.label}</span>
-            </button>
-          ))}
+          <NavGroup panes={RESEARCH_PANES} active={paneId} onNavigate={navigate} />
+          <span className="nav__spacer" />
+          <NavGroup panes={UTILITY_PANES} active={paneId} onNavigate={navigate} />
         </nav>
 
         <main className="content">
-          {paneId === 'sessions' ? (
-            <SessionsPane client={client} onStoreChanged={refreshLog} />
-          ) : (
-            <StubPane paneId={paneId} />
-          )}
+          {paneId === 'sessions' && <SessionsPane client={client} onStoreChanged={refreshLog} />}
+          {paneId === 'connections' && <ConnectionsPane client={client} />}
+          {paneId !== 'sessions' && paneId !== 'connections' && <StubPane paneId={paneId} />}
         </main>
       </div>
 
@@ -158,6 +151,37 @@ export function App(): ReactElement {
         <span className="statusbar__item statusbar__item--muted">local-first · no telemetry</span>
       </footer>
     </div>
+  );
+}
+
+/** One block of navigation items, so the seven surfaces stay visibly seven. */
+function NavGroup({
+  panes,
+  active,
+  onNavigate,
+}: {
+  panes: readonly PaneDefinition[];
+  active: PaneId;
+  onNavigate: (id: PaneId) => void;
+}): ReactElement {
+  return (
+    <>
+      {panes.map((pane) => (
+        <button
+          key={pane.id}
+          type="button"
+          className="nav__item"
+          aria-current={pane.id === active ? 'page' : undefined}
+          data-sheep-nav={pane.id}
+          onClick={() => {
+            onNavigate(pane.id as PaneId);
+          }}
+        >
+          <PaneIcon pane={pane.id as PaneId} />
+          <span className="nav__label">{pane.label}</span>
+        </button>
+      ))}
+    </>
   );
 }
 

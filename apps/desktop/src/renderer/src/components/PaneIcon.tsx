@@ -54,6 +54,14 @@ const PATHS: Record<PaneId, ReactElement> = {
       <path d="M11.3 2.8V7h4.2M7.6 10.4h5.2M7.6 13.2h5.2" />
     </>
   ),
+  connections: (
+    <>
+      <circle cx="5.2" cy="10" r="2.2" />
+      <circle cx="14.8" cy="5.4" r="2.2" />
+      <circle cx="14.8" cy="14.6" r="2.2" />
+      <path d="m7.2 9 5.6-2.7M7.2 11l5.6 2.7" />
+    </>
+  ),
 };
 
 export function PaneIcon({ pane }: { pane: PaneId }): ReactElement {

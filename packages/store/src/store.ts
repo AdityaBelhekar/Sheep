@@ -1,6 +1,7 @@
 import { copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { BlobStore, OBJECTS_DIRNAME } from './cas/blob-store';
+import { ConnectionRegistry } from './connections';
 import { CredentialRegistry } from './credentials';
 import { EventLog, type AppendEventInput, type EventRecord } from './events/log';
 import type { Migration } from './migrations/definitions';
@@ -38,6 +39,8 @@ export interface SheepStore {
   readonly settings: SettingsStore;
   /** Credential handles. Never the credentials themselves. */
   readonly credentials: CredentialRegistry;
+  /** Configured ways of reaching models. Configuration, not session history. */
+  readonly connections: ConnectionRegistry;
   readonly driver: SqliteDriverName;
   readonly journalMode: string;
   /** Why the native driver was not used, when it was not. */
@@ -100,6 +103,7 @@ export function openSheepStore(options: SheepStoreOptions): SheepStore {
     projectionState,
     settings,
     credentials: new CredentialRegistry(opened.db),
+    connections: new ConnectionRegistry(opened.db),
     driver: opened.driver,
     journalMode: opened.journalMode,
     ...(opened.fallbackReason === undefined ? {} : { fallbackReason: opened.fallbackReason }),
