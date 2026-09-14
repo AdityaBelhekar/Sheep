@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { confidenceSchema, idSchema, proseSchema, timestampSchema } from './primitives';
+import {
+  confidenceSchema,
+  idSchema,
+  proseSchema,
+  timestampSchema,
+  titleSchema,
+} from './primitives';
 
 /**
  * The seven phases of a Sheep session, in the order they run.
@@ -124,3 +130,33 @@ export const positionSchema = z.strictObject({
   rationale: proseSchema.optional(),
 });
 export type Position = z.infer<typeof positionSchema>;
+
+/**
+ * The two points at which a session stops and asks a human.
+ *
+ * `charter` closes FRAMING, `hypothesis` closes HYPOTHESIS. They are the only
+ * two gates in the protocol: everything else runs unattended, and a gate that
+ * could be added anywhere would make "unattended" meaningless.
+ */
+export const GATE_KINDS = ['charter', 'hypothesis'] as const;
+export const gateKindSchema = z.enum(GATE_KINDS);
+export type GateKind = z.infer<typeof gateKindSchema>;
+
+export const GATE_DECISIONS = ['approved', 'rejected'] as const;
+export const gateDecisionSchema = z.enum(GATE_DECISIONS);
+export type GateDecision = z.infer<typeof gateDecisionSchema>;
+
+/**
+ * One thing a human may pick at a gate.
+ *
+ * `score` is the roster's blind aggregate, carried so the choice is informed —
+ * never so it can be made automatically. Selection is the human's (P4-adjacent:
+ * a number produced by models does not get to decide what is studied).
+ */
+export const gateOptionSchema = z.strictObject({
+  optionId: idSchema,
+  label: titleSchema,
+  detail: proseSchema.optional(),
+  score: confidenceSchema.optional(),
+});
+export type GateOption = z.infer<typeof gateOptionSchema>;

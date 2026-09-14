@@ -22,6 +22,9 @@ import {
   usdSchema,
 } from './primitives';
 import {
+  gateDecisionSchema,
+  gateKindSchema,
+  gateOptionSchema,
   participantRoleSchema,
   phaseKindSchema,
   phaseOutcomeSchema,
@@ -129,6 +132,32 @@ export const EVENT_PAYLOADS = {
     phaseId: idSchema,
     outcome: phaseOutcomeSchema,
     summary: proseSchema.optional(),
+  }),
+
+  /**
+   * The protocol has stopped and is waiting for a human (P3's companion: the
+   * two places a person, not a model, decides what happens next).
+   *
+   * The proposal travels in the event rather than in a side table because it is
+   * what was actually put to the user — a charter read off a row that could be
+   * rewritten later would make the approval unauditable.
+   */
+  'phase.gate-raised': z.strictObject({
+    ...sessionScope,
+    phaseId: idSchema,
+    gate: gateKindSchema,
+    proposal: proseSchema,
+    /** What there is to choose between, when the gate is a choice. */
+    options: z.array(gateOptionSchema).optional(),
+  }),
+  'phase.gate-resolved': z.strictObject({
+    ...sessionScope,
+    phaseId: idSchema,
+    gate: gateKindSchema,
+    decision: gateDecisionSchema,
+    /** `optionId`s the human picked. Absent when the gate offered no options. */
+    selected: z.array(idSchema).optional(),
+    note: proseSchema.optional(),
   }),
 
   'round.opened': z.strictObject({

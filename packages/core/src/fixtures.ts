@@ -24,6 +24,7 @@ export const PARTICIPANT_A = '77777777-7777-4777-8777-777777777777';
 export const PARTICIPANT_B = '88888888-8888-4888-8888-888888888888';
 export const CONNECTION_ID = '99999999-9999-4999-8999-999999999999';
 export const CONNECTION_ID_B = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+export const OPTION_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 export const ANTHROPIC_MODEL: ModelRef = {
   connectionId: CONNECTION_ID,
@@ -114,6 +115,29 @@ export const EVENT_FIXTURES: EventFixtures = {
     phaseId: PHASE_ID,
     outcome: 'complete',
     summary: 'Charter approved with two scope restrictions.',
+  },
+
+  'phase.gate-raised': {
+    sessionId: SESSION_ID,
+    phaseId: PHASE_ID,
+    gate: 'charter',
+    proposal: 'Charter: measure perplexity at 128k under three sparsity patterns.',
+    options: [
+      {
+        optionId: OPTION_ID,
+        label: 'Block-sparse preserves perplexity within 2%',
+        detail: 'Testable on a 1.3B model at 128k with a fixed token budget.',
+        score: 0.72,
+      },
+    ],
+  },
+  'phase.gate-resolved': {
+    sessionId: SESSION_ID,
+    phaseId: PHASE_ID,
+    gate: 'charter',
+    decision: 'approved',
+    selected: [OPTION_ID],
+    note: 'Scope restricted to decoder-only models.',
   },
 
   'round.opened': {

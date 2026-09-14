@@ -50,6 +50,8 @@ export {
 } from './session';
 
 export {
+  GATE_DECISIONS,
+  GATE_KINDS,
   PARTICIPANT_ROLES,
   PHASE_KINDS,
   PHASE_OUTCOMES,
@@ -58,6 +60,9 @@ export {
   ROUND_OUTCOMES,
   ROUND_STATUSES,
   STANCES,
+  gateDecisionSchema,
+  gateKindSchema,
+  gateOptionSchema,
   participantRoleSchema,
   phaseKindSchema,
   phaseOutcomeSchema,
@@ -70,6 +75,9 @@ export {
   roundSchema,
   roundStatusSchema,
   stanceSchema,
+  type GateDecision,
+  type GateKind,
+  type GateOption,
   type ParticipantRole,
   type Phase,
   type PhaseKind,
