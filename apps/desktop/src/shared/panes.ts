@@ -36,8 +36,8 @@ export const RESEARCH_PANES = [
     label: 'Conversation',
     summary: 'The turns themselves: proposals, critiques, referee rulings.',
     detail:
-      'Phases open blind-parallel, so a model cannot see another model’s answer before committing its own. This surface shows what each said, once revealing is allowed.',
-    arriving: 'Blind-parallel rounds arrive in Phase 25',
+      'Phases open blind-parallel, so a model cannot see another model’s answer before committing its own. The protocol strip at the top shows where the session is and stops at the two points where a human decides: the Charter, and which hypotheses to pursue.',
+    arriving: 'METHOD onwards arrives with the sandbox, Stages 6 to 8',
   },
   {
     id: 'ledger',

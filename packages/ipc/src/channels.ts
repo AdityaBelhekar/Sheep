@@ -23,6 +23,10 @@ export const IPC_CHANNELS = [
   'sheep:roster-detach',
   'sheep:models-list',
   'sheep:messages-list',
+  'sheep:protocol-state',
+  'sheep:protocol-run',
+  'sheep:protocol-approve',
+  'sheep:protocol-cancel',
   'sheep:chat-send',
   'sheep:chat-cancel',
   'sheep:connections-list',
@@ -43,7 +47,7 @@ export type IpcChannel = (typeof IPC_CHANNELS)[number];
  * have opposite directions and opposite trust, and a single allowlist would let
  * a renderer `invoke` a channel that only main is supposed to speak on.
  */
-export const IPC_EVENT_CHANNELS = ['sheep:stream-event'] as const;
+export const IPC_EVENT_CHANNELS = ['sheep:stream-event', 'sheep:protocol-event'] as const;
 
 export type IpcEventChannel = (typeof IPC_EVENT_CHANNELS)[number];
 

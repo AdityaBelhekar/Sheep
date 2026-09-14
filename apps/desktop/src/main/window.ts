@@ -495,6 +495,63 @@ const CONCURRENCY_EXPRESSION = (sessionId: string, participantIds: string[]): st
   }
 })()`;
 
+/**
+ * Drives one FRAMING phase from the renderer, end to end.
+ *
+ * Only FRAMING: the smoke provider answers in prose, and HYPOTHESIS asks for
+ * JSON. Stopping here keeps the check honest about what it proves — the
+ * utility process spawned, both directions of the RPC work, a blind-parallel
+ * round ran, roles were solved, and the phase parked at its human gate.
+ */
+const PROTOCOL_EXPRESSION = (sessionId: string): string => `(async () => {
+  const before = await window.sheep.invoke('sheep:protocol-state', {
+    sessionId: ${JSON.stringify(sessionId)},
+  });
+
+  const notices = [];
+  const stop = window.sheep.subscribe('sheep:protocol-event', (event) => {
+    notices.push(event.kind);
+  });
+
+  try {
+    const run = await window.sheep.invoke('sheep:protocol-run', {
+      sessionId: ${JSON.stringify(sessionId)},
+    });
+    const framing = run.state.phases[0] ?? null;
+    const blind = framing ? (framing.rounds[0] ?? null) : null;
+
+    // Reading the state back goes through the orchestrator again, which
+    // rebuilds it from the log: what the run reported and what the log says
+    // must be the same thing.
+    const after = await window.sheep.invoke('sheep:protocol-state', {
+      sessionId: ${JSON.stringify(sessionId)},
+    });
+
+    return {
+      phasesBefore: before.state.phases.length,
+      status: run.status,
+      phaseKind: framing ? framing.kind : null,
+      phaseStatus: framing ? framing.status : null,
+      rounds: framing ? framing.rounds.length : 0,
+      blindMode: blind ? blind.mode : null,
+      blindSpoke: blind ? blind.spoke.length : 0,
+      proposers: blind ? blind.assignments.filter((a) => a.role === 'PROPOSER').length : 0,
+      otherRoles: blind
+        ? blind.assignments.filter((a) => a.role !== 'PROPOSER').length
+        : 0,
+      gate: framing && framing.gate ? framing.gate.gate : null,
+      proposalLength: framing && framing.gate ? framing.gate.proposal.length : 0,
+      reReadPhases: after.state.phases.length,
+      reReadGate: after.state.phases[0] && after.state.phases[0].gate
+        ? after.state.phases[0].gate.gate
+        : null,
+      notices: notices.join(','),
+    };
+  } finally {
+    stop();
+  }
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -677,6 +734,7 @@ async function checkLocalModel(window: BrowserWindow): Promise<void> {
     await checkChat(window, session.sessionId, connection.connectionId);
     await checkCancellation(window, session.sessionId, connection.connectionId);
     await checkConcurrency(window, session.sessionId, connection.connectionId);
+    await checkProtocol(window, session.sessionId, connection.connectionId);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     for (const name of [
@@ -684,6 +742,7 @@ async function checkLocalModel(window: BrowserWindow): Promise<void> {
       'renderer-chat',
       'stream-cancel',
       'stream-concurrency',
+      'orchestrator-protocol',
     ]) {
       recordSmokeCheck(name, false, detail);
     }
@@ -1063,4 +1122,80 @@ async function captureScreenshot(window: BrowserWindow, label?: string): Promise
   } catch (error) {
     logWarn('smoke screenshot failed -', error);
   }
+}
+
+type ProtocolResult =
+  | {
+      phasesBefore: number;
+      status: string;
+      phaseKind: string | null;
+      phaseStatus: string | null;
+      rounds: number;
+      blindMode: string | null;
+      blindSpoke: number;
+      proposers: number;
+      otherRoles: number;
+      gate: string | null;
+      proposalLength: number;
+      reReadPhases: number;
+      reReadGate: string | null;
+      notices: string;
+    }
+  | { error: string }
+  | undefined;
+
+/**
+ * Runs the protocol against a real orchestrator process.
+ *
+ * Everything here is the shipping path: the utility process is forked, the
+ * phase is driven over JSON-RPC, the turns go through the gateway to the smoke
+ * provider, and the events land in the same log every other check reads.
+ */
+async function checkProtocol(
+  window: BrowserWindow,
+  sessionId: string,
+  connectionId: string,
+): Promise<void> {
+  const attached = await attachModel(window, sessionId, connectionId, SMOKE_MODEL_ID);
+  if ('error' in attached) {
+    recordSmokeCheck('orchestrator-protocol', false, attached.error);
+    return;
+  }
+
+  const result = (await evaluate(window, PROTOCOL_EXPRESSION(sessionId))) as ProtocolResult;
+  if (!result || 'error' in result) {
+    recordSmokeCheck('orchestrator-protocol', false, result?.error ?? 'no result');
+    return;
+  }
+
+  const ok =
+    result.phasesBefore === 0 &&
+    result.status === 'awaiting-approval' &&
+    result.phaseKind === 'FRAMING' &&
+    result.phaseStatus === 'awaiting-approval' &&
+    // One blind round of statements, one sequential round for the charter.
+    result.rounds === 2 &&
+    result.blindMode === 'BLIND_PARALLEL' &&
+    // Every attached model proposes, independently, and nothing else is
+    // assigned in a framing round — however many the earlier checks left behind.
+    result.proposers > 0 &&
+    result.otherRoles === 0 &&
+    result.blindSpoke === result.proposers &&
+    result.gate === 'charter' &&
+    result.proposalLength > 0 &&
+    // Read back through a second RPC round trip: the state is in the log, not
+    // in the reply that reported it.
+    result.reReadPhases === 1 &&
+    result.reReadGate === 'charter' &&
+    result.notices.includes('gate-raised');
+
+  recordSmokeCheck(
+    'orchestrator-protocol',
+    ok,
+    `${result.phaseKind ?? 'none'} ${result.phaseStatus ?? 'none'} · ` +
+      `${String(result.rounds)} rounds · blind ${result.blindMode ?? 'none'} ` +
+      `(${String(result.blindSpoke)}/${String(result.proposers)} proposers spoke) · ` +
+      `gate=${result.gate ?? 'none'} (${String(result.proposalLength)} chars) · ` +
+      `re-read=${result.reReadGate ?? 'none'} · progress=${result.notices || 'none'}`,
+  );
 }

@@ -72,9 +72,33 @@ export const streamEventSchema = z.discriminatedUnion('kind', [
 ]);
 export type StreamEvent = z.infer<typeof streamEventSchema>;
 
+/**
+ * Protocol progress, main → renderer.
+ *
+ * Advisory only: it says a phase opened or a turn landed so the UI can move
+ * without polling. Nothing is derived from it — the authoritative state is the
+ * log, read back through `sheep:protocol-state`, so a dropped notice costs a
+ * moment's staleness rather than a wrong screen.
+ */
+export const protocolEventSchema = z.strictObject({
+  sessionId: idSchema,
+  kind: z.enum([
+    'phase-opened',
+    'round-opened',
+    'turn-recorded',
+    'round-closed',
+    'phase-closed',
+    'gate-raised',
+    'stopped',
+  ]),
+  detail: z.string().min(1).max(2_000),
+});
+export type ProtocolEvent = z.infer<typeof protocolEventSchema>;
+
 /** Every event channel's payload schema. */
 export const IPC_EVENT_CONTRACTS = {
   'sheep:stream-event': streamEventSchema,
+  'sheep:protocol-event': protocolEventSchema,
 } as const satisfies Record<IpcEventChannel, z.ZodType>;
 
 export type IpcEventContracts = typeof IPC_EVENT_CONTRACTS;

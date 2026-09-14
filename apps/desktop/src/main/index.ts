@@ -8,6 +8,7 @@ import { syncConnections } from './connections';
 import { openVault, runCredentialSelfTest } from './credentials';
 import { bindIpcRegistry, createIpcRegistry } from './ipc';
 import { logError, logInfo } from './log';
+import { startOrchestrator, stopOrchestrator } from './orchestrator';
 import { applyRendererSecurityPolicy } from './security';
 import { beginSmokeRun, expectSmokeCheck, isSmokeRun, recordSmokeCheck } from './smoke';
 import { closeStore, openStore, recordLaunch } from './store';
@@ -43,6 +44,8 @@ if (isSmokeRun) {
     'renderer-connections',
     'renderer-roster',
     'renderer-chat',
+    'orchestrator-ready',
+    'orchestrator-protocol',
     'stream-cancel',
     'stream-concurrency',
     'renderer-theme',
@@ -108,6 +111,16 @@ if (!hasInstanceLock) {
     bindIpcRegistry(createIpcRegistry());
     createMainWindow();
 
+    // Spawned eagerly rather than on first use: a session that resumes on
+    // launch should not wait for a process to boot, and a spawn failure is
+    // worth knowing about before someone presses Run.
+    if (storeOpened) {
+      void startOrchestrator().catch((error: unknown) => {
+        logError('the orchestrator could not start -', error);
+        recordSmokeCheck('orchestrator-ready', false, String(error));
+      });
+    }
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
     });
@@ -122,6 +135,7 @@ if (!hasInstanceLock) {
     // closed database would fail at the one moment its partial answer is the
     // only copy that exists.
     cancelAllChats();
+    stopOrchestrator();
     closeStore();
     if (smokeDataDir) {
       rmSync(smokeDataDir, { recursive: true, force: true });

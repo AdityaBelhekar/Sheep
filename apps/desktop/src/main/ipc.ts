@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { domainEvent, type Connection, type RosterEntry, type SessionSummary } from '@sheep/core';
 import type { ModelDescriptor } from '@sheep/gateway';
+import type { RunOutcome } from '@sheep/orchestrator';
 import { IpcError, IpcRegistry } from '@sheep/ipc';
 import { getSession, listMessages, listParticipants, listSessions } from '@sheep/store';
 import { APP_NAME } from '../shared/product';
@@ -17,6 +18,7 @@ import {
   updateConnection,
 } from './connections';
 import { cancelChat, sendChat } from './chat';
+import { approveGate, cancelSession, protocolView, runSession } from './orchestrator';
 import { getVault } from './credentials';
 import { logError } from './log';
 import { getEventLog, getStore } from './store';
@@ -195,6 +197,34 @@ export function createIpcRegistry(): IpcRegistry {
         ...(request.limit === undefined ? {} : { limit: request.limit }),
       }),
     }))
+    .register('sheep:protocol-state', async (request) => ({
+      status: 'idle' as const,
+      reason: null,
+      detail: 'read from the log',
+      state: await protocolView(request.sessionId),
+    }))
+    .register('sheep:protocol-run', async (request) =>
+      toProtocolReply(await runSession(request.sessionId)),
+    )
+    .register('sheep:protocol-approve', async (request) =>
+      toProtocolReply(
+        await approveGate(request.sessionId, {
+          gate: request.gate,
+          decision: request.decision,
+          ...(request.selected === undefined ? {} : { selected: request.selected }),
+          ...(request.note === undefined ? {} : { note: request.note }),
+        }),
+      ),
+    )
+    .register('sheep:protocol-cancel', async (request) => {
+      await cancelSession(request.sessionId);
+      return {
+        status: 'stopped' as const,
+        reason: 'cancelled',
+        detail: 'the session will stop at the next step',
+        state: await protocolView(request.sessionId),
+      };
+    })
     .register('sheep:chat-send', async (request, context) => {
       const window = windowFor(context.senderId);
       return await sendChat(window, request);
@@ -243,6 +273,21 @@ export function createIpcRegistry(): IpcRegistry {
         ...(provider.detail === undefined ? {} : { detail: provider.detail }),
       })),
     }));
+}
+
+/** The orchestrator's outcome, flattened onto the wire shape. */
+function toProtocolReply(outcome: RunOutcome): {
+  status: 'awaiting-approval' | 'stopped' | 'complete' | 'failed';
+  reason: string | null;
+  detail: string;
+  state: RunOutcome['state'];
+} {
+  return {
+    status: outcome.status,
+    reason: outcome.reason,
+    detail: outcome.detail,
+    state: outcome.state,
+  };
 }
 
 /**

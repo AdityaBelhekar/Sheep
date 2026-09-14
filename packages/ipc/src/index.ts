@@ -17,9 +17,11 @@ export {
 export {
   IPC_EVENT_CONTRACTS,
   eventContractFor,
+  protocolEventSchema,
   streamEventSchema,
   type IpcEventContracts,
   type IpcEventPayload,
+  type ProtocolEvent,
   type StreamEvent,
 } from './events';
 export {

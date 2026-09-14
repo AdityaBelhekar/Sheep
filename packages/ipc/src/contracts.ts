@@ -2,6 +2,15 @@ import { z } from 'zod';
 import {
   connectionConfigSchema,
   connectionSchema,
+  gateDecisionSchema,
+  gateKindSchema,
+  gateOptionSchema,
+  phaseKindSchema,
+  phaseStatusSchema,
+  roleAssignmentSchema,
+  roundModeSchema,
+  roundStatusSchema,
+  sessionStatusSchema,
   credentialKindSchema,
   credentialRefSchema,
   idSchema,
@@ -58,6 +67,55 @@ const connectionsReply = z.object({
   /** Where secrets go on this machine, or `none` if nowhere safe does. */
   vaultBackend: z.union([vaultBackendSchema, z.literal('none')]),
   vaultDescription: z.string().min(1),
+});
+
+/** One phase of the protocol, as the renderer draws it. */
+const phaseViewSchema = z.object({
+  phaseId: idSchema,
+  kind: phaseKindSchema,
+  index: z.number().int().nonnegative(),
+  status: phaseStatusSchema,
+  summary: z.string().nullable(),
+  rounds: z.array(
+    z.object({
+      roundId: idSchema,
+      index: z.number().int().nonnegative(),
+      mode: roundModeSchema,
+      status: roundStatusSchema,
+      assignments: z.array(roleAssignmentSchema),
+      spoke: z.array(idSchema),
+    }),
+  ),
+  gate: z
+    .object({
+      gate: gateKindSchema,
+      proposal: z.string(),
+      options: z.array(gateOptionSchema),
+      decision: gateDecisionSchema.nullable(),
+      selected: z.array(idSchema),
+      note: z.string().nullable(),
+    })
+    .nullable(),
+});
+
+/**
+ * What every protocol channel returns.
+ *
+ * `status` is the run's outcome — where the orchestrator stopped and why — and
+ * `state` is the protocol itself, rebuilt from the log. A reply that carried
+ * one without the other would leave the UI able to say a session stopped
+ * without being able to say what it had done.
+ */
+const protocolReply = z.object({
+  status: z.enum(['awaiting-approval', 'stopped', 'complete', 'failed', 'idle']),
+  reason: z.string().nullable(),
+  detail: z.string(),
+  state: z.object({
+    sessionId: idSchema,
+    status: sessionStatusSchema,
+    nextPhase: phaseKindSchema.nullable(),
+    phases: z.array(phaseViewSchema),
+  }),
 });
 
 /**
@@ -250,6 +308,38 @@ export const IPC_CONTRACTS = {
    * user's message is already recorded by the time this replies, so a crash
    * mid-stream loses the answer and never the question.
    */
+  /**
+   * The protocol.
+   *
+   * All four channels answer with the same `protocolReply`, on the same
+   * principle as the roster and connection channels: the renderer never merges
+   * a partial result into its own copy of the state. What it draws is what the
+   * orchestrator just derived from the log.
+   */
+  'sheep:protocol-state': {
+    request: z.object({ sessionId: idSchema }),
+    response: protocolReply,
+  },
+  /** Starts a session, or resumes one — the orchestrator does not distinguish. */
+  'sheep:protocol-run': {
+    request: z.object({ sessionId: idSchema }),
+    response: protocolReply,
+  },
+  'sheep:protocol-approve': {
+    request: z.object({
+      sessionId: idSchema,
+      gate: gateKindSchema,
+      decision: gateDecisionSchema,
+      /** `optionId`s chosen, for a gate that offered a choice. */
+      selected: z.array(idSchema).optional(),
+      note: proseSchema.optional(),
+    }),
+    response: protocolReply,
+  },
+  'sheep:protocol-cancel': {
+    request: z.object({ sessionId: idSchema }),
+    response: protocolReply,
+  },
   'sheep:chat-send': {
     request: z.object({
       sessionId: idSchema,

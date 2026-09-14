@@ -159,21 +159,21 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 
 ## Stage 4 — Orchestrator `Phases 22–29`
 
-- [ ] **22. Utility process host** — orchestrator in `utilityProcess`, JSON-RPC over MessagePort, lifecycle + restart, survives window close.
+- [x] **22. Utility process host** — orchestrator in `utilityProcess`, JSON-RPC over MessagePort, lifecycle + restart, survives window close.
   → `feat(orchestrator): utility process host with json-rpc`
-- [ ] **23. Protocol state machine** — phases → rounds → turns, persisted transitions, every transition is an event.
+- [x] **23. Protocol state machine** — phases → rounds → turns, persisted transitions, every transition is an event.
   → `feat(orchestrator): protocol state machine`
-- [ ] **24. Role assignment solver** — PROPOSER/CRITIC/VERIFIER/REFEREE/DEVIL/SCRIBE with constraints: no self-critique, critic vendor ≠ author vendor, referee unstaked, rotation. **(P1)**
+- [x] **24. Role assignment solver** — PROPOSER/CRITIC/VERIFIER/REFEREE/DEVIL/SCRIBE with constraints: no self-critique, critic vendor ≠ author vendor, referee unstaked, rotation. **(P1)**
   *Done when:* property tests prove no assignment ever violates a hard constraint. → `feat(orchestrator): vendor-diverse role assignment solver`
-- [ ] **25. Blind-parallel runner** — isolated contexts per model, commit-then-reveal. **(P3)**
+- [x] **25. Blind-parallel runner** — isolated contexts per model, commit-then-reveal. **(P3)**
   *Done when:* a test proves no model's context contains another's output before reveal. → `feat(orchestrator): blind parallel phase runner`
-- [ ] **26. FRAMING phase** — independent problem statements → embedding-cluster + dedupe → Referee drafts Charter → **human approval gate**.
+- [x] **26. FRAMING phase** — independent problem statements → embedding-cluster + dedupe → Referee drafts Charter → **human approval gate**.
   → `feat(orchestrator): framing phase with charter human gate`
-- [ ] **27. HYPOTHESIS phase** — blind generation, clustering, blind scoring (testability × novelty × feasibility), user selects top-k.
+- [x] **27. HYPOTHESIS phase** — blind generation, clustering, blind scoring (testability × novelty × feasibility), user selects top-k.
   → `feat(orchestrator): hypothesis generation and ranking`
-- [ ] **28. Termination & loop detection** — convergence rules, round caps, budget stop, cosine-similarity loop breaker.
+- [x] **28. Termination & loop detection** — convergence rules, round caps, budget stop, cosine-similarity loop breaker.
   → `feat(orchestrator): termination conditions and loop detection`
-- [ ] **29. Resume & golden-replay harness** — crash recovery from the event log, idempotent retry via request-hash dedupe, recorded provider fixtures for deterministic replay.
+- [x] **29. Resume & golden-replay harness** — crash recovery from the event log, idempotent retry via request-hash dedupe, recorded provider fixtures for deterministic replay.
   *Done when:* killing the app mid-session and reopening resumes at the last committed turn; a fixture session replays identically with zero API spend. → `feat(orchestrator): crash-safe resume and golden replay tests`
 
 > **Stage gate:** three models complete FRAMING + HYPOTHESIS; kill and resume works; replay costs nothing.

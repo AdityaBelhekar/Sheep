@@ -19,7 +19,13 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin({ exclude: workspaceDeps })],
     build: {
       rollupOptions: {
-        input: resolve(here, 'src/main/index.ts'),
+        // Two entries, both main-process bundles: `index` is Electron's main,
+        // and `orchestrator` is the utility process it forks. They are emitted
+        // side by side so main can resolve the child by path at runtime.
+        input: {
+          index: resolve(here, 'src/main/index.ts'),
+          orchestrator: resolve(here, 'src/orchestrator/index.ts'),
+        },
       },
     },
   },

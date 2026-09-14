@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import type { Message, RosterEntry, SessionSummary } from '@sheep/core';
 import type { IpcClient, StreamEvent } from '@sheep/ipc';
 import { paneById } from '@shared/panes';
+import { ProtocolPanel } from './ProtocolPanel';
 
 /** A run in flight: what has arrived so far, and what it turned into. */
 interface LiveRun {
@@ -251,6 +252,15 @@ export function ConversationPane({
                 : ` of ${formatUsd(state.session.budget.capUsd)}`}
             </span>
           </div>
+
+          <ProtocolPanel
+            client={client}
+            sessionId={state.session.sessionId}
+            onStoreChanged={() => {
+              void load();
+              onStoreChanged();
+            }}
+          />
 
           {roster.length === 0 ? (
             <div className="empty">

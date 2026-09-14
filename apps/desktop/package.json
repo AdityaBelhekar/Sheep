@@ -16,6 +16,7 @@
     "@sheep/core": "*",
     "@sheep/gateway": "*",
     "@sheep/ipc": "*",
+    "@sheep/orchestrator": "*",
     "@sheep/store": "*",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
