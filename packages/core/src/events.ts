@@ -201,6 +201,8 @@ export const EVENT_PAYLOADS = {
     claimType: claimTypeSchema,
     statement: z.string().min(1).max(2_000),
     phaseId: idSchema.optional(),
+    /** The turn the claim was asserted in. */
+    messageId: idSchema.optional(),
     authorParticipantId: idSchema.optional(),
     confidence: confidenceSchema.optional(),
     support: z.array(evidenceRefSchema).optional(),

@@ -86,6 +86,7 @@ const claim: Claim = {
   claimId: CLAIM_ID,
   sessionId: SESSION_ID,
   phaseId: PHASE_ID,
+  messageId: MESSAGE_ID,
   authorParticipantId: PARTICIPANT_A,
   claimType: 'EMPIRICAL',
   statement: 'Perplexity rises 0.3 nats at 128k context.',

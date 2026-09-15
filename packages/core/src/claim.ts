@@ -80,6 +80,8 @@ export const claimSchema = z.strictObject({
   sessionId: idSchema,
   /** The phase that produced it, if it came out of the protocol. */
   phaseId: idSchema.nullable(),
+  /** The turn it was asserted in, when a model asserted it — provenance (Phase 35). */
+  messageId: idSchema.nullable(),
   /** The participant that asserted it; null when a human wrote it. */
   authorParticipantId: idSchema.nullable(),
   claimType: claimTypeSchema,

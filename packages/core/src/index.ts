@@ -147,6 +147,16 @@ export {
 } from './dispute';
 
 export {
+  LEDGER_ERROR_CODES,
+  LEDGER_EVENT_TYPES,
+  Ledger,
+  LedgerError,
+  isLedgerEventType,
+  type LedgerEntry,
+  type LedgerErrorCode,
+} from './ledger';
+
+export {
   CREDENTIAL_KINDS,
   CREDENTIAL_REF_PREFIX,
   CREDENTIAL_SERVICE,

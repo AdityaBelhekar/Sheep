@@ -173,6 +173,7 @@ export const EVENT_FIXTURES: EventFixtures = {
     claimType: 'EMPIRICAL',
     statement: 'Block-sparse attention raises perplexity by 0.3 nats at 128k context.',
     phaseId: PHASE_ID,
+    messageId: MESSAGE_ID,
     authorParticipantId: PARTICIPANT_A,
     confidence: 0.62,
     support: [{ kind: 'EXECUTION', ref: 'exec-0001', note: 'run on held-out WikiText' }],
