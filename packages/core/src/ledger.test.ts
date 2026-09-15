@@ -408,3 +408,37 @@ describe('claim type enforcement (P2)', () => {
     rejects(ledgerOf(derived()), derived(), 'DUPLICATE_DERIVATION');
   });
 });
+
+describe('ancestry', () => {
+  it('lists every supporting claim transitively, nearest first, each once', () => {
+    const B = DISPUTE_2;
+    const C = OTHER_SESSION;
+    const ledger = ledgerOf(
+      conjecture(),
+      claimOf('CONJECTURE', [{ kind: 'CLAIM', ref: CLAIM_ID }], B),
+      // C rests on A directly and through B: A is listed once, at depth 1.
+      claimOf(
+        'CONJECTURE',
+        [
+          { kind: 'CLAIM', ref: B },
+          { kind: 'CLAIM', ref: CLAIM_ID },
+        ],
+        C,
+      ),
+    );
+    expect(ledger.ancestry(C).map((entry) => [entry.claim.claimId, entry.depth])).toEqual([
+      [B, 1],
+      [CLAIM_ID, 1],
+    ]);
+    const chain = ledgerOf(
+      conjecture(),
+      claimOf('CONJECTURE', [{ kind: 'CLAIM', ref: CLAIM_ID }], B),
+      claimOf('CONJECTURE', [{ kind: 'CLAIM', ref: B }], C),
+    );
+    expect(chain.ancestry(C).map((entry) => [entry.claim.claimId, entry.depth])).toEqual([
+      [B, 1],
+      [CLAIM_ID, 2],
+    ]);
+    expect(chain.ancestry(CLAIM_ID)).toEqual([]);
+  });
+});

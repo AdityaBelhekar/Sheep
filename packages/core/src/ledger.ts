@@ -247,6 +247,33 @@ export class Ledger {
     return [...this.#resolutions.values()];
   }
 
+  /**
+   * Every claim a claim rests on, transitively, nearest first.
+   *
+   * `depth` is how many support steps down the claim sits: 1 is a direct
+   * supporting claim. A claim reached by two paths is listed once, at its
+   * nearest depth.
+   */
+  ancestry(claimId: string): { claim: Claim; depth: number }[] {
+    const found: { claim: Claim; depth: number }[] = [];
+    const seen = new Set([claimId]);
+    let frontier = [claimId];
+    for (let depth = 1; frontier.length > 0; depth += 1) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        for (const evidence of this.#claims.get(id)?.claim.support ?? []) {
+          if (evidence.kind !== 'CLAIM' || seen.has(evidence.ref)) continue;
+          if (!this.#claims.has(evidence.ref)) continue;
+          seen.add(evidence.ref);
+          found.push({ claim: this.claim(evidence.ref), depth });
+          next.push(evidence.ref);
+        }
+      }
+      frontier = next;
+    }
+    return found;
+  }
+
   /** Every revealed position, in the order revealed. */
   positions(): RevealedPosition[] {
     return [...this.#reveals];

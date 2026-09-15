@@ -114,18 +114,22 @@ export function layoutClaimGraph(
     edges.push({ from: dispute.disputeId, to: dispute.claimId, kind: 'attacks' });
   }
 
-  const nodes: GraphNode[] = columns.flatMap((column, c) =>
+  // A ledger with no evidence yet has an empty first column; drawing it would
+  // push every claim a column to the right for nothing.
+  const used = columns.filter((column) => column.length > 0);
+  const nodes: GraphNode[] = used.flatMap((column, c) =>
     column.map((node, r) => ({
       ...node,
       x: PADDING + c * (NODE_WIDTH + COLUMN_GAP),
       y: PADDING + r * (NODE_HEIGHT + ROW_GAP),
     })),
   );
-  const rows = Math.max(1, ...columns.map((column) => column.length));
+  const rows = Math.max(1, ...used.map((column) => column.length));
+  const count = Math.max(1, used.length);
   return {
     nodes,
     edges,
-    width: PADDING * 2 + columns.length * NODE_WIDTH + (columns.length - 1) * COLUMN_GAP,
+    width: PADDING * 2 + count * NODE_WIDTH + (count - 1) * COLUMN_GAP,
     height: PADDING * 2 + rows * NODE_HEIGHT + (rows - 1) * ROW_GAP,
   };
 }

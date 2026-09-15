@@ -268,6 +268,7 @@ async function drive(
             }
           : {}),
         finish,
+        params: { maxOutputTokens: request.maxOutputTokens },
         promptHash,
       }),
       ...(cost && cost.costUsd > 0

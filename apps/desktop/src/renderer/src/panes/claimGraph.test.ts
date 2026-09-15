@@ -85,6 +85,12 @@ describe('claim graph layout', () => {
     expect(lineageOf(graph, A)).toEqual(new Set([A, evidenceNodeId(run)]));
   });
 
+  it('starts at the first column when nothing has evidence yet', () => {
+    const bare = layoutClaimGraph([claim(A, []), claim(B, [{ kind: 'CLAIM', ref: A }])], []);
+    expect(bare.nodes.map((n) => n.x)).toEqual([16, 16 + NODE_WIDTH + 64]);
+    expect(bare.width).toBe(16 * 2 + 2 * NODE_WIDTH + 64);
+  });
+
   it('draws an empty ledger as an empty picture', () => {
     expect(layoutClaimGraph([], []).nodes).toEqual([]);
   });

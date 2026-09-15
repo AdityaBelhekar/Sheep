@@ -410,6 +410,25 @@ export const IPC_CONTRACTS = {
     }),
     response: ledgerReply.extend({ claimId: idSchema }),
   },
+  /**
+   * Everything one claim's standing rests on, for the provenance drawer.
+   *
+   * `message` is the turn the claim was asserted in — model, version, params,
+   * prompt hash, cost and time all come from it — and is null for a claim a
+   * person wrote. Disputes cover the claim and every claim beneath it, since a
+   * challenge to a premise is a challenge to the conclusion.
+   */
+  'sheep:claim-provenance': {
+    request: z.object({ sessionId: idSchema, claimId: idSchema }),
+    response: z.object({
+      claim: claimSchema,
+      author: rosterEntrySchema.nullable(),
+      message: messageSchema.nullable(),
+      ancestry: z.array(z.object({ claim: claimSchema, depth: z.number().int().positive() })),
+      disputes: z.array(disputeSchema),
+      resolutions: z.array(resolutionSchema),
+    }),
+  },
   'sheep:chat-send': {
     request: z.object({
       sessionId: idSchema,

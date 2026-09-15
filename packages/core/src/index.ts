@@ -94,11 +94,13 @@ export {
 
 export {
   MESSAGE_FINISH_REASONS,
+  generationParamsSchema,
   messageAuthorSchema,
   messageBodySchema,
   messageFinishReasonSchema,
   messageSchema,
   usageSchema,
+  type GenerationParams,
   type Message,
   type MessageAuthor,
   type MessageBody,

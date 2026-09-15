@@ -7,6 +7,7 @@ import {
   proposedTestSchema,
 } from './dispute';
 import {
+  generationParamsSchema,
   messageAuthorSchema,
   messageBodySchema,
   messageFinishReasonSchema,
@@ -192,6 +193,7 @@ export const EVENT_PAYLOADS = {
      * without trace is not reproducible (P5).
      */
     finish: messageFinishReasonSchema.optional(),
+    params: generationParamsSchema.optional(),
     promptHash: sha256Schema.optional(),
   }),
 

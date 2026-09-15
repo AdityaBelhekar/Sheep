@@ -79,6 +79,9 @@ export const SESSIONS_DDL = `
     -- How the turn stopped: 'cancelled' and 'error' mark a body that is what
     -- survived rather than what the model finished.
     finish         TEXT,
+    -- Generation parameters Sheep sent. NULL means none were recorded.
+    max_output_tokens INTEGER,
+    temperature    REAL,
     prompt_hash    TEXT,
     recorded_at    TEXT NOT NULL
   ) STRICT;
@@ -114,7 +117,7 @@ const HANDLED = new Set<DomainEventType>([
  */
 export const SESSIONS_PROJECTION: Projection = {
   name: 'sessions',
-  ddlVersion: 3,
+  ddlVersion: 4,
   // Children first: these are the tables a future foreign key would depend on.
   tables: ['participants', 'messages', 'sessions'],
   ddl: SESSIONS_DDL,
@@ -196,8 +199,8 @@ export const SESSIONS_PROJECTION: Projection = {
              message_id, session_id, phase_id, round_id, seq, author_kind, participant_id,
              connection_id, vendor_id, model_id, model_version, role, body_kind, body_text,
              body_hash, body_bytes, media_type, input_tokens, output_tokens, cached_tokens,
-             cost_usd, finish, prompt_hash, recorded_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             cost_usd, finish, max_output_tokens, temperature, prompt_hash, recorded_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(message_id) DO UPDATE SET
              seq = excluded.seq,
              recorded_at = excluded.recorded_at`,
@@ -224,6 +227,8 @@ export const SESSIONS_PROJECTION: Projection = {
             usage?.cachedInputTokens ?? null,
             usage?.costUsd ?? null,
             event.payload.finish ?? null,
+            event.payload.params?.maxOutputTokens ?? null,
+            event.payload.params?.temperature ?? null,
             event.payload.promptHash ?? null,
             at,
           ],
@@ -379,6 +384,8 @@ type MessageRow = {
   cached_tokens: number | null;
   cost_usd: number | null;
   finish: string | null;
+  max_output_tokens: number | null;
+  temperature: number | null;
   prompt_hash: string | null;
   recorded_at: string;
 };
@@ -396,7 +403,8 @@ const PARTICIPANT_COLUMNS =
 const MESSAGE_COLUMNS =
   'message_id, session_id, phase_id, round_id, seq, author_kind, participant_id, connection_id, ' +
   'vendor_id, model_id, model_version, role, body_kind, body_text, body_hash, body_bytes, ' +
-  'media_type, input_tokens, output_tokens, cached_tokens, cost_usd, finish, prompt_hash, ' +
+  'media_type, input_tokens, output_tokens, cached_tokens, cost_usd, finish, max_output_tokens, ' +
+  'temperature, prompt_hash, ' +
   'recorded_at';
 
 /** Newest first — what a session list shows. */
@@ -455,6 +463,13 @@ export function listParticipants(
       [sessionId],
     )
     .map(toRosterEntry);
+}
+
+export function getMessage(db: SqliteDatabase, messageId: string): Message | undefined {
+  const row = db.get<MessageRow>(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE message_id = ?`, [
+    messageId,
+  ]);
+  return row ? toMessage(row) : undefined;
 }
 
 export function getParticipant(db: SqliteDatabase, participantId: string): RosterEntry | undefined {
@@ -526,6 +541,13 @@ function toMessage(row: MessageRow): Message {
             costUsd: row.cost_usd,
           },
     finish: row.finish as Message['finish'],
+    params:
+      row.max_output_tokens === null
+        ? null
+        : {
+            maxOutputTokens: row.max_output_tokens,
+            ...(row.temperature === null ? {} : { temperature: row.temperature }),
+          },
     promptHash: row.prompt_hash,
     recordedAt: row.recorded_at,
   };

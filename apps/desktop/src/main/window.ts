@@ -601,14 +601,22 @@ const LEDGER_EXPRESSION = `(async () => {
     if (pane && pane.querySelectorAll('[data-sheep-node]').length > 0) break;
   }
   const nodes = pane ? pane.querySelectorAll('[data-sheep-node]').length : 0;
-  const target = pane ? pane.querySelector('[data-sheep-node="' + base.claimId + '"]') : null;
+  const target = pane ? pane.querySelector('[data-sheep-node="' + built.claimId + '"]') : null;
   if (target) target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  await settle(80);
+  let drawer = null;
+  for (let i = 0; i < 40; i += 1) {
+    await settle(50);
+    drawer = document.querySelector('[data-sheep-provenance="' + built.claimId + '"]');
+    if (drawer && drawer.querySelector('[data-sheep-ancestry]')) break;
+  }
   const selected = pane ? pane.querySelectorAll('[data-selected="true"]').length : 0;
-
-  await window.sheep.invoke('sheep:settings-write', { key: 'ui.lastSessionId', value: previous });
-  window.location.hash = '#/sessions';
-  await settle(60);
+  const ancestry = drawer?.querySelector('[data-sheep-ancestry]')?.getAttribute('data-sheep-ancestry') ?? null;
+  const provenance = await window.sheep.invoke('sheep:claim-provenance', {
+    sessionId,
+    claimId: built.claimId,
+  });
+  // Left open for the screenshot; restored by LEDGER_RESTORE_EXPRESSION.
+  window.__sheepLedgerPrevious = previous;
 
   return {
     recorded: after.claims.length,
@@ -617,7 +625,20 @@ const LEDGER_EXPRESSION = `(async () => {
     rendered: pane ? pane.getAttribute('data-sheep-claims') : null,
     nodes,
     selected,
+    drawerAncestry: ancestry,
+    ancestryRoot: provenance.ancestry[0] ? provenance.ancestry[0].claim.claimId === base.claimId : false,
+    humanAuthored: provenance.author === null && provenance.message === null,
   };
+})()`;
+
+const LEDGER_RESTORE_EXPRESSION = `(async () => {
+  await window.sheep.invoke('sheep:settings-write', {
+    key: 'ui.lastSessionId',
+    value: window.__sheepLedgerPrevious ?? null,
+  });
+  window.location.hash = '#/sessions';
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  return true;
 })()`;
 
 /** Proves the renderer refuses a channel that is not on the allowlist. */
@@ -738,9 +759,16 @@ async function checkLedger(window: BrowserWindow): Promise<void> {
         rendered: string | null;
         nodes: number;
         selected: number;
+        drawerAncestry: string | null;
+        ancestryRoot: boolean;
+        humanAuthored: boolean;
       }
     | { error: string }
     | undefined;
+  // Let the drawer's reply reach a painted frame before capturing it.
+  await delay(250);
+  await captureScreenshot(window, 'ledger');
+  await evaluate(window, LEDGER_RESTORE_EXPRESSION);
 
   if (!result || 'error' in result) {
     recordSmokeCheck('renderer-ledger', false, result?.error ?? 'no result');
@@ -753,14 +781,19 @@ async function checkLedger(window: BrowserWindow): Promise<void> {
     result.refusal.includes('LEDGER_EMPIRICAL_WITHOUT_EXECUTION') &&
     result.rendered === '2' &&
     result.nodes === 2 &&
-    result.selected === 1;
+    result.selected === 1 &&
+    result.drawerAncestry === '1' &&
+    result.ancestryRoot &&
+    result.humanAuthored;
 
   recordSmokeCheck(
     'renderer-ledger',
     ok,
     `${String(result.recorded)} claims recorded · unbacked empirical → ${
       result.refusal.match(/LEDGER_[A-Z_]+/)?.[0] ?? result.refusal
-    } · graph ${String(result.nodes)} nodes, ${String(result.selected)} selected`,
+    } · graph ${String(result.nodes)} nodes, ${String(result.selected)} selected · drawer ancestry ${
+      result.drawerAncestry ?? 'none'
+    }`,
   );
 }
 

@@ -10,7 +10,15 @@ import {
 import type { ModelDescriptor } from '@sheep/gateway';
 import type { RunOutcome } from '@sheep/orchestrator';
 import { IpcError, IpcRegistry, type IpcResponse } from '@sheep/ipc';
-import { getSession, listMessages, listParticipants, listSessions, readLedger } from '@sheep/store';
+import {
+  getMessage,
+  getParticipant,
+  getSession,
+  listMessages,
+  listParticipants,
+  listSessions,
+  readLedger,
+} from '@sheep/store';
 import { APP_NAME } from '../shared/product';
 import {
   createConnection,
@@ -246,6 +254,27 @@ export function createIpcRegistry(): IpcRegistry {
         }),
       ]);
       return { claimId, ...readLedgerDetail(request.sessionId) };
+    })
+    .register('sheep:claim-provenance', (request) => {
+      const store = getStore();
+      const ledger = readLedger(store.events, request.sessionId);
+      const claim = ledger.claim(request.claimId);
+      const ancestry = ledger.ancestry(claim.claimId);
+      const lineage = new Set([claim.claimId, ...ancestry.map((entry) => entry.claim.claimId)]);
+      const disputes = ledger.disputes().filter((dispute) => lineage.has(dispute.claimId));
+      const disputeIds = new Set(disputes.map((dispute) => dispute.disputeId));
+
+      return {
+        claim,
+        author:
+          claim.authorParticipantId === null
+            ? null
+            : (getParticipant(store.db, claim.authorParticipantId) ?? null),
+        message: claim.messageId === null ? null : (getMessage(store.db, claim.messageId) ?? null),
+        ancestry,
+        disputes,
+        resolutions: ledger.resolutions().filter((r) => disputeIds.has(r.disputeId)),
+      };
     })
     .register('sheep:chat-send', async (request, context) => {
       const window = windowFor(context.senderId);

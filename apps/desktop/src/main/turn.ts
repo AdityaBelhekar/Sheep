@@ -45,6 +45,7 @@ export interface RunTurnResult {
   readonly model: ModelRef;
   readonly usage: { inputTokens: number; outputTokens: number; costUsd: number } | null;
   readonly finish: MessageFinishReason;
+  readonly params: { maxOutputTokens: number };
 }
 
 export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
@@ -116,5 +117,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       ? { inputTokens: cost.inputTokens, outputTokens: cost.outputTokens, costUsd: cost.costUsd }
       : null,
     finish: collected.stopReason ?? 'stop',
+    params: { maxOutputTokens: request.maxOutputTokens },
   };
 }

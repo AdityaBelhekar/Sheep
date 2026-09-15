@@ -95,6 +95,7 @@ export {
   SESSIONS_DDL,
   SESSIONS_PROJECTION,
   countSessions,
+  getMessage,
   getParticipant,
   getSession,
   listMessages,

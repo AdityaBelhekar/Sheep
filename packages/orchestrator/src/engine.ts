@@ -723,6 +723,7 @@ export class Orchestrator {
         body: { kind: 'text', text },
         ...(response.usage ? { usage: response.usage } : {}),
         finish: response.finish,
+        ...(response.params ? { params: { ...response.params } } : {}),
         promptHash,
       }),
     ];

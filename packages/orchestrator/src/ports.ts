@@ -54,6 +54,8 @@ export interface TurnResponse {
     readonly costUsd: number;
   } | null;
   readonly finish: MessageFinishReason;
+  /** What the provider was actually sent, for provenance. */
+  readonly params?: { readonly maxOutputTokens: number; readonly temperature?: number };
 }
 
 export type ProgressKind =

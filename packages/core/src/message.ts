@@ -83,6 +83,19 @@ export const usageSchema = z.strictObject({
 export type Usage = z.infer<typeof usageSchema>;
 
 /**
+ * The generation parameters a model call was sent with (Phase 35).
+ *
+ * Only what Sheep actually sets: the output cap, and a temperature when one is
+ * given. Absent means the provider's default was used, which is itself worth
+ * knowing when reproducing a run.
+ */
+export const generationParamsSchema = z.strictObject({
+  maxOutputTokens: tokenCountSchema,
+  temperature: z.number().min(0).max(2).optional(),
+});
+export type GenerationParams = z.infer<typeof generationParamsSchema>;
+
+/**
  * One turn of the conversation.
  *
  * `phaseId` and `roundId` are nullable because not every message belongs to the
@@ -100,6 +113,8 @@ export const messageSchema = z.strictObject({
   usage: usageSchema.nullable(),
   /** How the turn stopped. Null for anything a model did not produce. */
   finish: messageFinishReasonSchema.nullable(),
+  /** What the call was sent with. Null for anything a model did not produce. */
+  params: generationParamsSchema.nullable(),
   /** Hash of the exact prompt that produced this, for reproducibility (P5). */
   promptHash: sha256Schema.nullable(),
   recordedAt: timestampSchema,

@@ -3,6 +3,7 @@ import { CLAIM_TYPES, EVIDENCE_KINDS, type ClaimType, type EvidenceKind } from '
 import type { IpcClient, IpcResponse } from '@sheep/ipc';
 import { paneById } from '@shared/panes';
 import {
+  evidenceNodeId,
   layoutClaimGraph,
   lineageOf,
   NODE_HEIGHT,
@@ -123,7 +124,18 @@ export function LedgerPane({
               </p>
             </div>
           ) : (
-            <GraphView graph={graph} selected={selected} onSelect={setSelected} />
+            <div className="ledger__main">
+              <GraphView graph={graph} selected={selected} onSelect={setSelected} />
+              {selected !== null && (
+                <ProvenanceDrawer
+                  client={client}
+                  sessionId={sessionId}
+                  ledger={ledger}
+                  nodeId={selected}
+                  onSelect={setSelected}
+                />
+              )}
+            </div>
           )}
 
           <Legend />
@@ -282,6 +294,284 @@ function Node({
       </foreignObject>
     </g>
   );
+}
+
+type Provenance = IpcResponse<'sheep:claim-provenance'>;
+
+/**
+ * One click from any node to where it came from.
+ *
+ * For a claim: the model and version that asserted it, what it was sent with,
+ * the prompt hash that reproduces the call, what it cost and when, and every
+ * claim beneath it with the disputes raised along the way. A claim a person
+ * wrote says so rather than showing empty model fields.
+ */
+function ProvenanceDrawer({
+  client,
+  sessionId,
+  ledger,
+  nodeId,
+  onSelect,
+}: {
+  client: IpcClient;
+  sessionId: string;
+  ledger: Ledger;
+  nodeId: string;
+  onSelect: (id: string | null) => void;
+}): ReactElement {
+  const claim = ledger.claims.find((candidate) => candidate.claimId === nodeId);
+  const [provenance, setProvenance] = useState<Provenance | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!claim) return;
+    const signal = { cancelled: false };
+    setProvenance(null);
+    setProblem(null);
+    client
+      .invoke('sheep:claim-provenance', { sessionId, claimId: claim.claimId })
+      .then((reply) => {
+        if (!signal.cancelled) setProvenance(reply);
+      })
+      .catch((error: unknown) => {
+        if (!signal.cancelled) setProblem(describe(error));
+      });
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [client, sessionId, claim]);
+
+  const close = (
+    <button
+      type="button"
+      className="button button--quiet drawer__close"
+      aria-label="Close provenance"
+      onClick={() => {
+        onSelect(null);
+      }}
+    >
+      ×
+    </button>
+  );
+
+  if (!claim) {
+    const dispute = ledger.disputes.find((candidate) => candidate.disputeId === nodeId);
+    if (dispute) {
+      const resolution = ledger.resolutions.find((r) => r.disputeId === dispute.disputeId);
+      return (
+        <aside className="drawer" aria-label="Dispute">
+          <header className="drawer__head">
+            <span className="badge" data-status={dispute.status}>
+              dispute · {dispute.status}
+            </span>
+            {close}
+          </header>
+          <p className="drawer__statement">{dispute.argument}</p>
+          <dl className="drawer__facts">
+            <Fact term="Axis" value={`${dispute.axis} · ${dispute.severity}`} />
+            <Fact term="Raised by" value={participantName(ledger, dispute.raisedByParticipantId)} />
+            <Fact term="Opened" value={dispute.openedAt} />
+            {dispute.proposedTest && (
+              <Fact
+                term="Proposed test"
+                value={`${dispute.proposedTest.route}: ${dispute.proposedTest.description}`}
+              />
+            )}
+            {resolution && (
+              <Fact term="Outcome" value={`${resolution.outcome} — ${resolution.rationale}`} />
+            )}
+          </dl>
+          <button
+            type="button"
+            className="button button--quiet"
+            onClick={() => {
+              onSelect(dispute.claimId);
+            }}
+          >
+            Open the disputed claim
+          </button>
+        </aside>
+      );
+    }
+    const resting = ledger.claims.filter((c) =>
+      c.support.some((evidence) => evidenceNodeId(evidence) === nodeId),
+    );
+    return (
+      <aside className="drawer" aria-label="Evidence">
+        <header className="drawer__head">
+          <span className="badge">evidence</span>
+          {close}
+        </header>
+        <p className="drawer__statement drawer__mono">{nodeId}</p>
+        <p className="drawer__section">Supports</p>
+        <ClaimList claims={resting.map((c) => ({ claim: c, depth: 1 }))} onSelect={onSelect} />
+      </aside>
+    );
+  }
+
+  const message = provenance?.message ?? null;
+  const author = provenance?.author ?? null;
+  const model = message?.author.kind === 'MODEL' ? message.author.model : (author?.model ?? null);
+
+  return (
+    <aside className="drawer" aria-label="Claim provenance" data-sheep-provenance={claim.claimId}>
+      <header className="drawer__head">
+        <span className="badge">{claim.claimType}</span>
+        <span className="badge" data-status={claim.status}>
+          {claim.status}
+        </span>
+        {close}
+      </header>
+      <p className="drawer__statement">{claim.statement}</p>
+
+      {problem !== null && (
+        <p className="notice notice--error" role="alert">
+          {problem}
+        </p>
+      )}
+      {provenance === null && problem === null && <p className="notice">Tracing…</p>}
+
+      {provenance && (
+        <>
+          <dl className="drawer__facts">
+            {claim.authorParticipantId === null ? (
+              <Fact term="Author" value="Recorded by a person — no model produced this claim" />
+            ) : (
+              <>
+                <Fact
+                  term="Model"
+                  value={model ? `${model.vendorId} · ${model.modelId}` : 'unknown participant'}
+                />
+                <Fact term="Version" value={model?.version ?? 'not reported by the provider'} />
+                <Fact term="Role" value={message?.role ?? '—'} />
+                <Fact
+                  term="Params"
+                  value={
+                    message?.params
+                      ? `max ${String(message.params.maxOutputTokens)} output tokens · temperature ${
+                          message.params.temperature === undefined
+                            ? 'provider default'
+                            : String(message.params.temperature)
+                        }`
+                      : 'not recorded'
+                  }
+                />
+                <Fact term="Prompt hash" value={message?.promptHash ?? 'not recorded'} mono />
+                <Fact
+                  term="Cost"
+                  value={
+                    message?.usage
+                      ? `$${message.usage.costUsd.toFixed(4)} · ${String(message.usage.inputTokens)} in / ${String(message.usage.outputTokens)} out`
+                      : 'not priced'
+                  }
+                />
+                <Fact term="Asserted" value={message?.recordedAt ?? '—'} />
+              </>
+            )}
+            <Fact term="Recorded" value={claim.recordedAt} />
+            <Fact term="Claim id" value={claim.claimId} mono />
+          </dl>
+
+          <p className="drawer__section">Support</p>
+          {claim.support.length === 0 ? (
+            <p className="drawer__empty">Nothing — honestly unbacked.</p>
+          ) : (
+            <ul className="drawer__list">
+              {claim.support.map((evidence) => (
+                <li key={`${evidence.kind}:${evidence.ref}`}>
+                  <span className="badge">{evidence.kind}</span>{' '}
+                  <span className="drawer__mono">{evidence.ref}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <p className="drawer__section">Ancestry</p>
+          {provenance.ancestry.length === 0 ? (
+            <p className="drawer__empty">Rests on no other claim.</p>
+          ) : (
+            <ClaimList claims={provenance.ancestry} onSelect={onSelect} />
+          )}
+
+          {provenance.disputes.length > 0 && (
+            <>
+              <p className="drawer__section">Disputes along the lineage</p>
+              <ul className="drawer__list">
+                {provenance.disputes.map((dispute) => (
+                  <li key={dispute.disputeId}>
+                    <button
+                      type="button"
+                      className="drawer__link"
+                      onClick={() => {
+                        onSelect(dispute.disputeId);
+                      }}
+                    >
+                      <span className="badge" data-status={dispute.status}>
+                        {dispute.status}
+                      </span>{' '}
+                      {dispute.axis}: {dispute.argument}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      )}
+    </aside>
+  );
+}
+
+function ClaimList({
+  claims,
+  onSelect,
+}: {
+  claims: readonly { claim: Ledger['claims'][number]; depth: number }[];
+  onSelect: (id: string) => void;
+}): ReactElement {
+  return (
+    <ul className="drawer__list" data-sheep-ancestry={claims.length}>
+      {claims.map(({ claim, depth }) => (
+        <li key={claim.claimId} style={{ paddingLeft: `${String((depth - 1) * 0.9)}rem` }}>
+          <button
+            type="button"
+            className="drawer__link"
+            onClick={() => {
+              onSelect(claim.claimId);
+            }}
+          >
+            <span className="badge" data-status={claim.status}>
+              {claim.claimType}
+            </span>{' '}
+            {claim.statement}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Fact({
+  term,
+  value,
+  mono = false,
+}: {
+  term: string;
+  value: string;
+  mono?: boolean;
+}): ReactElement {
+  return (
+    <>
+      <dt>{term}</dt>
+      <dd className={mono ? 'drawer__mono' : undefined}>{value}</dd>
+    </>
+  );
+}
+
+function participantName(ledger: Ledger, participantId: string | null): string {
+  if (participantId === null) return 'a person';
+  const entry = ledger.roster.find((candidate) => candidate.participantId === participantId);
+  return entry ? `${entry.model.vendorId} · ${entry.model.modelId}` : participantId;
 }
 
 function Legend(): ReactElement {

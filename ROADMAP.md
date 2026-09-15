@@ -192,7 +192,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   → `feat(core): per-model calibration scoring`
 - [x] **34. Claim graph UI** — interactive DAG of claims/evidence/disputes, coloured by status.
   → `feat(ui): interactive claim graph`
-- [ ] **35. Provenance drawer** — click any claim: model, version, params, prompt hash, cost, timestamp, full ancestry.
+- [x] **35. Provenance drawer** — click any claim: model, version, params, prompt hash, cost, timestamp, full ancestry.
   → `feat(ui): claim provenance drawer`
 
 > **Stage gate:** an unbacked empirical claim is impossible to record, and every claim's full lineage is one click away.
