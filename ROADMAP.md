@@ -188,7 +188,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   *Done when:* each violation is rejected with a specific error, proven by tests. → `feat(core): claim type enforcement`
 - [x] **32. Position locking** — pre-reveal `{stance, confidence}` commitments, hashed and stored; movement diffing.
   → `feat(orchestrator): position commitment and movement tracking`
-- [ ] **33. Calibration scoring** — Brier scores over resolved disputes; per-model reliability shown, never used to auto-decide.
+- [x] **33. Calibration scoring** — Brier scores over resolved disputes; per-model reliability shown, never used to auto-decide.
   → `feat(core): per-model calibration scoring`
 - [ ] **34. Claim graph UI** — interactive DAG of claims/evidence/disputes, coloured by status.
   → `feat(ui): interactive claim graph`
