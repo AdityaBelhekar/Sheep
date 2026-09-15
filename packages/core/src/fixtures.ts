@@ -204,6 +204,21 @@ export const EVENT_FIXTURES: EventFixtures = {
     reason: 'no baseline reported',
   },
 
+  'position.committed': {
+    sessionId: SESSION_ID,
+    roundId: ROUND_ID,
+    claimId: CLAIM_ID,
+    participantId: PARTICIPANT_B,
+    commitment: PROMPT_HASH,
+  },
+  'position.revealed': {
+    sessionId: SESSION_ID,
+    roundId: ROUND_ID,
+    claimId: CLAIM_ID,
+    position: { participantId: PARTICIPANT_B, stance: 'OPPOSE', confidence: 0.55 },
+    salt: '0123456789abcdef0123456789abcdef',
+  },
+
   'dispute.opened': {
     sessionId: SESSION_ID,
     disputeId: DISPUTE_ID,

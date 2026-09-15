@@ -151,9 +151,13 @@ export {
   LEDGER_EVENT_TYPES,
   Ledger,
   LedgerError,
+  commitmentPreimage,
   isLedgerEventType,
   type LedgerEntry,
   type LedgerErrorCode,
+  type LedgerOptions,
+  type PositionMovement,
+  type RevealedPosition,
 } from './ledger';
 
 export {

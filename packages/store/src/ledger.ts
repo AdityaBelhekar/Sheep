@@ -1,4 +1,5 @@
 import { isLedgerEventType, Ledger, safeParseDomainEvent, type LedgerEntry } from '@sheep/core';
+import { sha256Hex } from './events/hash';
 import type { AppendEventInput, EventLog } from './events/log';
 
 /**
@@ -8,7 +9,7 @@ import type { AppendEventInput, EventLog } from './events/log';
  * ledger's own rule breaks are kept on `rejected`.
  */
 export function readLedger(log: EventLog, sessionId: string): Ledger {
-  return Ledger.replay(sessionId, ledgerEntries(log, sessionId));
+  return Ledger.replay(sessionId, ledgerEntries(log, sessionId), { digest: sha256Hex });
 }
 
 function* ledgerEntries(log: EventLog, sessionId: string): Generator<LedgerEntry> {

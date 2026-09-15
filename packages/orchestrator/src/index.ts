@@ -125,3 +125,10 @@ export {
   type RunOutcome,
   type RunStatus,
 } from './engine';
+
+export {
+  commitmentOf,
+  lockPositions,
+  type LockPositionsInput,
+  type LockedPositions,
+} from './positions';

@@ -236,6 +236,29 @@ export const EVENT_PAYLOADS = {
     reason: proseSchema.optional(),
   }),
 
+  /**
+   * A participant's stance on a claim, sealed before anyone's is shown (Phase 32).
+   *
+   * Only the hash travels; the position itself arrives with `position.revealed`,
+   * which must hash to this. Once any reveal for a round and claim is recorded,
+   * no further commitment for it is accepted — that is the lock.
+   */
+  'position.committed': z.strictObject({
+    ...sessionScope,
+    roundId: idSchema,
+    claimId: idSchema,
+    participantId: idSchema,
+    commitment: sha256Schema,
+  }),
+  'position.revealed': z.strictObject({
+    ...sessionScope,
+    roundId: idSchema,
+    claimId: idSchema,
+    position: positionSchema,
+    /** Random, so a commitment to a low-entropy stance cannot be guessed from its hash. */
+    salt: z.string().regex(/^[0-9a-f]{32,128}$/, 'expected a hex salt of 32 to 128 characters'),
+  }),
+
   'dispute.opened': z.strictObject({
     ...sessionScope,
     disputeId: idSchema,

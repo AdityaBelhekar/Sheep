@@ -7,6 +7,7 @@ import {
   type EvidenceRef,
 } from './claim';
 import type { Dispute, Resolution } from './dispute';
+import type { Position } from './protocol';
 import type { DomainEvent, DomainEventType } from './events';
 
 /**
@@ -30,6 +31,13 @@ import type { DomainEvent, DomainEventType } from './events';
  * derivation, a `CITED` claim at a citation — at the moment it is recorded,
  * not eventually. `CITED` and `CONJECTURE` claims may support others but can
  * never be marked supported themselves: they cannot establish anything alone.
+ *
+ * Positions are commit-then-reveal (Phase 32). A commitment is a hash of the
+ * position; the reveal must match it, and once any reveal for a round and claim
+ * exists no one may commit to it, so nobody's stance can be shaped by another's.
+ * Hashing needs a digest, which `@sheep/core` does not carry — the renderer
+ * imports this package — so the caller passes one, and without it reveals are
+ * checked for order but not content.
  */
 
 export const LEDGER_EVENT_TYPES = [
@@ -41,6 +49,8 @@ export const LEDGER_EVENT_TYPES = [
   'dispute.opened',
   'dispute.resolved',
   'dispute.withdrawn',
+  'position.committed',
+  'position.revealed',
 ] as const satisfies readonly DomainEventType[];
 
 const LEDGER_TYPES: ReadonlySet<string> = new Set(LEDGER_EVENT_TYPES);
@@ -73,6 +83,11 @@ export const LEDGER_ERROR_CODES = [
   'SUPPORT_NOT_STANDING',
   'CYCLIC_SUPPORT',
   'CANNOT_ESTABLISH_ALONE',
+  'DUPLICATE_COMMITMENT',
+  'COMMIT_AFTER_REVEAL',
+  'REVEAL_WITHOUT_COMMITMENT',
+  'DUPLICATE_REVEAL',
+  'REVEAL_MISMATCH',
 ] as const;
 export type LedgerErrorCode = (typeof LEDGER_ERROR_CODES)[number];
 
@@ -90,6 +105,54 @@ export class LedgerError extends Error {
 export interface LedgerEntry {
   readonly event: DomainEvent;
   readonly recordedAt: string;
+}
+
+export interface LedgerOptions {
+  /** Lower-case hex SHA-256 of a UTF-8 string. Enables reveal verification. */
+  readonly digest?: (text: string) => string;
+}
+
+/**
+ * The exact text a position commitment hashes.
+ *
+ * Round and claim are inside the hash so a commitment cannot be replayed onto a
+ * different question.
+ */
+export function commitmentPreimage(
+  roundId: string,
+  claimId: string,
+  position: Position,
+  salt: string,
+): string {
+  return JSON.stringify([
+    roundId,
+    claimId,
+    position.participantId,
+    position.stance,
+    position.confidence,
+    position.rationale ?? null,
+    salt,
+  ]);
+}
+
+export interface RevealedPosition {
+  readonly roundId: string;
+  readonly claimId: string;
+  readonly position: Position;
+  readonly revealedAt: string;
+}
+
+/** How one participant's stance on one claim changed between two reveals. */
+export interface PositionMovement {
+  readonly claimId: string;
+  readonly participantId: string;
+  readonly fromRoundId: string;
+  readonly toRoundId: string;
+  readonly from: Position;
+  readonly to: Position;
+  readonly stanceChanged: boolean;
+  /** `to.confidence - from.confidence`. */
+  readonly confidenceDelta: number;
 }
 
 /** What each type's required evidence is called when it is missing. */
@@ -117,10 +180,15 @@ export class Ledger {
   /** Execution id → exit code. */
   readonly #executions = new Map<string, number>();
   readonly #derivations = new Set<string>();
+  /** `round|claim|participant` → commitment hash. */
+  readonly #commitments = new Map<string, string>();
+  readonly #reveals: RevealedPosition[] = [];
   readonly #rejected: { entry: LedgerEntry; error: LedgerError }[] = [];
+  readonly #digest: ((text: string) => string) | undefined;
 
-  constructor(sessionId: string) {
+  constructor(sessionId: string, options: LedgerOptions = {}) {
     this.sessionId = sessionId;
+    this.#digest = options.digest;
   }
 
   /**
@@ -131,8 +199,12 @@ export class Ledger {
    * rejected entry means something bypassed that check — worth showing, not
    * worth making the session unreadable over.
    */
-  static replay(sessionId: string, entries: Iterable<LedgerEntry>): Ledger {
-    const ledger = new Ledger(sessionId);
+  static replay(
+    sessionId: string,
+    entries: Iterable<LedgerEntry>,
+    options: LedgerOptions = {},
+  ): Ledger {
+    const ledger = new Ledger(sessionId, options);
     for (const entry of entries) {
       if (!isLedgerEventType(entry.event.type)) continue;
       try {
@@ -173,6 +245,40 @@ export class Ledger {
 
   resolutions(): Resolution[] {
     return [...this.#resolutions.values()];
+  }
+
+  /** Every revealed position, in the order revealed. */
+  positions(): RevealedPosition[] {
+    return [...this.#reveals];
+  }
+
+  /**
+   * Movement: each participant's consecutive reveals on the same claim, diffed.
+   *
+   * Measured rather than inferred — both ends are sealed commitments, so a model
+   * cannot claim it held a view all along.
+   */
+  movements(): PositionMovement[] {
+    const last = new Map<string, RevealedPosition>();
+    const movements: PositionMovement[] = [];
+    for (const reveal of this.#reveals) {
+      const key = `${reveal.claimId}|${reveal.position.participantId}`;
+      const previous = last.get(key);
+      if (previous) {
+        movements.push({
+          claimId: reveal.claimId,
+          participantId: reveal.position.participantId,
+          fromRoundId: previous.roundId,
+          toRoundId: reveal.roundId,
+          from: previous.position,
+          to: reveal.position,
+          stanceChanged: previous.position.stance !== reveal.position.stance,
+          confidenceDelta: reveal.position.confidence - previous.position.confidence,
+        });
+      }
+      last.set(key, reveal);
+    }
+    return movements;
   }
 
   /** Throws a `LedgerError` and changes nothing if the event breaks a rule. */
@@ -343,6 +449,61 @@ export class Ledger {
           resolvedAt: at,
         });
         this.#touch(dispute.claimId, at);
+        return;
+      }
+
+      case 'position.committed': {
+        const { roundId, claimId, participantId, commitment } = event.payload;
+        if (!this.#claims.has(claimId)) {
+          throw new LedgerError('UNKNOWN_CLAIM', `no claim ${claimId} in this session`);
+        }
+        const key = `${roundId}|${claimId}|${participantId}`;
+        if (this.#commitments.has(key)) {
+          throw new LedgerError(
+            'DUPLICATE_COMMITMENT',
+            `participant ${participantId} already committed a position on this claim in this round`,
+          );
+        }
+        if (this.#reveals.some((r) => r.roundId === roundId && r.claimId === claimId)) {
+          throw new LedgerError(
+            'COMMIT_AFTER_REVEAL',
+            'positions on this claim are already being revealed; the round is locked',
+          );
+        }
+        this.#commitments.set(key, commitment);
+        return;
+      }
+
+      case 'position.revealed': {
+        const { roundId, claimId, position, salt } = event.payload;
+        const key = `${roundId}|${claimId}|${position.participantId}`;
+        const commitment = this.#commitments.get(key);
+        if (commitment === undefined) {
+          throw new LedgerError(
+            'REVEAL_WITHOUT_COMMITMENT',
+            `participant ${position.participantId} never committed a position to reveal`,
+          );
+        }
+        if (
+          this.#reveals.some(
+            (r) =>
+              r.roundId === roundId &&
+              r.claimId === claimId &&
+              r.position.participantId === position.participantId,
+          )
+        ) {
+          throw new LedgerError('DUPLICATE_REVEAL', 'this position has already been revealed');
+        }
+        if (
+          this.#digest !== undefined &&
+          this.#digest(commitmentPreimage(roundId, claimId, position, salt)) !== commitment
+        ) {
+          throw new LedgerError(
+            'REVEAL_MISMATCH',
+            `participant ${position.participantId} revealed a position other than the one committed`,
+          );
+        }
+        this.#reveals.push({ roundId, claimId, position, revealedAt: at });
         return;
       }
 

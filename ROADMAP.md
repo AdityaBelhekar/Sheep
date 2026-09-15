@@ -186,7 +186,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   → `feat(core): claim ledger schema and rules`
 - [x] **31. Ledger enforcement** — `EMPIRICAL` requires a valid `execution_id`; `DERIVED` requires a derivation record; `CITED` can support but never alone establish. **(P2)**
   *Done when:* each violation is rejected with a specific error, proven by tests. → `feat(core): claim type enforcement`
-- [ ] **32. Position locking** — pre-reveal `{stance, confidence}` commitments, hashed and stored; movement diffing.
+- [x] **32. Position locking** — pre-reveal `{stance, confidence}` commitments, hashed and stored; movement diffing.
   → `feat(orchestrator): position commitment and movement tracking`
 - [ ] **33. Calibration scoring** — Brier scores over resolved disputes; per-model reliability shown, never used to auto-decide.
   → `feat(core): per-model calibration scoring`
