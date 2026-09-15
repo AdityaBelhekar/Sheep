@@ -378,6 +378,7 @@ export class Orchestrator {
         phase,
         'complete',
         'hypotheses were selected',
+        this.#selectedHypothesisClaims(snapshot, phase),
       );
       return;
     }
@@ -537,6 +538,8 @@ export class Orchestrator {
     phase: PhaseState,
     outcome: 'complete' | 'failed',
     summary: string,
+    /** Recorded in the same batch, so they land if and only if the phase closes. */
+    extra: readonly DomainEvent[] = [],
   ): Promise<void> {
     const current = phaseById(state, phase.phaseId);
     if (current.status === 'complete' || current.status === 'failed') {
@@ -556,10 +559,48 @@ export class Orchestrator {
         }),
       );
     events.push(
+      ...extra,
       domainEvent('phase.closed', { sessionId, phaseId: phase.phaseId, outcome, summary }),
     );
     await this.#ports.record(sessionId, events);
     this.#report(sessionId, 'phase-closed', `${phase.kind} ${outcome}: ${summary}`);
+  }
+
+  /**
+   * The hypotheses a human selected, as CONJECTURE claims in the ledger.
+   *
+   * Conjecture is the honest type: nothing has been run or derived yet. Each
+   * claim names the turn and participant that proposed it, so its provenance
+   * survives the clustering that merged duplicates. The gate's options were
+   * raised from the same log in the same order, so they are matched back to
+   * their candidates by position — and by label, in case they ever are not.
+   */
+  #selectedHypothesisClaims(snapshot: SessionSnapshot, phase: PhaseState): DomainEvent[] {
+    const gate = phase.gate;
+    const scoring = phase.rounds.filter((round) => round.index % 2 === 1).at(-1);
+    if (!gate || !scoring) return [];
+
+    const ranked = rankCandidates(
+      candidatesFrom(snapshot, phase, scoring.index - 1),
+      turnsOf(snapshot.events, scoring.roundId),
+      snapshot,
+    );
+    return gate.options.flatMap((option, index) => {
+      const candidate = ranked[index];
+      if (!gate.selected.includes(option.optionId)) return [];
+      if (!candidate || candidate.label.slice(0, 200) !== option.label) return [];
+      return [
+        domainEvent('claim.recorded', {
+          sessionId: snapshot.sessionId,
+          claimId: this.#ports.newId(),
+          claimType: 'CONJECTURE',
+          statement: option.label,
+          phaseId: phase.phaseId,
+          messageId: candidate.messageId,
+          authorParticipantId: candidate.participantId,
+        }),
+      ];
+    });
   }
 
   async #raiseGate(
@@ -807,6 +848,9 @@ interface Candidate {
   readonly id: string;
   readonly label: string;
   readonly detail: string;
+  /** The turn and participant behind the cluster's representative. */
+  readonly messageId: string;
+  readonly participantId: string;
 }
 
 /** Hypotheses proposed in a generation round, clustered so duplicates count once. */
@@ -818,7 +862,12 @@ function candidatesFrom(
   const round = phase.rounds.find((candidate) => candidate.index === roundIndex);
   if (!round) return [];
 
-  const items: (ClusterItem & { detail: string; label: string })[] = [];
+  const items: (ClusterItem & {
+    detail: string;
+    label: string;
+    messageId: string;
+    source: string;
+  })[] = [];
   for (const turn of turnsOf(snapshot.events, round.roundId)) {
     let parsed;
     try {
@@ -836,6 +885,7 @@ function candidatesFrom(
         source: turn.participantId,
         label: hypothesis.label,
         detail: hypothesis.detail ?? hypothesis.label,
+        messageId: turn.messageId,
       });
     }
   }
@@ -845,6 +895,8 @@ function candidatesFrom(
     return {
       id: `H${String(index + 1)}`,
       label: representative.label,
+      messageId: representative.messageId,
+      participantId: representative.source,
       detail: `${representative.detail}\n\nProposed independently by ${String(cluster.sources.length)} participant(s).`,
     };
   });

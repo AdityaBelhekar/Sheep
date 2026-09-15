@@ -1,10 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { domainEvent, type Connection, type RosterEntry, type SessionSummary } from '@sheep/core';
+import {
+  calibrationScores,
+  domainEvent,
+  type Connection,
+  type RosterEntry,
+  type SessionSummary,
+} from '@sheep/core';
 import type { ModelDescriptor } from '@sheep/gateway';
 import type { RunOutcome } from '@sheep/orchestrator';
-import { IpcError, IpcRegistry } from '@sheep/ipc';
-import { getSession, listMessages, listParticipants, listSessions } from '@sheep/store';
+import { IpcError, IpcRegistry, type IpcResponse } from '@sheep/ipc';
+import { getSession, listMessages, listParticipants, listSessions, readLedger } from '@sheep/store';
 import { APP_NAME } from '../shared/product';
 import {
   createConnection,
@@ -225,6 +231,22 @@ export function createIpcRegistry(): IpcRegistry {
         state: await protocolView(request.sessionId),
       };
     })
+    .register('sheep:ledger-get', (request) => readLedgerDetail(request.sessionId))
+    .register('sheep:claim-record', (request) => {
+      const claimId = randomUUID();
+      // The store checks this against the session's ledger before it appends,
+      // so a refused claim throws here with the rule it broke and writes nothing.
+      getStore().record([
+        domainEvent('claim.recorded', {
+          sessionId: request.sessionId,
+          claimId,
+          claimType: request.claimType,
+          statement: request.statement,
+          ...(request.support.length === 0 ? {} : { support: request.support }),
+        }),
+      ]);
+      return { claimId, ...readLedgerDetail(request.sessionId) };
+    })
     .register('sheep:chat-send', async (request, context) => {
       const window = windowFor(context.senderId);
       return await sendChat(window, request);
@@ -330,6 +352,23 @@ function readSessionDetail(sessionId: string): {
     session,
     roster: listParticipants(store.db, sessionId),
     projectedThroughSeq: status?.lastSeq ?? 0,
+  };
+}
+
+/** A session's ledger, replayed from the log, with what the UI needs beside it. */
+function readLedgerDetail(sessionId: string): IpcResponse<'sheep:ledger-get'> {
+  const store = getStore();
+  if (!getSession(store.db, sessionId)) throw new Error(`unknown session: ${sessionId}`);
+  const ledger = readLedger(store.events, sessionId);
+  return {
+    claims: ledger.claims(),
+    disputes: ledger.disputes(),
+    resolutions: ledger.resolutions(),
+    positions: ledger.positions(),
+    movements: ledger.movements(),
+    calibration: calibrationScores(ledger),
+    roster: listParticipants(store.db, sessionId),
+    rejected: ledger.rejected.length,
   };
 }
 

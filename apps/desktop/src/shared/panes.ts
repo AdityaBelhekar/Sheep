@@ -44,8 +44,8 @@ export const RESEARCH_PANES = [
     label: 'Ledger',
     summary: 'Claims, evidence and disputes as a navigable graph.',
     detail:
-      'Every claim is typed — DERIVED, EMPIRICAL, CITED or CONJECTURE — and an empirical claim with no execution record behind it cannot be recorded at all.',
-    arriving: 'Phases 30 to 35',
+      'Every claim is typed — DERIVED, EMPIRICAL, CITED or CONJECTURE — and an empirical claim with no execution record behind it cannot be recorded at all. Select any node to trace everything it rests on.',
+    arriving: 'Claims from CRITIQUE and RESOLUTION arrive with Stage 8',
   },
   {
     id: 'lab',

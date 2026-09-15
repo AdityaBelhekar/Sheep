@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DomainEvent } from '@sheep/core';
+import { Ledger, type DomainEvent } from '@sheep/core';
 import { Orchestrator, turnsOf } from './engine';
 import type { TurnRequest } from './ports';
 import { violations } from './roles';
@@ -217,6 +217,42 @@ describe('HYPOTHESIS', () => {
     expect(outcome.detail).toContain('METHOD');
     expect(outcome.state.phases[1]?.status).toBe('complete');
     expect(outcome.state.nextPhase).toBe('METHOD');
+  });
+
+  it('records each selected hypothesis as a CONJECTURE claim with its proposing turn', async () => {
+    const ports = newPorts();
+    const engine = engineOn(ports);
+    await engine.run(SESSION);
+    await engine.approve(SESSION, { gate: 'charter', decision: 'approved' });
+    const option = (await engine.view(SESSION)).phases[1]?.gate?.options[0];
+    await engine.approve(SESSION, {
+      gate: 'hypothesis',
+      decision: 'approved',
+      selected: option === undefined ? [] : [option.optionId],
+    });
+
+    const claims = ports.events.flatMap((event) =>
+      event.type === 'claim.recorded' ? [event.payload] : [],
+    );
+    expect(claims).toHaveLength(1);
+    const claim = claims[0];
+    expect(claim).toMatchObject({ claimType: 'CONJECTURE', statement: option?.label });
+
+    const turn = ports.events.find(
+      (event) => event.type === 'message.recorded' && event.payload.messageId === claim?.messageId,
+    );
+    expect(turn?.type === 'message.recorded' && turn.payload.author).toMatchObject({
+      kind: 'MODEL',
+      participantId: claim?.authorParticipantId,
+    });
+    // Recorded in the same batch as the phase closing, and accepted by the ledger.
+    const closed = ports.events.findIndex(
+      (event) => event.type === 'phase.closed' && event.payload.phaseId === claim?.phaseId,
+    );
+    expect(ports.events[closed - 1]?.type).toBe('claim.recorded');
+    const ledger = new Ledger(SESSION);
+    for (const event of ports.events) ledger.apply(event, '2026-09-15T10:00:00.000Z');
+    expect(ledger.claims()).toHaveLength(1);
   });
 
   it('ignores a model that replies in prose instead of JSON', async () => {

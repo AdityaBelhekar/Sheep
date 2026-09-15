@@ -27,6 +27,8 @@ export const IPC_CHANNELS = [
   'sheep:protocol-run',
   'sheep:protocol-approve',
   'sheep:protocol-cancel',
+  'sheep:ledger-get',
+  'sheep:claim-record',
   'sheep:chat-send',
   'sheep:chat-cancel',
   'sheep:connections-list',

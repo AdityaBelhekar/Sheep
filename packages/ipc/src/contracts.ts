@@ -1,5 +1,12 @@
 import { z } from 'zod';
 import {
+  claimSchema,
+  claimTypeSchema,
+  disputeSchema,
+  evidenceRefSchema,
+  positionSchema,
+  resolutionSchema,
+  timestampSchema,
   connectionConfigSchema,
   connectionSchema,
   gateDecisionSchema,
@@ -116,6 +123,49 @@ const protocolReply = z.object({
     nextPhase: phaseKindSchema.nullable(),
     phases: z.array(phaseViewSchema),
   }),
+});
+
+/**
+ * A session's claim ledger, replayed from the log in main.
+ *
+ * Statuses are already derived and calibration already computed: the renderer
+ * draws the ledger, it does not re-decide it. `rejected` counts log entries the
+ * ledger refused on replay — zero unless something bypassed the write check.
+ */
+const ledgerReply = z.object({
+  claims: z.array(claimSchema),
+  disputes: z.array(disputeSchema),
+  resolutions: z.array(resolutionSchema),
+  positions: z.array(
+    z.object({
+      roundId: idSchema,
+      claimId: idSchema,
+      position: positionSchema,
+      revealedAt: timestampSchema,
+    }),
+  ),
+  movements: z.array(
+    z.object({
+      claimId: idSchema,
+      participantId: idSchema,
+      fromRoundId: idSchema,
+      toRoundId: idSchema,
+      from: positionSchema,
+      to: positionSchema,
+      stanceChanged: z.boolean(),
+      confidenceDelta: z.number(),
+    }),
+  ),
+  calibration: z.array(
+    z.object({
+      participantId: idSchema,
+      scored: z.number().int().nonnegative(),
+      brier: z.number().min(0).max(1).nullable(),
+    }),
+  ),
+  /** Everyone who ever sat on the roster, so a detached author can still be named. */
+  roster: z.array(rosterEntrySchema),
+  rejected: z.number().int().nonnegative(),
 });
 
 /**
@@ -339,6 +389,26 @@ export const IPC_CONTRACTS = {
   'sheep:protocol-cancel': {
     request: z.object({ sessionId: idSchema }),
     response: protocolReply,
+  },
+  'sheep:ledger-get': {
+    request: z.object({ sessionId: idSchema }),
+    response: ledgerReply,
+  },
+  /**
+   * A claim written by a person.
+   *
+   * Checked by the same ledger rules as a model's: an EMPIRICAL claim with no
+   * execution behind it is refused here with the rule it broke, not accepted
+   * and flagged later.
+   */
+  'sheep:claim-record': {
+    request: z.object({
+      sessionId: idSchema,
+      claimType: claimTypeSchema,
+      statement: z.string().min(1).max(2_000),
+      support: z.array(evidenceRefSchema).max(20),
+    }),
+    response: ledgerReply.extend({ claimId: idSchema }),
   },
   'sheep:chat-send': {
     request: z.object({

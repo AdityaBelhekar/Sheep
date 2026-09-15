@@ -552,6 +552,74 @@ const PROTOCOL_EXPRESSION = (sessionId: string): string => `(async () => {
   }
 })()`;
 
+/**
+ * The ledger, end to end: a claim recorded from the renderer, an unbacked
+ * empirical claim refused by the store's ledger check, and the graph drawn from
+ * what came back — then one node selected, to prove the graph is interactive.
+ */
+const LEDGER_EXPRESSION = `(async () => {
+  const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const created = await window.sheep.invoke('sheep:session-create', {
+    title: 'Ledger smoke ' + Date.now(),
+    question: 'Can an unbacked empirical claim reach the ledger?',
+  });
+  const sessionId = created.sessionId;
+
+  const base = await window.sheep.invoke('sheep:claim-record', {
+    sessionId,
+    claimType: 'CONJECTURE',
+    statement: 'Block-sparse attention costs perplexity past 64k tokens.',
+    support: [],
+  });
+  const built = await window.sheep.invoke('sheep:claim-record', {
+    sessionId,
+    claimType: 'CONJECTURE',
+    statement: 'The cost grows with sparsity.',
+    support: [{ kind: 'CLAIM', ref: base.claimId }],
+  });
+
+  let refusal = 'accepted';
+  try {
+    await window.sheep.invoke('sheep:claim-record', {
+      sessionId,
+      claimType: 'EMPIRICAL',
+      statement: 'Perplexity rises 0.3 nats at 128k.',
+      support: [{ kind: 'ARGUMENT', ref: 'it seems likely' }],
+    });
+  } catch (error) {
+    refusal = String(error && error.message ? error.message : error);
+  }
+  const after = await window.sheep.invoke('sheep:ledger-get', { sessionId });
+
+  const previous = (await window.sheep.invoke('sheep:settings-read', {})).settings['ui.lastSessionId'];
+  await window.sheep.invoke('sheep:settings-write', { key: 'ui.lastSessionId', value: sessionId });
+  window.location.hash = '#/ledger';
+  let pane = null;
+  for (let i = 0; i < 40; i += 1) {
+    await settle(50);
+    pane = document.querySelector('[data-pane="ledger"][data-sheep-claims]');
+    if (pane && pane.querySelectorAll('[data-sheep-node]').length > 0) break;
+  }
+  const nodes = pane ? pane.querySelectorAll('[data-sheep-node]').length : 0;
+  const target = pane ? pane.querySelector('[data-sheep-node="' + base.claimId + '"]') : null;
+  if (target) target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await settle(80);
+  const selected = pane ? pane.querySelectorAll('[data-selected="true"]').length : 0;
+
+  await window.sheep.invoke('sheep:settings-write', { key: 'ui.lastSessionId', value: previous });
+  window.location.hash = '#/sessions';
+  await settle(60);
+
+  return {
+    recorded: after.claims.length,
+    edges: built.claims.find((c) => c.claimId === built.claimId).support.length,
+    refusal,
+    rendered: pane ? pane.getAttribute('data-sheep-claims') : null,
+    nodes,
+    selected,
+  };
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -619,6 +687,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
 
   await checkNavigation(window);
   await checkProjection(window);
+  await checkLedger(window);
   await checkConnections(window);
   await checkLocalModel(window);
   await checkTheme(window);
@@ -657,6 +726,41 @@ async function checkNavigation(window: BrowserWindow): Promise<void> {
     `${String(result.visited.length)}/${String(result.declared)} panes rendered · unknown route → ${
       result.fallback ?? 'nothing'
     }${result.failed.length > 0 ? ` · failed: ${result.failed.join(', ')}` : ''}`,
+  );
+}
+
+async function checkLedger(window: BrowserWindow): Promise<void> {
+  const result = (await evaluate(window, LEDGER_EXPRESSION)) as
+    | {
+        recorded: number;
+        edges: number;
+        refusal: string;
+        rendered: string | null;
+        nodes: number;
+        selected: number;
+      }
+    | { error: string }
+    | undefined;
+
+  if (!result || 'error' in result) {
+    recordSmokeCheck('renderer-ledger', false, result?.error ?? 'no result');
+    return;
+  }
+
+  const ok =
+    result.recorded === 2 &&
+    result.edges === 1 &&
+    result.refusal.includes('LEDGER_EMPIRICAL_WITHOUT_EXECUTION') &&
+    result.rendered === '2' &&
+    result.nodes === 2 &&
+    result.selected === 1;
+
+  recordSmokeCheck(
+    'renderer-ledger',
+    ok,
+    `${String(result.recorded)} claims recorded · unbacked empirical → ${
+      result.refusal.match(/LEDGER_[A-Z_]+/)?.[0] ?? result.refusal
+    } · graph ${String(result.nodes)} nodes, ${String(result.selected)} selected`,
   );
 }
 
