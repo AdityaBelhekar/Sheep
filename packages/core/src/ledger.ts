@@ -1,4 +1,11 @@
-import type { Claim, ClaimStatus } from './claim';
+import {
+  canEstablishAlone,
+  REQUIRED_EVIDENCE_KIND,
+  type Claim,
+  type ClaimStatus,
+  type ClaimType,
+  type EvidenceRef,
+} from './claim';
 import type { Dispute, Resolution } from './dispute';
 import type { DomainEvent, DomainEventType } from './events';
 
@@ -17,9 +24,17 @@ import type { DomainEvent, DomainEventType } from './events';
  * a statement about evidence and must be backed by the dispute that produced
  * it. Precedence, strongest first: withdrawn, refuted, disputed, unresolved,
  * then whatever the claim's own status events last said.
+ *
+ * Claim types are enforced here too (P2). An `EMPIRICAL` claim must point at a
+ * recorded execution that exited cleanly, a `DERIVED` claim at a recorded
+ * derivation, a `CITED` claim at a citation — at the moment it is recorded,
+ * not eventually. `CITED` and `CONJECTURE` claims may support others but can
+ * never be marked supported themselves: they cannot establish anything alone.
  */
 
 export const LEDGER_EVENT_TYPES = [
+  'execution.recorded',
+  'derivation.recorded',
   'claim.recorded',
   'claim.evidence-attached',
   'claim.status-changed',
@@ -46,6 +61,18 @@ export const LEDGER_ERROR_CODES = [
   'DISPUTE_CLOSED',
   'RESOLUTION_WITHOUT_EVIDENCE',
   'UNRESOLVED_WITHOUT_POSITIONS',
+  'DUPLICATE_EXECUTION',
+  'DUPLICATE_DERIVATION',
+  'EMPIRICAL_WITHOUT_EXECUTION',
+  'DERIVED_WITHOUT_DERIVATION',
+  'CITED_WITHOUT_CITATION',
+  'UNKNOWN_EXECUTION',
+  'FAILED_EXECUTION',
+  'UNKNOWN_DERIVATION',
+  'UNKNOWN_SUPPORTING_CLAIM',
+  'SUPPORT_NOT_STANDING',
+  'CYCLIC_SUPPORT',
+  'CANNOT_ESTABLISH_ALONE',
 ] as const;
 export type LedgerErrorCode = (typeof LEDGER_ERROR_CODES)[number];
 
@@ -65,6 +92,14 @@ export interface LedgerEntry {
   readonly recordedAt: string;
 }
 
+/** What each type's required evidence is called when it is missing. */
+const MISSING_EVIDENCE: Readonly<Record<ClaimType, LedgerErrorCode | null>> = {
+  EMPIRICAL: 'EMPIRICAL_WITHOUT_EXECUTION',
+  DERIVED: 'DERIVED_WITHOUT_DERIVATION',
+  CITED: 'CITED_WITHOUT_CITATION',
+  CONJECTURE: null,
+};
+
 /** Statuses only a dispute may produce. */
 const DISPUTE_STATUSES: ReadonlySet<ClaimStatus> = new Set(['disputed', 'refuted', 'unresolved']);
 
@@ -79,6 +114,9 @@ export class Ledger {
   readonly #claims = new Map<string, ClaimRecord>();
   readonly #disputes = new Map<string, Dispute>();
   readonly #resolutions = new Map<string, Resolution>();
+  /** Execution id → exit code. */
+  readonly #executions = new Map<string, number>();
+  readonly #derivations = new Set<string>();
   readonly #rejected: { entry: LedgerEntry; error: LedgerError }[] = [];
 
   constructor(sessionId: string) {
@@ -149,10 +187,44 @@ export class Ledger {
     }
 
     switch (event.type) {
+      case 'execution.recorded': {
+        const { executionId, exitCode } = event.payload;
+        if (this.#executions.has(executionId)) {
+          throw new LedgerError(
+            'DUPLICATE_EXECUTION',
+            `execution ${executionId} is already recorded`,
+          );
+        }
+        this.#executions.set(executionId, exitCode);
+        return;
+      }
+
+      case 'derivation.recorded': {
+        const { derivationId } = event.payload;
+        if (this.#derivations.has(derivationId)) {
+          throw new LedgerError(
+            'DUPLICATE_DERIVATION',
+            `derivation ${derivationId} is already recorded`,
+          );
+        }
+        this.#derivations.add(derivationId);
+        return;
+      }
+
       case 'claim.recorded': {
         const p = event.payload;
         if (this.#claims.has(p.claimId)) {
           throw new LedgerError('DUPLICATE_CLAIM', `claim ${p.claimId} is already recorded`);
+        }
+        const support = p.support ?? [];
+        for (const evidence of support) this.#checkEvidence(evidence, p.claimId);
+        const required = REQUIRED_EVIDENCE_KIND[p.claimType];
+        const missing = MISSING_EVIDENCE[p.claimType];
+        if (required !== null && missing !== null && !support.some((e) => e.kind === required)) {
+          throw new LedgerError(
+            missing,
+            `a ${p.claimType} claim must point at a recorded ${required.toLowerCase()} when it is recorded`,
+          );
         }
         this.#claims.set(p.claimId, {
           claim: {
@@ -175,6 +247,7 @@ export class Ledger {
 
       case 'claim.evidence-attached': {
         const record = this.#open(event.payload.claimId);
+        this.#checkEvidence(event.payload.evidence, event.payload.claimId);
         record.claim = {
           ...record.claim,
           support: [...record.claim.support, event.payload.evidence],
@@ -190,6 +263,12 @@ export class Ledger {
           throw new LedgerError(
             'STATUS_NEEDS_DISPUTE',
             `a claim becomes ${status} only through a dispute, never by assertion`,
+          );
+        }
+        if (status === 'supported' && !canEstablishAlone(record.claim.claimType)) {
+          throw new LedgerError(
+            'CANNOT_ESTABLISH_ALONE',
+            `a ${record.claim.claimType} claim can support others but is never established by itself`,
           );
         }
         if (status === 'supported' && this.#openDisputes(claimId) > 0) {
@@ -230,6 +309,7 @@ export class Ledger {
         const p = event.payload;
         const dispute = this.#openDispute(p.disputeId);
         const positions = p.positions ?? [];
+        for (const evidence of p.evidence) this.#checkEvidence(evidence, dispute.claimId);
 
         if (p.outcome === 'UNRESOLVED') {
           // P6: an open question ships with both sides, or it is not one.
@@ -273,6 +353,69 @@ export class Ledger {
         return;
       }
     }
+  }
+
+  /**
+   * Evidence must point at something that exists, in this session, and still
+   * stands. `CITATION`, `ARTIFACT` and `ARGUMENT` refs have no record here to
+   * check against yet — retrieval records and artifact links arrive in later
+   * stages — so only their shape is checked, by the schema.
+   */
+  #checkEvidence(evidence: EvidenceRef, claimId: string): void {
+    switch (evidence.kind) {
+      case 'EXECUTION': {
+        const exitCode = this.#executions.get(evidence.ref);
+        if (exitCode === undefined) {
+          throw new LedgerError('UNKNOWN_EXECUTION', `no execution ${evidence.ref} was recorded`);
+        }
+        if (exitCode !== 0) {
+          throw new LedgerError(
+            'FAILED_EXECUTION',
+            `execution ${evidence.ref} exited with code ${String(exitCode)}; a failed run backs nothing`,
+          );
+        }
+        return;
+      }
+      case 'DERIVATION': {
+        if (!this.#derivations.has(evidence.ref)) {
+          throw new LedgerError('UNKNOWN_DERIVATION', `no derivation ${evidence.ref} was recorded`);
+        }
+        return;
+      }
+      case 'CLAIM': {
+        if (evidence.ref === claimId || this.#supportReaches(evidence.ref, claimId)) {
+          throw new LedgerError(
+            'CYCLIC_SUPPORT',
+            `claim ${claimId} would end up supporting itself`,
+          );
+        }
+        const record = this.#claims.get(evidence.ref);
+        if (!record) {
+          throw new LedgerError('UNKNOWN_SUPPORTING_CLAIM', `no claim ${evidence.ref} to rest on`);
+        }
+        const status = this.#statusOf(evidence.ref, record);
+        if (status === 'refuted' || status === 'withdrawn') {
+          throw new LedgerError(
+            'SUPPORT_NOT_STANDING',
+            `claim ${evidence.ref} is ${status} and cannot support anything`,
+          );
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /** Whether `target` is anywhere in `from`'s chain of supporting claims. */
+  #supportReaches(from: string, target: string, seen = new Set<string>()): boolean {
+    if (seen.has(from)) return false;
+    seen.add(from);
+    for (const evidence of this.#claims.get(from)?.claim.support ?? []) {
+      if (evidence.kind !== 'CLAIM') continue;
+      if (evidence.ref === target || this.#supportReaches(evidence.ref, target, seen)) return true;
+    }
+    return false;
   }
 
   #statusOf(claimId: string, record: ClaimRecord): ClaimStatus {

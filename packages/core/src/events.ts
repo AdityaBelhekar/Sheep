@@ -195,6 +195,23 @@ export const EVENT_PAYLOADS = {
     promptHash: sha256Schema.optional(),
   }),
 
+  /**
+   * A run the sandbox actually performed — what an `EMPIRICAL` claim must point
+   * at (P2). The minimum the ledger checks against; Phase 41 widens the record.
+   */
+  'execution.recorded': z.strictObject({
+    ...sessionScope,
+    executionId: idSchema,
+    codeHash: sha256Schema,
+    exitCode: z.number().int(),
+  }),
+  /** A derivation, by content address — what a `DERIVED` claim must point at. */
+  'derivation.recorded': z.strictObject({
+    ...sessionScope,
+    derivationId: idSchema,
+    bodyHash: sha256Schema,
+  }),
+
   'claim.recorded': z.strictObject({
     ...sessionScope,
     claimId: idSchema,

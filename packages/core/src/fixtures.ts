@@ -25,6 +25,8 @@ export const PARTICIPANT_B = '88888888-8888-4888-8888-888888888888';
 export const CONNECTION_ID = '99999999-9999-4999-8999-999999999999';
 export const CONNECTION_ID_B = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 export const OPTION_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+export const EXECUTION_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+export const DERIVATION_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
 export const ANTHROPIC_MODEL: ModelRef = {
   connectionId: CONNECTION_ID,
@@ -167,6 +169,18 @@ export const EVENT_FIXTURES: EventFixtures = {
     promptHash: PROMPT_HASH,
   },
 
+  'execution.recorded': {
+    sessionId: SESSION_ID,
+    executionId: EXECUTION_ID,
+    codeHash: PROMPT_HASH,
+    exitCode: 0,
+  },
+  'derivation.recorded': {
+    sessionId: SESSION_ID,
+    derivationId: DERIVATION_ID,
+    bodyHash: PROMPT_HASH,
+  },
+
   'claim.recorded': {
     sessionId: SESSION_ID,
     claimId: CLAIM_ID,
@@ -176,7 +190,7 @@ export const EVENT_FIXTURES: EventFixtures = {
     messageId: MESSAGE_ID,
     authorParticipantId: PARTICIPANT_A,
     confidence: 0.62,
-    support: [{ kind: 'EXECUTION', ref: 'exec-0001', note: 'run on held-out WikiText' }],
+    support: [{ kind: 'EXECUTION', ref: EXECUTION_ID, note: 'run on held-out WikiText' }],
   },
   'claim.evidence-attached': {
     sessionId: SESSION_ID,

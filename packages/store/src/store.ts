@@ -4,6 +4,7 @@ import { BlobStore, OBJECTS_DIRNAME } from './cas/blob-store';
 import { ConnectionRegistry } from './connections';
 import { CredentialRegistry } from './credentials';
 import { EventLog, type AppendEventInput, type EventRecord } from './events/log';
+import { enforceLedger } from './ledger';
 import type { Migration } from './migrations/definitions';
 import { runMigrations, type MigrationReport } from './migrations/runner';
 import { ProjectionRunner, type EnsureResult } from './projections/runner';
@@ -50,6 +51,9 @@ export interface SheepStore {
   /**
    * Appends events and folds them into the projections in one transaction, so
    * a reader can never see a log entry the derived tables do not reflect.
+   *
+   * Claim, dispute, execution and derivation events are checked against the
+   * session's ledger first (P2), and a batch with one violation writes nothing.
    */
   record(inputs: readonly AppendEventInput[]): EventRecord[];
   close(): void;
@@ -111,7 +115,9 @@ export function openSheepStore(options: SheepStoreOptions): SheepStore {
     schemaVersion: migrations.finalVersion,
     record(inputs) {
       return opened.db.transaction(() => {
-        const written = events.appendAll(inputs.map(withPayloadSessionId));
+        const prepared = inputs.map(withPayloadSessionId);
+        enforceLedger(events, prepared);
+        const written = events.appendAll(prepared);
         projections.catchUp();
         return written;
       });

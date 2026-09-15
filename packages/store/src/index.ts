@@ -84,6 +84,7 @@ export {
   type UpdateConnectionInput,
 } from './connections';
 export { SettingsStore } from './settings';
+export { enforceLedger, readLedger } from './ledger';
 export {
   PROJECTIONS,
   ProjectionRunner,

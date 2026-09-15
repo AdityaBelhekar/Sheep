@@ -35,6 +35,10 @@ export type ClaimStatus = z.infer<typeof claimStatusSchema>;
  * `ARGUMENT` exists to be visibly weak: it records that the only support
  * offered was prose, which is precisely the case P2 refuses to let pass as
  * empirical backing.
+ *
+ * `CLAIM` points at another claim in the same session. It is how claims form a
+ * graph, and it never counts as the backing a claim type requires: a claim
+ * resting on other claims still needs its own execution or derivation.
  */
 export const EVIDENCE_KINDS = [
   'EXECUTION',
@@ -42,6 +46,7 @@ export const EVIDENCE_KINDS = [
   'CITATION',
   'ARTIFACT',
   'ARGUMENT',
+  'CLAIM',
 ] as const;
 export const evidenceKindSchema = z.enum(EVIDENCE_KINDS);
 export type EvidenceKind = z.infer<typeof evidenceKindSchema>;

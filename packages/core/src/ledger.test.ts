@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { domainEvent, type DomainEvent, type DomainEventType, type EventPayload } from './events';
-import { CLAIM_ID, DISPUTE_ID, PARTICIPANT_A, PARTICIPANT_B, SESSION_ID } from './fixtures';
+import {
+  CLAIM_ID,
+  DERIVATION_ID,
+  DISPUTE_ID,
+  EXECUTION_ID,
+  PARTICIPANT_A,
+  PARTICIPANT_B,
+  SESSION_ID,
+} from './fixtures';
 import { Ledger, LedgerError, type LedgerErrorCode } from './ledger';
 
 const AT = '2026-09-15T10:00:00.000Z';
@@ -31,6 +39,30 @@ const openDispute = (disputeId = DISPUTE_ID, claimId = CLAIM_ID): DomainEvent =>
     argument: 'No dense baseline.',
     raisedByParticipantId: PARTICIPANT_B,
   });
+
+const executed = (exitCode = 0, executionId = EXECUTION_ID): DomainEvent =>
+  ev('execution.recorded', { sessionId: SESSION_ID, executionId, codeHash: HASH, exitCode });
+
+const derived = (): DomainEvent =>
+  ev('derivation.recorded', { sessionId: SESSION_ID, derivationId: DERIVATION_ID, bodyHash: HASH });
+
+type Support = EventPayload<'claim.recorded'>['support'];
+
+const claimOf = (
+  claimType: 'EMPIRICAL' | 'DERIVED' | 'CITED' | 'CONJECTURE',
+  support: Support = [],
+  claimId = CLAIM_ID,
+): DomainEvent =>
+  ev('claim.recorded', {
+    sessionId: SESSION_ID,
+    claimId,
+    claimType,
+    statement: 'Perplexity rises 0.3 nats at 128k context.',
+    support,
+  });
+
+const empiricalClaim = (claimId = CLAIM_ID): DomainEvent =>
+  claimOf('EMPIRICAL', [{ kind: 'EXECUTION', ref: EXECUTION_ID }], claimId);
 
 const status = (value: 'asserted' | 'supported' | 'withdrawn' | 'disputed'): DomainEvent =>
   ev('claim.status-changed', { sessionId: SESSION_ID, claimId: CLAIM_ID, status: value });
@@ -116,8 +148,10 @@ describe('disputes', () => {
     const ledger = ledgerOf(conjecture(), openDispute());
     expect(ledger.claim(CLAIM_ID).status).toBe('disputed');
     expect(ledger.disputesOf(CLAIM_ID)).toHaveLength(1);
-    rejects(ledger, status('supported'), 'OPEN_DISPUTES');
     rejects(ledger, openDispute(), 'DUPLICATE_DISPUTE');
+
+    const empirical = ledgerOf(executed(), empiricalClaim(), openDispute());
+    rejects(empirical, status('supported'), 'OPEN_DISPUTES');
   });
 
   it('refuses to settle a dispute on rationale alone', () => {
@@ -251,5 +285,126 @@ describe('replay', () => {
     ]);
     expect(ledger.claim(CLAIM_ID).status).toBe('disputed');
     expect(ledger.rejected.map((entry) => entry.error.code)).toEqual(['STATUS_NEEDS_DISPUTE']);
+  });
+});
+
+describe('claim type enforcement (P2)', () => {
+  it('refuses an EMPIRICAL claim with no execution behind it', () => {
+    rejects(ledgerOf(), claimOf('EMPIRICAL'), 'EMPIRICAL_WITHOUT_EXECUTION');
+    // Prose and citations are not an execution, however many there are.
+    rejects(
+      ledgerOf(),
+      claimOf('EMPIRICAL', [
+        { kind: 'ARGUMENT', ref: 'obviously true' },
+        { kind: 'CITATION', ref: 'arXiv:2401.00001' },
+      ]),
+      'EMPIRICAL_WITHOUT_EXECUTION',
+    );
+  });
+
+  it('refuses an EMPIRICAL claim pointing at a run that never happened, or failed', () => {
+    rejects(ledgerOf(), empiricalClaim(), 'UNKNOWN_EXECUTION');
+    rejects(ledgerOf(executed(1)), empiricalClaim(), 'FAILED_EXECUTION');
+  });
+
+  it('records an EMPIRICAL claim backed by a clean execution', () => {
+    expect(ledgerOf(executed(), empiricalClaim()).claim(CLAIM_ID).claimType).toBe('EMPIRICAL');
+  });
+
+  it('refuses a DERIVED claim without a recorded derivation', () => {
+    rejects(ledgerOf(), claimOf('DERIVED'), 'DERIVED_WITHOUT_DERIVATION');
+    rejects(
+      ledgerOf(),
+      claimOf('DERIVED', [{ kind: 'DERIVATION', ref: DERIVATION_ID }]),
+      'UNKNOWN_DERIVATION',
+    );
+    const ledger = ledgerOf(
+      derived(),
+      claimOf('DERIVED', [{ kind: 'DERIVATION', ref: DERIVATION_ID }]),
+    );
+    expect(ledger.claim(CLAIM_ID).status).toBe('asserted');
+  });
+
+  it('refuses a CITED claim with no citation', () => {
+    rejects(ledgerOf(), claimOf('CITED'), 'CITED_WITHOUT_CITATION');
+  });
+
+  it('lets CITED and CONJECTURE claims support, but never be established alone', () => {
+    const cited = ledgerOf(claimOf('CITED', [{ kind: 'CITATION', ref: 'doi:10.1000/x' }]));
+    rejects(cited, status('supported'), 'CANNOT_ESTABLISH_ALONE');
+    rejects(ledgerOf(conjecture()), status('supported'), 'CANNOT_ESTABLISH_ALONE');
+
+    const established = ledgerOf(executed(), empiricalClaim());
+    established.apply(status('supported'), LATER);
+    expect(established.claim(CLAIM_ID).status).toBe('supported');
+  });
+
+  it('refuses to establish a conclusion on citations alone, however they are chained', () => {
+    const CITED_ID = DISPUTE_2;
+    const ledger = ledgerOf(
+      claimOf('CITED', [{ kind: 'CITATION', ref: 'doi:10.1000/x' }], CITED_ID),
+    );
+    rejects(
+      ledger,
+      claimOf('EMPIRICAL', [{ kind: 'CLAIM', ref: CITED_ID }]),
+      'EMPIRICAL_WITHOUT_EXECUTION',
+    );
+  });
+
+  it('checks evidence attached later exactly as strictly', () => {
+    const ledger = ledgerOf(conjecture());
+    rejects(
+      ledger,
+      ev('claim.evidence-attached', {
+        sessionId: SESSION_ID,
+        claimId: CLAIM_ID,
+        evidence: { kind: 'EXECUTION', ref: EXECUTION_ID },
+      }),
+      'UNKNOWN_EXECUTION',
+    );
+  });
+
+  it('keeps claim support acyclic and resting only on claims that still stand', () => {
+    const B = DISPUTE_2;
+    const ledger = ledgerOf(
+      conjecture(),
+      claimOf('CONJECTURE', [{ kind: 'CLAIM', ref: CLAIM_ID }], B),
+    );
+    const attach = (claimId: string, ref: string): DomainEvent =>
+      ev('claim.evidence-attached', {
+        sessionId: SESSION_ID,
+        claimId,
+        evidence: { kind: 'CLAIM', ref },
+      });
+
+    rejects(ledger, attach(CLAIM_ID, CLAIM_ID), 'CYCLIC_SUPPORT');
+    rejects(ledger, attach(CLAIM_ID, B), 'CYCLIC_SUPPORT');
+    rejects(ledger, attach(B, OTHER_SESSION), 'UNKNOWN_SUPPORTING_CLAIM');
+
+    ledger.apply(status('withdrawn'), LATER);
+    rejects(
+      ledger,
+      claimOf('CONJECTURE', [{ kind: 'CLAIM', ref: CLAIM_ID }], OTHER_SESSION),
+      'SUPPORT_NOT_STANDING',
+    );
+  });
+
+  it('checks the evidence a resolution cites', () => {
+    rejects(
+      ledgerOf(conjecture(), openDispute()),
+      ev('dispute.resolved', {
+        sessionId: SESSION_ID,
+        disputeId: DISPUTE_ID,
+        outcome: 'OVERTURNED',
+        rationale: 'The run says otherwise.',
+        evidence: [{ kind: 'EXECUTION', ref: EXECUTION_ID }],
+      }),
+      'UNKNOWN_EXECUTION',
+    );
+  });
+
+  it('refuses to record the same execution or derivation twice', () => {
+    rejects(ledgerOf(executed()), executed(), 'DUPLICATE_EXECUTION');
+    rejects(ledgerOf(derived()), derived(), 'DUPLICATE_DERIVATION');
   });
 });

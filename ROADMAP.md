@@ -184,7 +184,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 
 - [x] **30. Ledger schema & rules** — claims, evidence, disputes, resolutions as pure tested logic in `packages/core`.
   → `feat(core): claim ledger schema and rules`
-- [ ] **31. Ledger enforcement** — `EMPIRICAL` requires a valid `execution_id`; `DERIVED` requires a derivation record; `CITED` can support but never alone establish. **(P2)**
+- [x] **31. Ledger enforcement** — `EMPIRICAL` requires a valid `execution_id`; `DERIVED` requires a derivation record; `CITED` can support but never alone establish. **(P2)**
   *Done when:* each violation is rejected with a specific error, proven by tests. → `feat(core): claim type enforcement`
 - [ ] **32. Position locking** — pre-reveal `{stance, confidence}` commitments, hashed and stored; movement diffing.
   → `feat(orchestrator): position commitment and movement tracking`
