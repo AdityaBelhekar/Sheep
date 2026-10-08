@@ -149,6 +149,21 @@ export {
 } from './dispute';
 
 export {
+  SYMBOL_ASSUMPTIONS,
+  VERIFICATION_STATUSES,
+  derivationSchema,
+  derivationStepSchema,
+  derivationVerdictSchema,
+  stepVerdictSchema,
+  verificationStatusSchema,
+  type Derivation,
+  type DerivationStep,
+  type DerivationVerdict,
+  type StepVerdict,
+  type VerificationStatus,
+} from './derivation';
+
+export {
   EXECUTION_STATUSES,
   executionArtifactSchema,
   executionFields,

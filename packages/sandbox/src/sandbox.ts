@@ -4,7 +4,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { basename, join, relative, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
@@ -99,6 +99,11 @@ const RUNNER_GRACE_MS = 5_000;
 
 export interface RunRequest {
   readonly code: string;
+  /**
+   * Input files, written beside the script before it starts. Names only, no
+   * directories. They are the caller's, so they are not reported as artifacts.
+   */
+  readonly files?: Readonly<Record<string, string>>;
   /** Names the run; generated when absent. */
   readonly executionId?: string;
   readonly limits?: Partial<SandboxLimits>;
@@ -222,6 +227,13 @@ export class Sandbox {
     mkdirSync(workDir, { recursive: true });
     mkdirSync(tempDir);
     writeFileSync(join(workDir, ENTRY), request.code);
+    const inputs = Object.entries(request.files ?? {});
+    for (const [name, content] of inputs) {
+      if (name !== basename(name) || name === ENTRY) {
+        throw new SandboxLimitError(`not a usable input file name: ${name}`);
+      }
+      writeFileSync(join(workDir, name), content);
+    }
 
     const guardConfig = {
       entry: ENTRY,
@@ -254,7 +266,7 @@ export class Sandbox {
     return {
       executionId,
       ...outcome,
-      artifacts: await collectArtifacts(workDir),
+      artifacts: await collectArtifacts(workDir, new Set([ENTRY, ...inputs.map(([name]) => name)])),
       codeHash: createHash('sha256').update(request.code).digest('hex'),
       seed,
       envLockHash: this.runtime.lockHash,
@@ -446,13 +458,16 @@ async function labelLowIntegrity(directory: string): Promise<void> {
  * ponytail: no cap on count or bytes — a script can fill the disk up to the
  * wall clock. Add a quota if a run ever does.
  */
-async function collectArtifacts(workDir: string): Promise<RunArtifact[]> {
+async function collectArtifacts(
+  workDir: string,
+  supplied: ReadonlySet<string>,
+): Promise<RunArtifact[]> {
   const artifacts: RunArtifact[] = [];
   for (const entry of readdirSync(workDir, { recursive: true, withFileTypes: true })) {
     if (!entry.isFile()) continue;
     const absolute = join(entry.parentPath, entry.name);
     const path = relative(workDir, absolute).split(sep).join('/');
-    if (path === ENTRY) continue;
+    if (supplied.has(path)) continue;
 
     const hash = createHash('sha256');
     await pipeline(createReadStream(absolute), hash);

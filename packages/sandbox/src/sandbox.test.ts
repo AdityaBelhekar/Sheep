@@ -90,6 +90,19 @@ describe('runner protocol', () => {
     expect(readFileSync(join(result.workDir, 'out/data.txt'), 'utf8')).toBe('abc');
   });
 
+  it('gives the script its input files, and does not call them artifacts', async () => {
+    const result = await sandbox.run({
+      code: 'print(open("input.json").read())\nopen("out.txt", "w").write("x")',
+      files: { 'input.json': '{"n": 3}' },
+    });
+
+    expect(result.stdout).toBe('{"n": 3}\n');
+    expect(result.artifacts.map((artifact) => artifact.path)).toEqual(['out.txt']);
+    await expect(sandbox.run({ code: '', files: { '../up.txt': '' } })).rejects.toThrow(
+      /input file name/,
+    );
+  });
+
   it('caps relayed output and says so', async () => {
     const result = await sandbox.run({ code: 'print("x" * (5 * 1024 * 1024))\nprint("end")' });
 

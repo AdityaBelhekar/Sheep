@@ -11,5 +11,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@sheep/core": "*",
+    "@sheep/sandbox": "*"
   }
 }
