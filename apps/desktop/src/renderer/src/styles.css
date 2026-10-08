@@ -1242,3 +1242,156 @@ select.field__input {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ── Lab ──────────────────────────────────────────────────────────────── */
+
+.lab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.lab__compose,
+.lab__result,
+.lab__history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.lab__history {
+  grid-column: 1 / -1;
+}
+
+.lab__editor {
+  height: 26rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  /* Monaco measures text itself; selection has to be allowed for it to work. */
+  user-select: text;
+}
+
+.lab__controls,
+.lab__run-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+
+.lab__controls .field--inline {
+  width: auto;
+}
+
+.lab__spacer {
+  flex: 1;
+}
+
+.lab__runtime,
+.lab__muted {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+}
+
+.lab__run {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.lab__output {
+  margin: 0;
+  max-height: 20rem;
+  overflow: auto;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.lab__output [data-stream='stderr'] {
+  color: var(--error);
+}
+
+.lab__artifacts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lab__artifact {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lab__artifact figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+
+.lab__plot {
+  max-width: 100%;
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  /* Figures are drawn for paper; keep them on white in the dark theme too. */
+  background: #fff;
+}
+
+.lab__runs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.lab__run-row {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lab__run-row[aria-current='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+@media (max-width: 70rem) {
+  .lab {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.lab__controls .field__input--narrow {
+  width: 6.5rem;
+}

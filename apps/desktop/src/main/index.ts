@@ -7,6 +7,7 @@ import { cancelAllChats } from './chat';
 import { syncConnections } from './connections';
 import { openVault, runCredentialSelfTest } from './credentials';
 import { bindIpcRegistry, createIpcRegistry } from './ipc';
+import { cancelAllLabRuns } from './lab';
 import { logError, logInfo } from './log';
 import { startOrchestrator, stopOrchestrator } from './orchestrator';
 import { applyRendererSecurityPolicy } from './security';
@@ -44,6 +45,7 @@ if (isSmokeRun) {
     'renderer-connections',
     'renderer-roster',
     'renderer-chat',
+    'renderer-lab',
     'orchestrator-ready',
     'orchestrator-protocol',
     'stream-cancel',
@@ -135,6 +137,7 @@ if (!hasInstanceLock) {
     // closed database would fail at the one moment its partial answer is the
     // only copy that exists.
     cancelAllChats();
+    cancelAllLabRuns();
     stopOrchestrator();
     closeStore();
     if (smokeDataDir) {

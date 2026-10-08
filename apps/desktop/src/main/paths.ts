@@ -14,6 +14,18 @@ export function resourcePath(...segments: string[]): string {
     : join(import.meta.dirname, '../../resources', ...segments);
 }
 
+/**
+ * The bundled Python runtime.
+ *
+ * A packaged build carries it under resources; a checkout runs the one
+ * `npm run fetch-runtime` installed in the sandbox package.
+ */
+export function runtimePath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'python')
+    : join(import.meta.dirname, '../../../../packages/sandbox/runtime');
+}
+
 /** Absolute path to a file emitted next to the main bundle in `out/`. */
 export function bundlePath(...segments: string[]): string {
   return join(import.meta.dirname, '..', ...segments);

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  executionRecordSchema,
   idSchema,
   messageFinishReasonSchema,
   modelIdSchema,
@@ -95,10 +96,42 @@ export const protocolEventSchema = z.strictObject({
 });
 export type ProtocolEvent = z.infer<typeof protocolEventSchema>;
 
+/**
+ * A sandbox run, as it happens.
+ *
+ * `output` is what the script printed, coalesced to a frame like chat text.
+ * `end` carries the execution exactly as it was recorded — by the time it
+ * arrives the run is in the log and its artifacts are in the store, so what the
+ * Lab shows is the record and not a preview of one. `error` means there is no
+ * record: the run could not be started or could not be written down.
+ */
+export const labEventSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    ...runScope,
+    kind: z.literal('output'),
+    stream: z.enum(['stdout', 'stderr']),
+    data: z.string(),
+  }),
+  z.strictObject({
+    ...runScope,
+    kind: z.literal('end'),
+    execution: executionRecordSchema,
+    /** Why, when the status alone does not say — a runner that crashed, for one. */
+    detail: z.string().nullable(),
+  }),
+  z.strictObject({
+    ...runScope,
+    kind: z.literal('error'),
+    message: z.string().min(1).max(4_000),
+  }),
+]);
+export type LabEvent = z.infer<typeof labEventSchema>;
+
 /** Every event channel's payload schema. */
 export const IPC_EVENT_CONTRACTS = {
   'sheep:stream-event': streamEventSchema,
   'sheep:protocol-event': protocolEventSchema,
+  'sheep:lab-event': labEventSchema,
 } as const satisfies Record<IpcEventChannel, z.ZodType>;
 
 export type IpcEventContracts = typeof IPC_EVENT_CONTRACTS;

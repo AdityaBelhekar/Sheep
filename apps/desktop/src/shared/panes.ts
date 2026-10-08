@@ -53,7 +53,7 @@ export const RESEARCH_PANES = [
     summary: 'Code, runs and artifacts from the sandboxed Python runtime.',
     detail:
       'Bundled CPython under a Windows Job Object: capped memory, capped CPU, wall-clock timeout, no network. Results are hashed artifacts rather than model assertions.',
-    arriving: 'Phases 36 to 42',
+    arriving: 'Runs driven by the protocol arrive with EXECUTION, Stage 8',
   },
   {
     id: 'verification',

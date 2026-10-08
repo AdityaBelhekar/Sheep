@@ -641,6 +641,128 @@ const LEDGER_RESTORE_EXPRESSION = `(async () => {
   return true;
 })()`;
 
+/**
+ * The Lab, end to end, through the same channels the pane uses.
+ *
+ * One script runs clean and leaves a figure; an EMPIRICAL claim then rests on
+ * it. A second reaches for the network: it is refused inside the sandbox,
+ * recorded as failed, and refused again by the ledger as backing. Then the
+ * pane itself is opened — editor, history, the recorded output, the figure.
+ *
+ * The scripts avoid matplotlib on purpose: its first import builds a font
+ * cache, and this check starts from an empty data directory every time.
+ */
+const LAB_EXPRESSION = `(async () => {
+  const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const status = await window.sheep.invoke('sheep:lab-status', {});
+  if (!status.available) return { error: 'sandbox unavailable: ' + status.detail };
+
+  const created = await window.sheep.invoke('sheep:session-create', {
+    title: 'Lab smoke ' + Date.now(),
+    question: 'Does a result reach the ledger as a hashed artifact?',
+  });
+  const sessionId = created.sessionId;
+
+  const ended = new Map();
+  const output = new Map();
+  const stop = window.sheep.subscribe('sheep:lab-event', (event) => {
+    if (event.kind === 'output') {
+      output.set(event.runId, (output.get(event.runId) ?? '') + event.data);
+    } else {
+      ended.set(event.runId, event);
+    }
+  });
+  const run = async (lines) => {
+    const { runId } = await window.sheep.invoke('sheep:lab-run', {
+      sessionId,
+      code: lines.join('\\n'),
+      seed: 7,
+    });
+    for (let i = 0; i < 300 && !ended.has(runId); i += 1) await settle(50);
+    return { runId, end: ended.get(runId) ?? null, output: output.get(runId) ?? '' };
+  };
+  const claim = async (runId) => {
+    try {
+      await window.sheep.invoke('sheep:claim-record', {
+        sessionId,
+        claimType: 'EMPIRICAL',
+        statement: 'The mean of 0..4 is 2.',
+        support: [{ kind: 'EXECUTION', ref: runId }],
+      });
+      return 'accepted';
+    } catch (error) {
+      return String(error && error.message ? error.message : error);
+    }
+  };
+
+  try {
+    const clean = await run([
+      'import numpy as np',
+      'print("mean", float(np.arange(5).mean()), np.random.default_rng().integers(1000))',
+      'svg = \\'<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="teal"/></svg>\\'',
+      'open("chart.svg", "w").write(svg)',
+    ]);
+    const again = await run([
+      'import numpy as np',
+      'print("mean", float(np.arange(5).mean()), np.random.default_rng().integers(1000))',
+    ]);
+    const escape = await run([
+      'import socket',
+      'socket.create_connection(("1.1.1.1", 80), timeout=5)',
+      'print("ESCAPED")',
+    ]);
+    const backed = await claim(clean.runId);
+    const unbacked = await claim(escape.runId);
+    const listed = await window.sheep.invoke('sheep:executions-list', { sessionId });
+
+    const previous = (await window.sheep.invoke('sheep:settings-read', {})).settings['ui.lastSessionId'];
+    window.__sheepLedgerPrevious = previous;
+    await window.sheep.invoke('sheep:settings-write', { key: 'ui.lastSessionId', value: sessionId });
+    window.location.hash = '#/lab';
+
+    let pane = null;
+    for (let i = 0; i < 200; i += 1) {
+      await settle(50);
+      pane = document.querySelector('[data-pane="lab"][data-sheep-runs="3"]');
+      if (pane && pane.querySelector('[data-sheep-editor="ready"] .monaco-editor')) break;
+    }
+    const editor = Boolean(pane && pane.querySelector('[data-sheep-editor="ready"] .monaco-editor'));
+    const row = pane ? pane.querySelector('[data-sheep-run="' + clean.runId + '"]') : null;
+    if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    let shown = '';
+    let plot = null;
+    for (let i = 0; i < 100; i += 1) {
+      await settle(50);
+      shown = pane?.querySelector('[data-sheep-lab-output]')?.textContent ?? '';
+      plot = pane?.querySelector('img[data-sheep-plot]') ?? null;
+      if (shown.includes('mean') && plot && plot.complete && plot.naturalWidth > 0) break;
+    }
+
+    return {
+      python: status.python,
+      cleanStatus: clean.end && clean.end.kind === 'end' ? clean.end.execution.status : (clean.end ? clean.end.message : 'no end'),
+      streamed: clean.output,
+      repeated: again.output === clean.output && clean.output !== '',
+      artifacts: clean.end && clean.end.kind === 'end' ? clean.end.execution.artifacts.map((a) => a.path) : [],
+      escapeStatus: escape.end && escape.end.kind === 'end' ? escape.end.execution.status : 'no end',
+      escapeContained: escape.output.includes('network access is not allowed') && !escape.output.includes('ESCAPED'),
+      backed,
+      unbacked,
+      listed: listed.executions.length,
+      backing: listed.backing.length === 1 && listed.backing[0].executionId === clean.runId,
+      runs: pane ? pane.getAttribute('data-sheep-runs') : null,
+      editor,
+      shown,
+      plotWidth: plot ? plot.naturalWidth : 0,
+    };
+  } catch (error) {
+    return { error: String(error && error.message ? error.message : error) };
+  } finally {
+    stop();
+  }
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -709,6 +831,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
   await checkNavigation(window);
   await checkProjection(window);
   await checkLedger(window);
+  await checkLab(window);
   await checkConnections(window);
   await checkLocalModel(window);
   await checkTheme(window);
@@ -794,6 +917,67 @@ async function checkLedger(window: BrowserWindow): Promise<void> {
     } · graph ${String(result.nodes)} nodes, ${String(result.selected)} selected · drawer ancestry ${
       result.drawerAncestry ?? 'none'
     }`,
+  );
+}
+
+async function checkLab(window: BrowserWindow): Promise<void> {
+  const result = (await evaluate(window, LAB_EXPRESSION)) as
+    | {
+        python: string | null;
+        cleanStatus: string;
+        streamed: string;
+        repeated: boolean;
+        artifacts: string[];
+        escapeStatus: string;
+        escapeContained: boolean;
+        backed: string;
+        unbacked: string;
+        listed: number;
+        backing: boolean;
+        runs: string | null;
+        editor: boolean;
+        shown: string;
+        plotWidth: number;
+      }
+    | { error: string }
+    | undefined;
+  await delay(250);
+  await captureScreenshot(window, 'lab');
+  await evaluate(window, LEDGER_RESTORE_EXPRESSION);
+
+  if (!result || 'error' in result) {
+    recordSmokeCheck('renderer-lab', false, result?.error ?? 'no result');
+    return;
+  }
+
+  const ok =
+    result.cleanStatus === 'ok' &&
+    result.streamed.startsWith('mean 2.0') &&
+    result.repeated &&
+    result.artifacts.join() === 'chart.svg' &&
+    result.escapeStatus === 'error' &&
+    result.escapeContained &&
+    result.backed === 'accepted' &&
+    result.unbacked.includes('LEDGER_FAILED_EXECUTION') &&
+    result.listed === 3 &&
+    result.backing &&
+    result.runs === '3' &&
+    result.editor &&
+    result.shown.includes('mean 2.0') &&
+    result.plotWidth === 40;
+
+  recordSmokeCheck(
+    'renderer-lab',
+    ok,
+    `python ${result.python ?? '?'} · run=${result.cleanStatus} · streamed=${JSON.stringify(
+      result.streamed.trim(),
+    )} · same seed same output=${String(result.repeated)} · artifacts=${result.artifacts.join()} · network attempt=${
+      result.escapeStatus
+    } contained=${String(result.escapeContained)} · claim on clean run=${result.backed} · on failed run → ${
+      result.unbacked.match(/LEDGER_[A-Z_]+/)?.[0] ?? result.unbacked
+    } · pane runs=${result.runs ?? 'none'} · monaco=${String(result.editor)} · plot ${String(
+      result.plotWidth,
+    )}px`,
   );
 }
 

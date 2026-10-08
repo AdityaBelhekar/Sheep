@@ -32,6 +32,7 @@ import {
   updateConnection,
 } from './connections';
 import { cancelChat, sendChat } from './chat';
+import { cancelLabRun, labStatus, readExecutionBlob, readExecutions, startLabRun } from './lab';
 import { approveGate, cancelSession, protocolView, runSession } from './orchestrator';
 import { getVault } from './credentials';
 import { logError } from './log';
@@ -280,6 +281,13 @@ export function createIpcRegistry(): IpcRegistry {
       const window = windowFor(context.senderId);
       return await sendChat(window, request);
     })
+    .register('sheep:lab-status', () => labStatus())
+    .register('sheep:lab-run', (request, context) =>
+      startLabRun(windowFor(context.senderId), request),
+    )
+    .register('sheep:lab-cancel', (request) => ({ cancelled: cancelLabRun(request.runId) }))
+    .register('sheep:executions-list', (request) => readExecutions(request.sessionId))
+    .register('sheep:execution-blob', (request) => readExecutionBlob(request))
     .register('sheep:chat-cancel', (request) => ({ cancelled: cancelChat(request.runId) }))
     .register('sheep:connections-list', () => readConnections())
     .register('sheep:connection-create', async (request) => {

@@ -4,6 +4,8 @@ import {
   claimTypeSchema,
   disputeSchema,
   evidenceRefSchema,
+  executionLimitsSchema,
+  executionRecordSchema,
   positionSchema,
   resolutionSchema,
   timestampSchema,
@@ -27,6 +29,7 @@ import {
   participantRoleSchema,
   proseSchema,
   rosterEntrySchema,
+  sha256Schema,
   sessionSummarySchema,
   settingUpdateSchema,
   settingsSchema,
@@ -427,6 +430,69 @@ export const IPC_CONTRACTS = {
       ancestry: z.array(z.object({ claim: claimSchema, depth: z.number().int().positive() })),
       disputes: z.array(disputeSchema),
       resolutions: z.array(resolutionSchema),
+    }),
+  },
+  /**
+   * The Lab.
+   *
+   * Whether the sandbox can run at all, and on what. `available: false` is an
+   * answer, not an error: a checkout that has not fetched the runtime should
+   * open a Lab that says so and how to fix it.
+   */
+  'sheep:lab-status': {
+    request: z.object({}),
+    response: z.object({
+      available: z.boolean(),
+      detail: z.string(),
+      python: z.string().nullable(),
+      /** Identifies interpreter + wheels; recorded with every run. */
+      lockHash: sha256Schema.nullable(),
+      packages: z.array(z.object({ name: z.string(), version: z.string() })),
+      defaults: executionLimitsSchema,
+    }),
+  },
+  /**
+   * Start a run.
+   *
+   * Like a chat turn, this returns as soon as the run is accepted; output and
+   * the recorded execution arrive on `sheep:lab-event` under the `runId`
+   * returned here, which is also the execution's id.
+   */
+  'sheep:lab-run': {
+    request: z.object({
+      sessionId: idSchema,
+      code: z.string().max(200_000),
+      seed: z.number().int().min(0).max(0xffff_ffff).optional(),
+      limits: executionLimitsSchema.partial().optional(),
+    }),
+    response: z.object({ runId: idSchema }),
+  },
+  'sheep:lab-cancel': {
+    request: z.object({ runId: idSchema }),
+    /** False when the run had already finished — not an error, just late. */
+    response: z.object({ cancelled: z.boolean() }),
+  },
+  /** A session's runs, newest first, and which claims each one backs. */
+  'sheep:executions-list': {
+    request: z.object({ sessionId: idSchema }),
+    response: z.object({
+      executions: z.array(executionRecordSchema),
+      backing: z.array(z.object({ executionId: idSchema, claimIds: z.array(idSchema) })),
+    }),
+  },
+  /**
+   * One blob an execution holds: its code, a stream, or an artifact.
+   *
+   * Addressed through the execution rather than by hash alone, so the renderer
+   * can read what a run produced and nothing else in the store.
+   */
+  'sheep:execution-blob': {
+    request: z.object({ executionId: idSchema, hash: sha256Schema }),
+    response: z.object({
+      base64: z.string(),
+      bytes: z.number().int().nonnegative(),
+      /** True when the blob is larger than what was sent. */
+      truncated: z.boolean(),
     }),
   },
   'sheep:chat-send': {

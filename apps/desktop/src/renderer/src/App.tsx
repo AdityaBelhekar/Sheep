@@ -15,6 +15,7 @@ import {
 } from '@shared/panes';
 import { ConnectionsPane } from './panes/ConnectionsPane';
 import { ConversationPane } from './panes/ConversationPane';
+import { LabPane } from './panes/LabPane';
 import { LedgerPane } from './panes/LedgerPane';
 import { SessionsPane } from './panes/SessionsPane';
 import { StubPane } from './panes/StubPane';
@@ -122,10 +123,12 @@ export function App(): ReactElement {
             <ConversationPane client={client} onStoreChanged={refreshLog} />
           )}
           {paneId === 'ledger' && <LedgerPane client={client} onStoreChanged={refreshLog} />}
+          {paneId === 'lab' && <LabPane client={client} onStoreChanged={refreshLog} />}
           {paneId === 'connections' && <ConnectionsPane client={client} />}
           {paneId !== 'sessions' &&
             paneId !== 'conversation' &&
             paneId !== 'ledger' &&
+            paneId !== 'lab' &&
             paneId !== 'connections' && <StubPane paneId={paneId} />}
         </main>
       </div>
