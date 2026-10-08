@@ -1,7 +1,8 @@
 """Sheep sandbox runner.
 
 Speaks JSON-RPC 2.0 over stdio, one message per line. It reads a single `run`
-request, confines itself to a Job Object, starts the script as a child process,
+request, confines itself to a Job Object — memory, CPU, process count and
+outbound network — starts the script as a child process,
 relays what the child prints as `output` notifications while it is printing,
 and answers with a result envelope once the child has exited or run out of
 time.
@@ -108,6 +109,13 @@ class Job:
         class CpuRate(ctypes.Structure):
             _fields_ = [("ControlFlags", wintypes.DWORD), ("CpuRate", wintypes.DWORD)]
 
+        class NetRate(ctypes.Structure):
+            _fields_ = [
+                ("MaxBandwidth", ctypes.c_ulonglong),
+                ("ControlFlags", wintypes.DWORD),
+                ("DscpTag", ctypes.c_ubyte),
+            ]
+
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel32.CreateJobObjectW.restype = wintypes.HANDLE
         kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
@@ -147,6 +155,18 @@ class Job:
                 self._handle, 15, ctypes.byref(rate), ctypes.sizeof(rate)
             ),
             "SetInformationJobObject(cpu rate)",
+        )
+
+        # ENABLE | MAX_BANDWIDTH, at one byte per second. The kernel paces every
+        # packet the job sends off the machine, so at this rate nothing gets
+        # out — whatever made the socket, Python or native code. Loopback never
+        # reaches the pacer and is unaffected.
+        net = NetRate(1, 0x1 | 0x2, 0)
+        check(
+            kernel32.SetInformationJobObject(
+                self._handle, 32, ctypes.byref(net), ctypes.sizeof(net)
+            ),
+            "SetInformationJobObject(net rate)",
         )
 
         check(

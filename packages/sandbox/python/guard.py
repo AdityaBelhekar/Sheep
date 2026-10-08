@@ -9,8 +9,8 @@ This is defence in depth against a script that misbehaves — a runaway loop, a
 stray write, a library that phones home — not a boundary against code written
 to escape. Python can load native code, and native code answers to the
 operating system, not to an audit hook. The layers below that hold regardless
-are the Job Object the runner put this process in and the low integrity level
-set here.
+are the Job Object the runner put this process in — which also paces outbound
+network traffic down to nothing — and the low integrity level set here.
 """
 
 import json
@@ -154,6 +154,65 @@ def install_jail(config):
     sys.addaudithook(hook)
 
 
+def install_network_denial():
+    """Refuses any socket operation that would leave the machine.
+
+    Loopback stays open: a script may talk to itself. Name lookups are refused
+    too — a DNS query is network traffic, and carries whatever is in the name.
+    """
+    import ipaddress
+
+    def is_loopback(host):
+        if isinstance(host, bytes):
+            host = host.decode("ascii", "replace")
+        if not isinstance(host, str):
+            return False
+        if host == "localhost":
+            return True
+        try:
+            return ipaddress.ip_address(host.partition("%")[0]).is_loopback
+        except ValueError:
+            return False
+
+    def refuse(target):
+        raise PermissionError(f"sandbox: network access is not allowed: {target!r}")
+
+    def address(args):
+        target = args[1]
+        if target is None:  # sendmsg on a socket that is already connected
+            return
+        if not (isinstance(target, tuple) and target and is_loopback(target[0])):
+            refuse(target)
+
+    def lookup(args):
+        # getaddrinfo(None, port) asks for a local address and sends nothing.
+        if args[0] is not None and not is_loopback(args[0]):
+            refuse(args[0])
+
+    def reverse_lookup(args):
+        target = args[0]
+        if not is_loopback(target[0] if isinstance(target, tuple) else target):
+            refuse(target)
+
+    handlers = {
+        "socket.connect": address,
+        "socket.bind": address,
+        "socket.sendto": address,
+        "socket.sendmsg": address,
+        "socket.getaddrinfo": lookup,
+        "socket.gethostbyname": lookup,
+        "socket.gethostbyaddr": reverse_lookup,
+        "socket.getnameinfo": reverse_lookup,
+    }
+
+    def hook(event, args):
+        handler = handlers.get(event)
+        if handler is not None:
+            handler(args)
+
+    sys.addaudithook(hook)
+
+
 def execute(entry):
     sys.argv = [entry]
     scope = {"__name__": "__main__", "__file__": entry, "__builtins__": __builtins__}
@@ -183,6 +242,7 @@ def main():
     if sys.platform == "win32":
         lower_integrity()
     install_jail(config)
+    install_network_denial()
     execute(config["entry"])
 
 

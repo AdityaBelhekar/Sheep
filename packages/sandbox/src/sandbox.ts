@@ -28,8 +28,12 @@ import type { PythonRuntime } from './runtime';
  *   the thing that hung;
  * - a **low integrity level**, so the OS itself refuses writes outside the
  *   jail directory;
- * - an **audit hook** that refuses reads outside the jail and the runtime, and
- *   refuses to start processes.
+ * - an **audit hook** that refuses reads outside the jail and the runtime,
+ *   refuses to start processes, and refuses any socket that is not loopback;
+ * - a **bandwidth cap** on the job of one byte a second, so traffic that got
+ *   past the hook still does not leave the machine;
+ * - an **environment built from nothing**, with no proxy to reach and none of
+ *   the parent's secrets to send.
  *
  * It contains runaway code. It is not a boundary against code written to
  * escape — see guard.py.
@@ -142,6 +146,8 @@ export class SandboxLimitError extends Error {
 
 const ENTRY = 'main.py';
 
+const SYSTEM_ROOT = process.env['SystemRoot'] ?? 'C:\\Windows';
+
 interface RunnerReply {
   readonly exitCode: number;
   readonly timedOut: boolean;
@@ -210,7 +216,7 @@ export class Sandbox {
       entry: ENTRY,
       write: [runDir, this.#cache],
       // Fonts, because matplotlib enumerates them; nothing else of the machine's.
-      read: [this.runtime.dir, join(process.env['SystemRoot'] ?? 'C:\\Windows', 'Fonts')],
+      read: [this.runtime.dir, join(SYSTEM_ROOT, 'Fonts')],
     };
 
     const outcome = await this.#drive(request, limits, {
@@ -220,10 +226,8 @@ export class Sandbox {
       args: ['-X', 'utf8', '-s', '-P', '-B', this.#guard, JSON.stringify(guardConfig)],
       workDir,
       env: {
-        ...process.env,
+        ...scrubbedEnv(tempDir),
         ...SINGLE_THREADED,
-        TEMP: tempDir,
-        TMP: tempDir,
         MPLCONFIGDIR: join(this.#cache, 'mpl'),
       },
       limits: {
@@ -342,6 +346,30 @@ export class Sandbox {
   }
 }
 
+/**
+ * The script's environment, built from nothing.
+ *
+ * Not the parent's with a few names removed: a denylist is only as good as
+ * the list, and the parent's environment is where API keys and proxy settings
+ * live. A script sees what Windows needs in order to run a process, a home and
+ * temp directory inside the jail, and no proxy to route anything through.
+ */
+function scrubbedEnv(home: string): Record<string, string> {
+  return {
+    SystemRoot: SYSTEM_ROOT,
+    windir: SYSTEM_ROOT,
+    PATH: join(SYSTEM_ROOT, 'System32'),
+    PROCESSOR_ARCHITECTURE: process.env['PROCESSOR_ARCHITECTURE'] ?? 'AMD64',
+    TEMP: home,
+    TMP: home,
+    USERPROFILE: home,
+    HOME: home,
+    APPDATA: home,
+    LOCALAPPDATA: home,
+    NO_PROXY: '*',
+  };
+}
+
 function resolveLimits(requested: Partial<SandboxLimits> = {}): SandboxLimits {
   const limits = { ...DEFAULT_LIMITS, ...requested };
   const within = (name: keyof SandboxLimits, min: number, max: number): void => {
@@ -366,7 +394,7 @@ function resolveLimits(requested: Partial<SandboxLimits> = {}): SandboxLimits {
 async function labelLowIntegrity(directory: string): Promise<void> {
   // ponytail: Windows only, like the Job Object; POSIX confinement is Phase 72.
   if (process.platform !== 'win32') return;
-  const icacls = join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'icacls.exe');
+  const icacls = join(SYSTEM_ROOT, 'System32', 'icacls.exe');
   await promisify(execFile)(icacls, [directory, '/setintegritylevel', '(OI)(CI)L'], {
     windowsHide: true,
   });
