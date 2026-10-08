@@ -203,7 +203,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 
 - [x] **36. Bundled Python runtime** — pinned CPython 3.12 (python-build-standalone) + locked wheels (numpy, scipy, sympy, pandas, matplotlib, scikit-learn, networkx), fetch script, lock hash. *Deliberately not system Python 3.14 — wheel availability is unreliable.*
   → `chore(sandbox): bundle pinned cpython 3.12 runtime`
-- [ ] **37. Runner protocol** — stdio JSON-RPC, live stdout/stderr streaming, structured result envelope.
+- [x] **37. Runner protocol** — stdio JSON-RPC, live stdout/stderr streaming, structured result envelope.
   → `feat(sandbox): python runner with json-rpc protocol`
 - [ ] **38. Windows Job Object isolation** — memory cap, CPU rate cap, wall-clock timeout, kill-on-close, jailed working directory.
   → `feat(sandbox): job object resource isolation`
