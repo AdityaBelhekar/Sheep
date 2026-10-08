@@ -110,8 +110,13 @@ export const stepVerdictSchema = z.strictObject({
   status: verificationStatusSchema,
   /** Why, in a sentence a person can act on. */
   reason: z.string(),
-  /** Which checker decided: `symbolic`, `structural`, `dimensional`, or `none`. */
+  /** Which checker decided: `symbolic`, `structural`, `numeric`, `dimensional`, or `none`. */
   method: z.string(),
+  /**
+   * For a step falsified numerically: the point at which the two sides
+   * differ, and what each came to there (`left` is the step as stated).
+   */
+  counterexample: z.record(z.string(), z.string()).nullable(),
   ...renderedSchema,
 });
 export type StepVerdict = z.infer<typeof stepVerdictSchema>;
@@ -146,6 +151,31 @@ export const quantitySchema = z.strictObject({
   expected: z.string().min(1).max(80),
 });
 export type Quantity = z.infer<typeof quantitySchema>;
+
+/**
+ * A logical or constraint claim: that something holds in every case the
+ * assumptions allow. Formulas are comparisons and arithmetic joined with
+ * `and`, `or`, `not`, or `Implies(a, b)`: `x > 0 and y >= x`.
+ */
+export const constraintClaimSchema = z.strictObject({
+  name: z.string().min(1).max(200),
+  variables: z.record(
+    z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,31}$/, 'expected a variable name'),
+    z.enum(['real', 'int', 'bool']),
+  ),
+  assumptions: z.array(z.string().min(1).max(2_000)).max(50),
+  claim: z.string().min(1).max(2_000),
+});
+export type ConstraintClaim = z.infer<typeof constraintClaimSchema>;
+
+export const constraintVerdictSchema = z.strictObject({
+  name: z.string(),
+  /** `PASS` is a proof; `FAIL` comes with the case that breaks the claim. */
+  status: verificationStatusSchema,
+  reason: z.string(),
+  counterexample: z.record(z.string(), z.string()).nullable(),
+});
+export type ConstraintVerdict = z.infer<typeof constraintVerdictSchema>;
 
 export const quantityVerdictSchema = z.strictObject({
   name: z.string(),

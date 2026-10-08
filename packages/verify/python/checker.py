@@ -5,7 +5,8 @@ one JSON line per finding as it reaches it, so a checker that runs out of time
 has still said everything it managed to decide.
 
 Nothing here asks a language model anything. A step passes because SymPy
-reduced a difference to zero, or fails because it did not, or is reported as
+reduced a difference to zero, or fails because it did not — or because the two
+sides came to different numbers at a sampled point — or is reported as
 UNCHECKABLE because no rule here could decide it. That third answer is never
 rounded up.
 
@@ -18,6 +19,7 @@ There is no attribute access, no subscripting and no string to smuggle code in
 
 import ast
 import json
+import random
 import sys
 
 import sympy
@@ -170,11 +172,80 @@ def read_statement(source, symbols):
 # ── Deciding ────────────────────────────────────────────────────────────────
 
 
+SAMPLES = 12
+
+
+def draw(symbol, rng):
+    """A value for a symbol that respects what was assumed of it."""
+    if symbol.is_integer:
+        low = 1 if symbol.is_positive else -6
+        high = -1 if symbol.is_negative else 6
+        value = rng.randint(low, high)
+        return sympy.Integer(value if value or not symbol.is_nonzero else 1)
+    magnitude = rng.uniform(0.2, 4.0)
+    if symbol.is_negative or not (symbol.is_positive or symbol.is_nonnegative or rng.random() < 0.5):
+        magnitude = -magnitude
+    return sympy.Float(magnitude, 30)
+
+
+def spot_check(left, right):
+    """Tries to show two expressions differ by evaluating them at random points.
+
+    Cheap, and decisive in one direction only: a single point at which the two
+    disagree proves they are not identical, while agreeing at every point
+    proves nothing. Returns (counterexample or None, points evaluated).
+
+    Seeded, so a verdict is the same verdict on every run.
+    """
+    if left.has(sympy.Derivative, sympy.Integral) or right.has(sympy.Derivative, sympy.Integral):
+        return None, 0
+    rng = random.Random(0)
+    symbols = sorted(left.free_symbols | right.free_symbols, key=str)
+    evaluated = 0
+    for _ in range(SAMPLES if symbols else 1):
+        point = {symbol: draw(symbol, rng) for symbol in symbols}
+        try:
+            # SymPy's own numbers, not floats: a value like 5**9999 is far past
+            # what a float can hold and is still perfectly comparable.
+            a = left.xreplace(point).evalf(30)
+            b = right.xreplace(point).evalf(30)
+            if not (a.is_number and b.is_number and a.is_finite and b.is_finite):
+                continue  # undefined here: a pole, or outside a function's domain
+            differs = bool(abs(a - b) > sympy.Float("1e-9") * (1 + abs(a) + abs(b)))
+        except Exception:
+            continue
+        evaluated += 1
+        if differs:
+            shown = {str(thaw(symbol)): f"{float(value):.6g}" for symbol, value in point.items()}
+            return {**shown, "left": show_number(a), "right": show_number(b)}, evaluated
+    return None, evaluated
+
+
+def show_number(value):
+    return sympy.sstr(sympy.N(value, 6))
+
+
 def identical(left, right):
     """Whether two expressions are the same for every value of their symbols."""
     difference = left - right
     if difference == 0:
         return PASS, "both sides are the same expression", "structural"
+
+    # Numbers first. Falsifying an identity takes one evaluation; proving one
+    # can take SymPy minutes, and there is no point proving what is false.
+    counterexample, evaluated = spot_check(left, right)
+    if counterexample is not None:
+        where = ", ".join(
+            f"{name} = {value}"
+            for name, value in counterexample.items()
+            if name not in ("left", "right")
+        )
+        reason = (
+            f"it gives {counterexample['left']} where the operation gives {counterexample['right']}"
+            + (f", at {where}" if where else "")
+        )
+        return FAIL, reason, "numeric", counterexample
+
     try:
         reduced = sympy.simplify(difference)
         if reduced == 0:
@@ -186,10 +257,13 @@ def identical(left, right):
         return PASS, "the difference is zero", "symbolic"
     if equal is False:
         return FAIL, f"it differs from what the operation gives by {sympy.sstr(reduced)}", "symbolic"
+    # Agreement at sampled points is evidence, not proof, and is reported as
+    # exactly that.
+    agreed = f"it agrees at all {evaluated} points sampled, but " if evaluated else ""
     return (
         UNCHECKABLE,
-        f"could not decide whether {sympy.sstr(reduced)} is zero",
-        "none",
+        f"{agreed}SymPy could not prove that {sympy.sstr(reduced)} is zero",
+        "numeric" if evaluated else "none",
     )
 
 
@@ -383,7 +457,7 @@ OPERATIONS = {
 
 
 def check_step(raw, previous, known, symbols):
-    """Returns (statement or None, status, reason, method)."""
+    """Returns (statement or None, status, reason, method[, counterexample])."""
     try:
         stated = read_statement(raw["statement"], symbols)
     except Unreadable as error:
@@ -584,6 +658,155 @@ def check_units(request, emit):
         emit({"quantity": {**finding, "status": PASS, "reason": reason, "factor": factor}})
 
 
+# ── Constraints ─────────────────────────────────────────────────────────────
+
+SOLVER_TIMEOUT_MS = 10_000
+
+COMPARISONS = {
+    ast.Lt: lambda a, b: a < b,
+    ast.LtE: lambda a, b: a <= b,
+    ast.Gt: lambda a, b: a > b,
+    ast.GtE: lambda a, b: a >= b,
+    ast.Eq: lambda a, b: a == b,
+    ast.NotEq: lambda a, b: a != b,
+}
+
+
+def read_constraint(source, variables):
+    """Builds a Z3 formula from text, by the same rule as `read_expression`:
+    the syntax tree is walked, and only what is listed here is understood."""
+    import z3
+
+    def real(term):
+        return z3.ToReal(term) if z3.is_int(term) else term
+
+    logic = {
+        "And": z3.And,
+        "Or": z3.Or,
+        "Not": z3.Not,
+        "Implies": z3.Implies,
+        "Abs": lambda x: z3.If(x >= 0, x, -x),
+        "Min": lambda a, b: z3.If(a <= b, a, b),
+        "Max": lambda a, b: z3.If(a >= b, a, b),
+    }
+
+    def build(node):
+        if isinstance(node, ast.Constant):
+            value = node.value
+            if type(value) is bool:
+                return z3.BoolVal(value)
+            if type(value) is int:
+                return z3.IntVal(value)
+            if type(value) is float:
+                return z3.RealVal(repr(value))
+            raise Unreadable("only numbers and True/False may appear as literals")
+        if isinstance(node, ast.Name):
+            if node.id not in variables:
+                raise Unreadable(f"{node.id} is not a declared variable")
+            return variables[node.id]
+        if isinstance(node, ast.UnaryOp):
+            operand = build(node.operand)
+            if isinstance(node.op, ast.Not):
+                return z3.Not(operand)
+            if isinstance(node.op, ast.USub):
+                return -operand
+            if isinstance(node.op, ast.UAdd):
+                return operand
+        if isinstance(node, ast.BinOp):
+            left, right = build(node.left), build(node.right)
+            if isinstance(node.op, ast.Add):
+                return left + right
+            if isinstance(node.op, ast.Sub):
+                return left - right
+            if isinstance(node.op, ast.Mult):
+                return left * right
+            if isinstance(node.op, ast.Div):
+                # Z3 divides integers by truncating. A claim that writes x/2
+                # means half of x.
+                return real(left) / real(right)
+            if isinstance(node.op, ast.Pow):
+                return left**right
+            raise Unreadable(f"the operator {type(node.op).__name__} is not allowed")
+        if isinstance(node, ast.BoolOp):
+            parts = [build(value) for value in node.values]
+            return z3.And(*parts) if isinstance(node.op, ast.And) else z3.Or(*parts)
+        if isinstance(node, ast.Compare):
+            terms = [build(node.left), *(build(term) for term in node.comparators)]
+            links = []
+            for operator, left, right in zip(node.ops, terms, terms[1:]):
+                if type(operator) not in COMPARISONS:
+                    raise Unreadable(f"the comparison {type(operator).__name__} is not allowed")
+                links.append(COMPARISONS[type(operator)](left, right))
+            return z3.And(*links) if len(links) > 1 else links[0]
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name) or node.func.id not in logic or node.keywords:
+                raise Unreadable("only And, Or, Not, Implies, Abs, Min and Max may be called")
+            return logic[node.func.id](*(build(argument) for argument in node.args))
+        raise Unreadable(f"{type(node).__name__} is not allowed in a constraint")
+
+    try:
+        formula = build(ast.parse(source.strip(), mode="eval").body)
+    except SyntaxError as error:
+        raise Unreadable(f"not a constraint: {error.msg}") from None
+    except Unreadable:
+        raise
+    except Exception as error:  # a sort mismatch: adding a number to a boolean
+        raise Unreadable(f"{type(error).__name__}: {error}") from None
+    if not z3.is_bool(formula):
+        raise Unreadable("a constraint has to be true or false, not a number")
+    return formula
+
+
+def check_constraints(request, emit):
+    """Whether each claim holds in every case its assumptions allow.
+
+    Z3 is asked for a case where the assumptions hold and the claim does not.
+    If there is provably none, the claim is proved. If it finds one, that case
+    is the counterexample. If it gives up, the claim is undecided.
+    """
+    import z3
+
+    sorts = {"real": z3.Real, "int": z3.Int, "bool": z3.Bool}
+    for claim in request["claims"]:
+        finding = {"name": claim["name"], "counterexample": None}
+
+        def answer(status, reason, **extra):
+            emit({"constraint": {**finding, "status": status, "reason": reason, **extra}})
+
+        try:
+            variables = {name: sorts[sort](name) for name, sort in claim["variables"].items()}
+            assumptions = [read_constraint(text, variables) for text in claim["assumptions"]]
+            goal = read_constraint(claim["claim"], variables)
+        except Unreadable as error:
+            answer(UNCHECKABLE, f"could not read it: {error}")
+            continue
+
+        solver = z3.Solver()
+        solver.set("timeout", SOLVER_TIMEOUT_MS)
+        solver.add(*assumptions)
+        # A claim proved from assumptions that cannot all hold is proved from
+        # nothing: everything follows from a contradiction.
+        consistent = solver.check()
+        if consistent == z3.unsat:
+            answer(FAIL, "the assumptions contradict each other, so nothing can be concluded from them")
+            continue
+
+        solver.add(z3.Not(goal))
+        outcome = solver.check()
+        if outcome == z3.unsat:
+            if consistent == z3.sat:
+                answer(PASS, "there is no case in which the assumptions hold and the claim does not")
+            else:
+                answer(UNCHECKABLE, "the claim follows, but Z3 could not confirm the assumptions can hold")
+        elif outcome == z3.sat:
+            model = solver.model()
+            case = {name: str(model.eval(variable, model_completion=True)) for name, variable in variables.items()}
+            shown = ", ".join(f"{name} = {value}" for name, value in case.items())
+            answer(FAIL, f"it does not hold when {shown}", counterexample=case)
+        else:
+            answer(UNCHECKABLE, f"Z3 could not decide it: {solver.reason_unknown()}")
+
+
 def check_derivation(derivation, emit):
     symbols = {
         name: sympy.Symbol(name, **dict.fromkeys(spec.get("assumptions") or (), True))
@@ -633,14 +856,14 @@ def check_derivation(derivation, emit):
 
     for raw in derivation["steps"]:
         if raw["id"] in known:
-            statement, status, reason, method = (
+            statement, status, reason, method, *found = (
                 None,
                 UNCHECKABLE,
                 "this id is already used by an earlier statement",
                 "none",
             )
         else:
-            statement, status, reason, method = check_step(raw, previous, known, symbols)
+            statement, status, reason, method, *found = check_step(raw, previous, known, symbols)
             known[raw["id"]] = statement
             previous = raw["id"]
         shown = rendered(statement)
@@ -655,6 +878,7 @@ def check_derivation(derivation, emit):
                     "status": status,
                     "reason": reason,
                     "method": method,
+                    "counterexample": found[0] if found and status == FAIL else None,
                     **shown,
                 }
             }
@@ -664,6 +888,7 @@ def check_derivation(derivation, emit):
 HANDLERS = {
     "derivation": lambda request, emit: check_derivation(request["derivation"], emit),
     "units": check_units,
+    "constraints": check_constraints,
 }
 
 

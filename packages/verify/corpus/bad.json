@@ -410,5 +410,57 @@
         "expect": "FAIL"
       }
     ]
+  },
+  {
+    "name": "a logarithm distributed over a sum",
+    "error": "log(a + b) is not log(a) + log(b)",
+    "symbols": {
+      "a": {
+        "assumptions": ["positive"]
+      },
+      "b": {
+        "assumptions": ["positive"]
+      }
+    },
+    "given": ["log(a + b)"],
+    "steps": [
+      {
+        "statement": "log(a) + log(b)",
+        "operation": "expand",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "an absolute value distributed over a sum",
+    "error": "|a + b| equals |a| + |b| only when the signs agree",
+    "symbols": {
+      "a": {
+        "assumptions": ["real"]
+      },
+      "b": {
+        "assumptions": ["real"]
+      }
+    },
+    "given": ["Abs(a + b)"],
+    "steps": [
+      {
+        "statement": "Abs(a) + Abs(b)",
+        "operation": "rewrite",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "two enormous polynomials that are not the same",
+    "error": "the sign of w differs; expanding either would never finish",
+    "given": ["(x + y + z + w)**9999"],
+    "steps": [
+      {
+        "statement": "(x + y + z - w)**9999",
+        "operation": "rewrite",
+        "expect": "FAIL"
+      }
+    ]
   }
 ]

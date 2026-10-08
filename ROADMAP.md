@@ -228,7 +228,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   *Done when:* every planted error is caught and every valid derivation passes. → `test(verify): known-good and known-bad derivation corpus`
 - [x] **45. Dimensional analysis** — `pint` unit checking across derivations and empirical results.
   → `feat(verify): dimensional analysis with pint`
-- [ ] **46. Numeric spot-check + Z3** — random sampling to falsify identities cheaply before symbolic work; SMT for logical/constraint claims.
+- [x] **46. Numeric spot-check + Z3** — random sampling to falsify identities cheaply before symbolic work; SMT for logical/constraint claims.
   → `feat(verify): numeric spot-check and smt solver`
 - [ ] **47. Statistical audit** — n, effect size, CIs, multiple-comparison correction, p-hacking shape detection.
   → `feat(verify): statistical audit for empirical claims`

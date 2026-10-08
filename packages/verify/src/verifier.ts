@@ -2,10 +2,13 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./raw.d.ts" />
 import {
+  constraintVerdictSchema,
   derivationVerdictSchema,
   quantityVerdictSchema,
   stepVerdictSchema,
   type Derivation,
+  type ConstraintClaim,
+  type ConstraintVerdict,
   type DerivationVerdict,
   type Quantity,
   type QuantityVerdict,
@@ -93,6 +96,7 @@ export class Verifier {
               status: 'UNCHECKABLE',
               reason: why,
               method: 'none',
+              counterexample: null,
               latex: null,
               mathml: null,
               dimensions: null,
@@ -120,6 +124,27 @@ export class Verifier {
           status: 'UNCHECKABLE',
           reason: stopped ?? 'the checker gave no verdict',
           factor: null,
+        },
+    );
+  }
+
+  /**
+   * Decides logical and constraint claims with an SMT solver. A pass is a
+   * proof that no case breaks the claim; a fail carries the case that does.
+   */
+  async checkConstraints(claims: readonly ConstraintClaim[]): Promise<ConstraintVerdict[]> {
+    const { findings, stopped } = await this.#run([{ kind: 'constraints', claims }]);
+    const reported = (findings[0] ?? []).flatMap((finding) => {
+      const parsed = constraintVerdictSchema.safeParse(finding['constraint']);
+      return parsed.success ? [parsed.data] : [];
+    });
+    return claims.map(
+      (claim, index) =>
+        reported[index] ?? {
+          name: claim.name,
+          status: 'UNCHECKABLE',
+          reason: stopped ?? 'the checker gave no verdict',
+          counterexample: null,
         },
     );
   }

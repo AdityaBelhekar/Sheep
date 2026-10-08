@@ -46,7 +46,7 @@ describe('step checker', () => {
     // does follow from it: the error is located, not smeared.
     expect(statuses).toEqual(['PASS', 'FAIL', 'PASS']);
     expect(verdict.status).toBe('FAIL');
-    expect(verdict.steps[1]!.reason).toMatch(/differs from what the operation gives/);
+    expect(verdict.steps[1]!.reason).toMatch(/where the operation gives/);
   });
 
   it('checks each operation against what it actually does', async () => {
@@ -231,25 +231,5 @@ describe('a checker that does not finish', () => {
     });
     expect(verdict!.steps[0]!.reason).toMatch(/ran out of time/);
     expect(verdict!.given[0]!.problem).toMatch(/ran out of time/);
-  });
-
-  it('keeps what it had decided when one step defeats it', async () => {
-    const [verdict] = await testVerifier({ timeoutMs: 8_000 }).checkDerivations([
-      derivation(
-        ['y = x', '(x + y + z + w)**9999'],
-        [
-          { statement: 'x = y', operation: 'rewrite', from: 'g1' },
-          // Deciding this means expanding two polynomials with more terms
-          // than there is memory or time for. Which runs out first varies.
-          { statement: '(x + y + z - w)**9999', operation: 'rewrite', from: 'g2' },
-          { statement: 'y = x', operation: 'rewrite', from: 's1' },
-        ],
-      ),
-    ]);
-
-    const statuses = verdict!.steps.map((step) => step.status);
-    expect(statuses.slice(0, 2)).toEqual(['PASS', 'UNCHECKABLE']);
-    expect(statuses).not.toContain('FAIL');
-    expect(verdict!.status).toBe('UNCHECKABLE');
   });
 });
