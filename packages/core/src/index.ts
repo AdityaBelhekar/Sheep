@@ -174,6 +174,19 @@ export {
 } from './derivation';
 
 export {
+  P_CORRECTIONS,
+  STATISTICAL_TESTS,
+  reportedTestSchema,
+  statisticalAuditSchema,
+  statisticalFindingSchema,
+  statisticalReportSchema,
+  type ReportedTest,
+  type StatisticalAudit,
+  type StatisticalFinding,
+  type StatisticalReport,
+} from './statistics';
+
+export {
   EXECUTION_STATUSES,
   executionArtifactSchema,
   executionFields,

@@ -807,6 +807,237 @@ def check_constraints(request, emit):
             answer(UNCHECKABLE, f"Z3 could not decide it: {solver.reason_unknown()}")
 
 
+# ── Statistics ──────────────────────────────────────────────────────────────
+
+
+def recompute_p(test, tails):
+    """The p-value a reported test statistic actually implies, or None."""
+    from scipy import stats
+
+    kind, statistic, df = test.get("test"), test.get("statistic"), test.get("df")
+    if kind is None or statistic is None:
+        return None
+    if kind == "z":
+        upper = stats.norm.sf(abs(statistic))
+    elif kind == "t" and df:
+        upper = stats.t.sf(abs(statistic), df)
+    elif kind == "r" and df and abs(statistic) < 1:
+        upper = stats.t.sf(abs(statistic) * (df / (1 - statistic**2)) ** 0.5, df)
+    elif kind == "chi2" and df:
+        return float(stats.chi2.sf(statistic, df))
+    elif kind == "f" and df and test.get("df2"):
+        return float(stats.f.sf(statistic, df, test["df2"]))
+    else:
+        return None
+    return float(upper * tails)
+
+
+def describe_test(test):
+    kind, statistic = test["test"], test["statistic"]
+    df = [str(test[key]) for key in ("df", "df2") if test.get(key)]
+    return f"{kind}{'(' + ', '.join(df) + ')' if df else ''} = {statistic:g}"
+
+
+def power_for(effect, sizes, alpha, tails):
+    """Chance that a design this size detects a standardised difference this big."""
+    from scipy import stats
+
+    if len(sizes) == 2:
+        df, scale = sum(sizes) - 2, (sizes[0] * sizes[1] / sum(sizes)) ** 0.5
+    else:
+        df, scale = sizes[0] - 1, sizes[0] ** 0.5
+    if df < 1:
+        return None
+    critical = stats.t.isf(alpha / tails, df)
+    noncentrality = abs(effect) * scale
+    power = stats.nct.sf(critical, df, noncentrality)
+    if tails == 2:
+        power += stats.nct.cdf(-critical, df, noncentrality)
+    return float(power)
+
+
+def adjust(p_values, comparisons, method):
+    """Adjusted p-values, in the order given.
+
+    `comparisons` may exceed the number of p-values reported. The tests nobody
+    reported are treated as the least significant: they still count towards
+    how many were run.
+    """
+    order = sorted(range(len(p_values)), key=lambda index: p_values[index])
+    adjusted = [1.0] * len(p_values)
+    if method == "bonferroni":
+        return [min(1.0, p * comparisons) for p in p_values]
+    if method == "holm":
+        running = 0.0
+        for rank, index in enumerate(order):
+            running = max(running, min(1.0, (comparisons - rank) * p_values[index]))
+            adjusted[index] = running
+        return adjusted
+    # Benjamini-Hochberg, stepping up from the least significant.
+    running = 1.0
+    for rank in range(len(order) - 1, -1, -1):
+        index = order[rank]
+        running = min(running, p_values[index] * comparisons / (rank + 1))
+        adjusted[index] = running
+    return adjusted
+
+
+def audit_report(report):
+    """Yields (check, subject, status, reason) for one reported analysis."""
+    from scipy import stats
+
+    alpha = report.get("alpha", 0.05)
+    tests = report["tests"]
+    sizes = [group["n"] for group in report.get("groups") or []] or (
+        [report["n"]] if report.get("n") else []
+    )
+
+    # How many observations. Without it nothing else here can be weighed.
+    if not sizes:
+        yield "sample-size", None, FAIL, "no sample size is reported"
+    else:
+        shown = " + ".join(str(size) for size in sizes)
+        yield "sample-size", None, PASS, f"n = {shown}"
+
+    for test in tests:
+        name, tails = test["name"], test.get("tails", 2)
+        p, effect, interval = test.get("p"), test.get("effect"), test.get("ci")
+
+        # A p-value says an effect is unlikely to be zero, not how big it is.
+        if effect is None:
+            yield "effect-size", name, FAIL, "no effect size is reported, only whether there is one"
+        else:
+            yield "effect-size", name, PASS, f"{effect['kind']} = {effect['value']:g}"
+
+        # Was the study big enough to find an effect of the size it reports? A
+        # significant result from a design that would usually miss it is more
+        # likely an overestimate than a discovery.
+        if effect is None or effect["kind"] != "d":
+            yield "power", name, UNCHECKABLE, "power is computed for a standardised mean difference (d) only"
+        elif not sizes or len(sizes) > 2:
+            yield "power", name, UNCHECKABLE, "power needs one or two group sizes"
+        else:
+            power = power_for(effect["value"], sizes, alpha, tails)
+            if power is None:
+                yield "power", name, UNCHECKABLE, "the groups are too small to compute power"
+            else:
+                detail = f"a design of this size detects d = {effect['value']:g} {power:.0%} of the time"
+                yield "power", name, (PASS if power >= 0.5 else FAIL), detail
+
+        if interval is None:
+            yield "confidence-interval", name, FAIL, "no confidence interval is reported"
+        else:
+            low, high, null = interval["low"], interval["high"], interval.get("null", 0)
+            excludes = not (low <= null <= high)
+            if low > high:
+                yield "confidence-interval", name, FAIL, f"the interval [{low:g}, {high:g}] is upside down"
+            elif effect is not None and not (low <= effect["value"] <= high):
+                detail = f"the estimate {effect['value']:g} lies outside its own interval [{low:g}, {high:g}]"
+                yield "confidence-interval", name, FAIL, detail
+            elif p is not None and abs(interval["level"] - (1 - alpha)) < 1e-9 and excludes != (p < alpha):
+                side = "excludes" if excludes else "contains"
+                detail = (
+                    f"the {interval['level']:.0%} interval {side} {null:g}, "
+                    f"which contradicts p = {p:g} at alpha = {alpha:g}"
+                )
+                yield "confidence-interval", name, FAIL, detail
+            else:
+                yield "confidence-interval", name, PASS, f"[{low:g}, {high:g}] at {interval['level']:.0%}"
+
+        # The reported p against the one the reported statistic implies.
+        if p is None:
+            yield "p-value", name, UNCHECKABLE, "no p-value is reported"
+        else:
+            implied = recompute_p(test, tails)
+            if implied is None:
+                yield "p-value", name, UNCHECKABLE, "no test statistic to recompute it from"
+            else:
+                gap = abs(implied - p)
+                flips = (implied < alpha) != (p < alpha) and gap > 0.0005
+                if flips or gap > max(0.005, 0.05 * implied):
+                    detail = f"reported p = {p:g}, but {describe_test(test)} gives p = {implied:.3g}"
+                    if flips:
+                        detail += ", which changes whether it is significant"
+                    yield "p-value", name, FAIL, detail
+                else:
+                    yield "p-value", name, PASS, f"{describe_test(test)} gives p = {implied:.3g}, as reported"
+
+    reported = [(test["name"], test["p"]) for test in tests if test.get("p") is not None]
+    comparisons = max(report.get("comparisons", 0), len(tests))
+    correction = report.get("correction", "none")
+
+    # Twenty tests at alpha = 0.05 produce one "finding" from noise alone.
+    if comparisons < 2:
+        yield "multiple-comparisons", None, PASS, "one comparison; nothing to correct for"
+    elif not reported:
+        yield "multiple-comparisons", None, UNCHECKABLE, "no p-values to correct"
+    else:
+        method = "holm" if correction == "none" else correction
+        adjusted = adjust([p for _, p in reported], comparisons, method)
+        lost = [
+            f"{name} (p = {p:g}, adjusted {corrected:.3g})"
+            for (name, p), corrected in zip(reported, adjusted)
+            if p < alpha <= corrected
+        ]
+        applied = "no correction was applied; under Holm" if correction == "none" else f"under {correction}"
+        if lost:
+            detail = f"{comparisons} comparisons, and {applied} these are no longer significant: {'; '.join(lost)}"
+            yield "multiple-comparisons", None, FAIL, detail
+        elif correction == "none":
+            detail = f"{comparisons} comparisons with no correction, though every significant result survives Holm"
+            yield "multiple-comparisons", None, PASS, detail
+        else:
+            yield "multiple-comparisons", None, PASS, f"{comparisons} comparisons, corrected with {correction}"
+
+    # The shape of the significant p-values. A real effect piles them up near
+    # zero; results nudged across the line pile up just under alpha instead.
+    significant = [p for _, p in reported if p < alpha]
+    if len(significant) < 5:
+        detail = f"{len(significant)} significant p-values; a shape needs at least 5"
+        yield "p-curve", None, UNCHECKABLE, detail
+    else:
+        near = sum(p > alpha / 2 for p in significant)
+        chance = float(stats.binomtest(near, len(significant), 0.5, alternative="greater").pvalue)
+        detail = (
+            f"{near} of {len(significant)} significant p-values fall in the half nearest "
+            f"alpha ({alpha / 2:g} to {alpha:g})"
+        )
+        if chance < 0.05:
+            yield "p-curve", None, FAIL, f"{detail}; that many by chance has probability {chance:.3g}"
+        else:
+            yield "p-curve", None, PASS, detail
+
+
+def audit_statistics(request, emit):
+    for index, report in enumerate(request["reports"]):
+        try:
+            for check, subject, status, reason in audit_report(report):
+                emit(
+                    {
+                        "finding": {
+                            "report": index,
+                            "check": check,
+                            "subject": subject,
+                            "status": status,
+                            "reason": reason,
+                        }
+                    }
+                )
+        except Exception as error:
+            emit(
+                {
+                    "finding": {
+                        "report": index,
+                        "check": "audit",
+                        "subject": None,
+                        "status": UNCHECKABLE,
+                        "reason": f"the audit failed: {type(error).__name__}: {error}",
+                    }
+                }
+            )
+        emit({"audited": index})
+
+
 def check_derivation(derivation, emit):
     symbols = {
         name: sympy.Symbol(name, **dict.fromkeys(spec.get("assumptions") or (), True))
@@ -889,6 +1120,7 @@ HANDLERS = {
     "derivation": lambda request, emit: check_derivation(request["derivation"], emit),
     "units": check_units,
     "constraints": check_constraints,
+    "statistics": audit_statistics,
 }
 
 

@@ -5,6 +5,7 @@ import {
   constraintVerdictSchema,
   derivationVerdictSchema,
   quantityVerdictSchema,
+  statisticalFindingSchema,
   stepVerdictSchema,
   type Derivation,
   type ConstraintClaim,
@@ -12,6 +13,9 @@ import {
   type DerivationVerdict,
   type Quantity,
   type QuantityVerdict,
+  type StatisticalAudit,
+  type StatisticalFinding,
+  type StatisticalReport,
   type StepVerdict,
   type VerificationStatus,
 } from '@sheep/core';
@@ -147,6 +151,42 @@ export class Verifier {
           counterexample: null,
         },
     );
+  }
+
+  /**
+   * Audits the statistics an empirical claim reports: whether they are
+   * complete, whether they agree with each other, and whether they survive
+   * the number of tests that were run.
+   */
+  async auditStatistics(reports: readonly StatisticalReport[]): Promise<StatisticalAudit[]> {
+    const { findings, stopped } = await this.#run([{ kind: 'statistics', reports }]);
+    const reported = findings[0] ?? [];
+
+    return reports.map((report, index) => {
+      const made: StatisticalFinding[] = reported.flatMap((finding) => {
+        const raw = finding['finding'] as { report?: unknown } | undefined;
+        if (raw?.report !== index) return [];
+        const { report: _report, ...rest } = raw;
+        const parsed = statisticalFindingSchema.safeParse(rest);
+        return parsed.success ? [parsed.data] : [];
+      });
+      // An audit cut short must not read as an audit that found nothing wrong.
+      if (!reported.some((finding) => finding['audited'] === index)) {
+        made.push({
+          check: 'audit',
+          subject: null,
+          status: 'UNCHECKABLE',
+          reason: stopped ?? 'the audit did not finish',
+        });
+      }
+      const has = (status: VerificationStatus): boolean =>
+        made.some((finding) => finding.status === status);
+      return {
+        name: report.name,
+        status: has('FAIL') ? 'FAIL' : has('UNCHECKABLE') ? 'UNCHECKABLE' : 'PASS',
+        findings: made,
+      };
+    });
   }
 
   async #run(requests: readonly unknown[]): Promise<Outcome> {
