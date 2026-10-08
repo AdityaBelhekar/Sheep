@@ -86,6 +86,13 @@ export {
 export { SettingsStore } from './settings';
 export { enforceLedger, readLedger } from './ledger';
 export { executionBlobRef, recordExecution, type FinishedRun } from './executions';
+export { derivationBlobRef, readDerivation, recordDerivation } from './derivations';
+export {
+  DERIVATIONS_DDL,
+  DERIVATIONS_PROJECTION,
+  getDerivation,
+  listDerivations,
+} from './projections/derivations';
 export {
   EXECUTIONS_DDL,
   EXECUTIONS_PROJECTION,

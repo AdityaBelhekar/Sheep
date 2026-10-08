@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { titleSchema } from './primitives';
+import { idSchema, sha256Schema, timestampSchema, titleSchema } from './primitives';
 
 /**
  * A derivation, written so that a program can check it (P4).
@@ -143,6 +143,34 @@ export const derivationVerdictSchema = z.strictObject({
   steps: z.array(stepVerdictSchema),
 });
 export type DerivationVerdict = z.infer<typeof derivationVerdictSchema>;
+
+/**
+ * A derivation that has been checked, as the log records it.
+ *
+ * The derivation and its verdict travel as content addresses. What is kept in
+ * the event itself is what the ledger decides on: the outcome and the count of
+ * steps in each state, so that a derivation with a failed step can be refused
+ * as backing without reading a blob.
+ */
+export const derivationFields = {
+  derivationId: idSchema,
+  /** The derivation as submitted. */
+  bodyHash: sha256Schema,
+  /** Every step's verdict, as the checker gave it. */
+  verdictHash: sha256Schema,
+  status: verificationStatusSchema,
+  counts: derivationVerdictSchema.shape.counts,
+  /** Which interpreter and libraries did the checking: the runtime's lock hash. */
+  envLockHash: sha256Schema,
+} as const;
+
+export const derivationRecordSchema = z.strictObject({
+  sessionId: idSchema,
+  ...derivationFields,
+  title: titleSchema.nullable(),
+  recordedAt: timestampSchema,
+});
+export type DerivationRecord = z.infer<typeof derivationRecordSchema>;
 
 /** A reported quantity, and the kind of quantity it is supposed to be. */
 export const quantitySchema = z.strictObject({

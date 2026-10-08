@@ -763,6 +763,102 @@ const LAB_EXPRESSION = `(async () => {
   }
 })()`;
 
+/**
+ * Verification, end to end, through the channels the pane uses.
+ *
+ * One derivation is sound and a DERIVED claim then rests on it. The other has
+ * a step that follows, a planted error, and a step no checker can decide: the
+ * three must come back PASS, FAIL and UNCHECKABLE in that order, and the
+ * ledger must refuse it as backing. Then the pane is opened on the second, to
+ * prove the undecided step is on screen and labelled.
+ */
+const VERIFICATION_EXPRESSION = `(async () => {
+  const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const created = await window.sheep.invoke('sheep:session-create', {
+    title: 'Verification smoke ' + Date.now(),
+    question: 'Is a planted error caught, and an undecided step labelled?',
+  });
+  const sessionId = created.sessionId;
+  const check = (derivation) =>
+    window.sheep.invoke('sheep:derivation-check', { sessionId, derivation });
+  const claim = async (derivationId) => {
+    try {
+      await window.sheep.invoke('sheep:claim-record', {
+        sessionId,
+        claimType: 'DERIVED',
+        statement: 'Work done is half the mass times the speed squared.',
+        support: [{ kind: 'DERIVATION', ref: derivationId }],
+      });
+      return 'accepted';
+    } catch (error) {
+      return String(error && error.message ? error.message : error);
+    }
+  };
+
+  try {
+    const sound = await check({
+      title: 'Kinetic energy',
+      symbols: { W: { units: 'joule' }, F: { units: 'newton' }, d: { units: 'm' }, m: { units: 'kg' }, a: { units: 'm/s**2' } },
+      given: [
+        { id: 'g1', statement: 'W = F*d' },
+        { id: 'g2', statement: 'F = m*a' },
+      ],
+      steps: [{ id: 's1', statement: 'W = m*a*d', operation: 'substitute', from: 'g1', using: 'g2' }],
+    });
+    const flawed = await check({
+      title: 'A planted error',
+      given: [{ id: 'g1', statement: 'y = (x + 1)**2' }],
+      steps: [
+        { id: 's1', statement: 'y = x**2 + 2*x + 1', operation: 'expand' },
+        { id: 's2', statement: 'Derivative(y, x) = 2*x - 2', operation: 'differentiate', args: { var: 'x' } },
+        { id: 's3', statement: 'y = x**2 + 2*x + 1', operation: 'by inspection', from: 'g1' },
+      ],
+    });
+    const backed = await claim(sound.record.derivationId);
+    const unbacked = await claim(flawed.record.derivationId);
+
+    const previous = (await window.sheep.invoke('sheep:settings-read', {})).settings['ui.lastSessionId'];
+    window.__sheepLedgerPrevious = previous;
+    await window.sheep.invoke('sheep:settings-write', { key: 'ui.lastSessionId', value: sessionId });
+    window.location.hash = '#/verification';
+
+    let pane = null;
+    let row = null;
+    for (let i = 0; i < 100; i += 1) {
+      await settle(50);
+      pane = document.querySelector('[data-pane="verification"][data-sheep-derivations="2"]');
+      row = pane ? pane.querySelector('[data-sheep-derivation="' + flawed.record.derivationId + '"]') : null;
+      if (row) break;
+    }
+    if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    let rows = [];
+    for (let i = 0; i < 100; i += 1) {
+      await settle(50);
+      rows = pane ? [...pane.querySelectorAll('tr[data-sheep-step]')] : [];
+      if (rows.length === 3) break;
+    }
+    const undecided = rows.find((entry) => entry.getAttribute('data-status') === 'UNCHECKABLE');
+
+    return {
+      sound: sound.verdict.status,
+      soundUnits: sound.verdict.steps[0].dimensions ? sound.verdict.steps[0].dimensions.status : 'none',
+      flawed: flawed.verdict.steps.map((step) => step.status).join(','),
+      method: flawed.verdict.steps[1].method,
+      backed,
+      unbacked,
+      listed: pane ? pane.getAttribute('data-sheep-derivations') : null,
+      shown: rows.map((entry) => entry.getAttribute('data-status')).join(','),
+      undecidedVisible: Boolean(undecided && undecided.getBoundingClientRect().height > 0),
+      undecidedText: undecided ? undecided.textContent : '',
+      typeset: pane ? pane.querySelectorAll('math').length : 0,
+      fractionDrawn: pane ? pane.querySelectorAll('math msup, math mrow').length > 0 : false,
+    };
+  } catch (error) {
+    return { error: String(error && error.message ? error.message : error) };
+  }
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -832,6 +928,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
   await checkProjection(window);
   await checkLedger(window);
   await checkLab(window);
+  await checkVerification(window);
   await checkConnections(window);
   await checkLocalModel(window);
   await checkTheme(window);
@@ -978,6 +1075,60 @@ async function checkLab(window: BrowserWindow): Promise<void> {
     } · pane runs=${result.runs ?? 'none'} · monaco=${String(result.editor)} · plot ${String(
       result.plotWidth,
     )}px`,
+  );
+}
+
+async function checkVerification(window: BrowserWindow): Promise<void> {
+  const result = (await evaluate(window, VERIFICATION_EXPRESSION)) as
+    | {
+        sound: string;
+        soundUnits: string;
+        flawed: string;
+        method: string;
+        backed: string;
+        unbacked: string;
+        listed: string | null;
+        shown: string;
+        undecidedVisible: boolean;
+        undecidedText: string;
+        typeset: number;
+        fractionDrawn: boolean;
+      }
+    | { error: string }
+    | undefined;
+  await delay(250);
+  await captureScreenshot(window, 'verification');
+  await evaluate(window, LEDGER_RESTORE_EXPRESSION);
+
+  if (!result || 'error' in result) {
+    recordSmokeCheck('renderer-verification', false, result?.error ?? 'no result');
+    return;
+  }
+
+  const ok =
+    result.sound === 'PASS' &&
+    result.soundUnits === 'PASS' &&
+    result.flawed === 'PASS,FAIL,UNCHECKABLE' &&
+    result.backed === 'accepted' &&
+    result.unbacked.includes('LEDGER_FAILED_DERIVATION') &&
+    result.listed === '2' &&
+    result.shown === 'PASS,FAIL,UNCHECKABLE' &&
+    result.undecidedVisible &&
+    result.undecidedText.includes('UNCHECKABLE') &&
+    result.undecidedText.includes('no checker for the operation') &&
+    result.typeset >= 4 &&
+    result.fractionDrawn;
+
+  recordSmokeCheck(
+    'renderer-verification',
+    ok,
+    `sound derivation=${result.sound} units=${result.soundUnits} · planted error → ${
+      result.flawed
+    } (caught by ${result.method}) · DERIVED claim on sound=${result.backed} · on flawed → ${
+      result.unbacked.match(/LEDGER_[A-Z_]+/)?.[0] ?? result.unbacked
+    } · pane rows=${result.shown} · undecided step shown and labelled=${String(
+      result.undecidedVisible && result.undecidedText.includes('UNCHECKABLE'),
+    )} · ${String(result.typeset)} formulas typeset`,
   );
 }
 

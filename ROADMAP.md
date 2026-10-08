@@ -232,7 +232,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   → `feat(verify): numeric spot-check and smt solver`
 - [x] **47. Statistical audit** — n, effect size, CIs, multiple-comparison correction, p-hacking shape detection.
   → `feat(verify): statistical audit for empirical claims`
-- [ ] **48. Derivation UI** — LaTeX with per-step PASS / FAIL / **UNCHECKABLE**. Unchecked steps stay visible, never silently hidden.
+- [x] **48. Derivation UI** — LaTeX with per-step PASS / FAIL / **UNCHECKABLE**. Unchecked steps stay visible, never silently hidden.
   → `feat(ui): derivation view with per-step verification status`
 
 > **Stage gate:** planted errors are caught; unverifiable steps are honestly labelled rather than assumed correct.

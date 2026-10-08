@@ -151,6 +151,8 @@ export {
 export {
   SYMBOL_ASSUMPTIONS,
   VERIFICATION_STATUSES,
+  derivationFields,
+  derivationRecordSchema,
   derivationSchema,
   derivationStepSchema,
   constraintClaimSchema,
@@ -162,6 +164,7 @@ export {
   stepVerdictSchema,
   verificationStatusSchema,
   type Derivation,
+  type DerivationRecord,
   type DerivationStep,
   type ConstraintClaim,
   type ConstraintVerdict,

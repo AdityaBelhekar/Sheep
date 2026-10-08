@@ -37,7 +37,7 @@ const MAX_BLOB_BYTES = 8 * 1024 * 1024;
 let sandbox: Sandbox | undefined;
 
 /** Built on first use: a missing runtime should not stop the app from opening. */
-function getSandbox(): Sandbox {
+export function getSandbox(): Sandbox {
   sandbox ??= new Sandbox({
     runtime: locateRuntime(runtimePath()),
     root: join(app.getPath('userData'), 'sandbox'),

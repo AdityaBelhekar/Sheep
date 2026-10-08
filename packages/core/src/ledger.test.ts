@@ -8,6 +8,7 @@ import {
   PARTICIPANT_A,
   PARTICIPANT_B,
   SESSION_ID,
+  CHECKED_DERIVATION,
   CLEAN_RUN,
 } from './fixtures';
 import { Ledger, LedgerError, type LedgerErrorCode } from './ledger';
@@ -50,8 +51,15 @@ const executed = (exitCode = 0, executionId = EXECUTION_ID): DomainEvent =>
     status: exitCode === 0 ? 'ok' : 'error',
   });
 
-const derived = (): DomainEvent =>
-  ev('derivation.recorded', { sessionId: SESSION_ID, derivationId: DERIVATION_ID, bodyHash: HASH });
+const derived = (
+  verdict: Partial<Pick<typeof CHECKED_DERIVATION, 'status' | 'counts'>> = {},
+): DomainEvent =>
+  ev('derivation.recorded', {
+    sessionId: SESSION_ID,
+    derivationId: DERIVATION_ID,
+    ...CHECKED_DERIVATION,
+    ...verdict,
+  });
 
 type Support = EventPayload<'claim.recorded'>['support'];
 
@@ -423,6 +431,25 @@ describe('claim type enforcement (P2)', () => {
     // Either would let a run that did not finish cleanly back a claim.
     rejects(ledgerOf(), disagreeing('timeout', 0), 'INCONSISTENT_EXECUTION');
     rejects(ledgerOf(), disagreeing('ok', 1), 'INCONSISTENT_EXECUTION');
+  });
+
+  it('refuses a DERIVED claim resting on a derivation with a failed step', () => {
+    const cite = claimOf('DERIVED', [{ kind: 'DERIVATION', ref: DERIVATION_ID }]);
+    const failed = { status: 'FAIL', counts: { pass: 2, fail: 1, uncheckable: 0 } } as const;
+    const undecided = {
+      status: 'UNCHECKABLE',
+      counts: { pass: 2, fail: 0, uncheckable: 1 },
+    } as const;
+
+    rejects(ledgerOf(derived(failed)), cite, 'FAILED_DERIVATION');
+    // Undecided is not failed. It may be cited, and is labelled wherever it is shown.
+    expect(ledgerOf(derived(undecided), cite).claim(CLAIM_ID).claimType).toBe('DERIVED');
+    // A record cannot call itself a pass while counting a failed step.
+    rejects(
+      ledgerOf(),
+      derived({ status: 'PASS', counts: { pass: 2, fail: 1, uncheckable: 0 } }),
+      'INCONSISTENT_DERIVATION',
+    );
   });
 
   it('refuses to record the same execution or derivation twice', () => {

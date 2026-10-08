@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import process from 'node:process';
 import electronBinary from 'electron';
 
-const HARD_TIMEOUT_MS = 90_000;
+const HARD_TIMEOUT_MS = 150_000;
 
 const child = spawn(electronBinary, ['.'], {
   env: { ...process.env, SHEEP_SMOKE: '1' },

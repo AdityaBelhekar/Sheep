@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { claimStatusSchema, claimTypeSchema, evidenceRefSchema } from './claim';
+import { derivationFields } from './derivation';
 import { executionFields } from './execution';
 import {
   critiqueAxisSchema,
@@ -209,11 +210,15 @@ export const EVENT_PAYLOADS = {
     ...executionFields,
     peakMemoryBytes: byteCountSchema.optional(),
   }),
-  /** A derivation, by content address — what a `DERIVED` claim must point at. */
+  /**
+   * A derivation and the verdict a checker gave it — what a `DERIVED` claim
+   * must point at (P2, P4). Recorded whatever the verdict: a failed derivation
+   * is history too, and the ledger is what refuses to let it back a claim.
+   */
   'derivation.recorded': z.strictObject({
     ...sessionScope,
-    derivationId: idSchema,
-    bodyHash: sha256Schema,
+    ...derivationFields,
+    title: titleSchema.optional(),
   }),
 
   'claim.recorded': z.strictObject({

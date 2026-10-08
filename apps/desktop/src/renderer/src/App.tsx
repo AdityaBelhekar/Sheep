@@ -19,6 +19,7 @@ import { LabPane } from './panes/LabPane';
 import { LedgerPane } from './panes/LedgerPane';
 import { SessionsPane } from './panes/SessionsPane';
 import { StubPane } from './panes/StubPane';
+import { VerificationPane } from './panes/VerificationPane';
 
 type LogState =
   | { kind: 'pending' }
@@ -124,11 +125,15 @@ export function App(): ReactElement {
           )}
           {paneId === 'ledger' && <LedgerPane client={client} onStoreChanged={refreshLog} />}
           {paneId === 'lab' && <LabPane client={client} onStoreChanged={refreshLog} />}
+          {paneId === 'verification' && (
+            <VerificationPane client={client} onStoreChanged={refreshLog} />
+          )}
           {paneId === 'connections' && <ConnectionsPane client={client} />}
           {paneId !== 'sessions' &&
             paneId !== 'conversation' &&
             paneId !== 'ledger' &&
             paneId !== 'lab' &&
+            paneId !== 'verification' &&
             paneId !== 'connections' && <StubPane paneId={paneId} />}
         </main>
       </div>

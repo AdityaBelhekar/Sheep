@@ -35,6 +35,7 @@ import { cancelChat, sendChat } from './chat';
 import { cancelLabRun, labStatus, readExecutionBlob, readExecutions, startLabRun } from './lab';
 import { approveGate, cancelSession, protocolView, runSession } from './orchestrator';
 import { getVault } from './credentials';
+import { checkDerivation, getDerivationDetail, readDerivations } from './verification';
 import { logError } from './log';
 import { getEventLog, getStore } from './store';
 
@@ -288,6 +289,9 @@ export function createIpcRegistry(): IpcRegistry {
     .register('sheep:lab-cancel', (request) => ({ cancelled: cancelLabRun(request.runId) }))
     .register('sheep:executions-list', (request) => readExecutions(request.sessionId))
     .register('sheep:execution-blob', (request) => readExecutionBlob(request))
+    .register('sheep:derivation-check', (request) => checkDerivation(request))
+    .register('sheep:derivations-list', (request) => readDerivations(request.sessionId))
+    .register('sheep:derivation-get', (request) => getDerivationDetail(request.derivationId))
     .register('sheep:chat-cancel', (request) => ({ cancelled: cancelChat(request.runId) }))
     .register('sheep:connections-list', () => readConnections())
     .register('sheep:connection-create', async (request) => {

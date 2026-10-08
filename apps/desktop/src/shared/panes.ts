@@ -61,7 +61,7 @@ export const RESEARCH_PANES = [
     summary: 'Derivations checked step by step, and honestly labelled when they cannot be.',
     detail:
       'SymPy, pint and Z3 do the checking; a language model only routes a question to a checker. A step that cannot be verified is marked UNCHECKABLE rather than quietly assumed.',
-    arriving: 'Phases 43 to 48',
+    arriving: 'Checks routed from critiques arrive with Stage 8',
   },
   {
     id: 'artifacts',

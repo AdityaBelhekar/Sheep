@@ -50,6 +50,18 @@ export const CLEAN_RUN: Omit<
   artifacts: [{ path: 'figures/perplexity.png', hash: 'f1'.repeat(32), bytes: 18_204 }],
 };
 
+/** Everything about a derivation except which one it was: three steps, all of which follow. */
+export const CHECKED_DERIVATION: Omit<
+  EventPayload<'derivation.recorded'>,
+  'sessionId' | 'derivationId' | 'title'
+> = {
+  bodyHash: 'b0d1'.repeat(16),
+  verdictHash: 'c4ec'.repeat(16),
+  status: 'PASS',
+  counts: { pass: 3, fail: 0, uncheckable: 0 },
+  envLockHash: '10c4'.repeat(16),
+};
+
 export const ANTHROPIC_MODEL: ModelRef = {
   connectionId: CONNECTION_ID,
   vendorId: 'anthropic',
@@ -201,7 +213,8 @@ export const EVENT_FIXTURES: EventFixtures = {
   'derivation.recorded': {
     sessionId: SESSION_ID,
     derivationId: DERIVATION_ID,
-    bodyHash: PROMPT_HASH,
+    ...CHECKED_DERIVATION,
+    title: 'Perplexity bound under block sparsity',
   },
 
   'claim.recorded': {

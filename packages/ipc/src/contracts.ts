@@ -22,6 +22,9 @@ import {
   sessionStatusSchema,
   credentialKindSchema,
   credentialRefSchema,
+  derivationRecordSchema,
+  derivationSchema,
+  derivationVerdictSchema,
   idSchema,
   localProviderIdSchema,
   messageSchema,
@@ -77,6 +80,17 @@ const connectionsReply = z.object({
   /** Where secrets go on this machine, or `none` if nowhere safe does. */
   vaultBackend: z.union([vaultBackendSchema, z.literal('none')]),
   vaultDescription: z.string().min(1),
+});
+
+/**
+ * A checked derivation: the record, what was submitted, and every step's
+ * verdict. Returned by the check and by a later read, so the pane draws a
+ * derivation it just checked and one from last week the same way.
+ */
+const derivationDetailReply = z.object({
+  record: derivationRecordSchema,
+  derivation: derivationSchema,
+  verdict: derivationVerdictSchema,
 });
 
 /** One phase of the protocol, as the renderer draws it. */
@@ -494,6 +508,29 @@ export const IPC_CONTRACTS = {
       /** True when the blob is larger than what was sent. */
       truncated: z.boolean(),
     }),
+  },
+  /**
+   * Check a derivation step by step, and record it with its verdict.
+   *
+   * Answers when the checker has finished. The derivation is recorded whatever
+   * the verdict was: a failed one is history too, and the ledger is what
+   * refuses to let it back a claim.
+   */
+  'sheep:derivation-check': {
+    request: z.object({ sessionId: idSchema, derivation: derivationSchema }),
+    response: derivationDetailReply,
+  },
+  /** A session's derivations, newest first, and which claims each one backs. */
+  'sheep:derivations-list': {
+    request: z.object({ sessionId: idSchema }),
+    response: z.object({
+      derivations: z.array(derivationRecordSchema),
+      backing: z.array(z.object({ derivationId: idSchema, claimIds: z.array(idSchema) })),
+    }),
+  },
+  'sheep:derivation-get': {
+    request: z.object({ derivationId: idSchema }),
+    response: derivationDetailReply,
   },
   'sheep:chat-send': {
     request: z.object({

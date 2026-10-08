@@ -4,6 +4,7 @@ import type { DomainEventType } from '@sheep/core';
 import { EVENT_FIXTURES, SESSION_ID } from '@sheep/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { EventLog } from '../events/log';
+import { DERIVATIONS_PROJECTION } from './derivations';
 import { EXECUTIONS_PROJECTION } from './executions';
 import type { JsonValue } from '../events/json';
 import { MIGRATIONS } from '../migrations/definitions';
@@ -115,6 +116,13 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
           name: 'executions',
           lastSeq: 0,
           ddlVersion: EXECUTIONS_PROJECTION.ddlVersion,
+          behind: 0,
+          ready: true,
+        },
+        {
+          name: 'derivations',
+          lastSeq: 0,
+          ddlVersion: DERIVATIONS_PROJECTION.ddlVersion,
           behind: 0,
           ready: true,
         },

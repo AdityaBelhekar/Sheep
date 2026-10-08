@@ -1395,3 +1395,118 @@ select.field__input {
 .lab__controls .field__input--narrow {
   width: 6.5rem;
 }
+
+/* ── Verification ─────────────────────────────────────────────────────── */
+
+.verify {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.verify__compose,
+.verify__result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.verify__source {
+  height: 26rem;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.8rem;
+  white-space: pre;
+}
+
+.verify__toggle {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+}
+
+.verify__caution {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.verify__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.verify__table th,
+.verify__table td {
+  padding: 0.5rem 0.6rem;
+  border-top: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.verify__table thead th {
+  border-top: none;
+  color: var(--fg-muted);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* An undecided step is not allowed to blend in with the ones that passed. */
+.verify__table tr[data-status='UNCHECKABLE'] {
+  background: color-mix(in srgb, var(--warn) 9%, transparent);
+}
+
+.verify__table tr[data-status='FAIL'] {
+  background: color-mix(in srgb, var(--error) 9%, transparent);
+}
+
+.verify__reason {
+  margin: 0.3rem 0 0;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  user-select: text;
+}
+
+.formula {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.formula__math {
+  font-size: 1.05rem;
+  user-select: text;
+}
+
+.formula__latex {
+  color: var(--fg-muted);
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.badge[data-status='PASS'] {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.badge[data-status='FAIL'] {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.badge[data-status='UNCHECKABLE'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+@media (max-width: 70rem) {
+  .verify {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

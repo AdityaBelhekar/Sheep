@@ -6,6 +6,7 @@ import {
   type ClaimType,
   type EvidenceRef,
 } from './claim';
+import type { VerificationStatus } from './derivation';
 import type { Dispute, Resolution } from './dispute';
 import type { Position } from './protocol';
 import type { DomainEvent, DomainEventType } from './events';
@@ -28,7 +29,7 @@ import type { DomainEvent, DomainEventType } from './events';
  *
  * Claim types are enforced here too (P2). An `EMPIRICAL` claim must point at a
  * recorded execution that exited cleanly, a `DERIVED` claim at a recorded
- * derivation, a `CITED` claim at a citation — at the moment it is recorded,
+ * derivation with no step that fails its check, a `CITED` claim at a citation — at the moment it is recorded,
  * not eventually. `CITED` and `CONJECTURE` claims may support others but can
  * never be marked supported themselves: they cannot establish anything alone.
  *
@@ -74,6 +75,8 @@ export const LEDGER_ERROR_CODES = [
   'DUPLICATE_EXECUTION',
   'INCONSISTENT_EXECUTION',
   'DUPLICATE_DERIVATION',
+  'INCONSISTENT_DERIVATION',
+  'FAILED_DERIVATION',
   'EMPIRICAL_WITHOUT_EXECUTION',
   'DERIVED_WITHOUT_DERIVATION',
   'CITED_WITHOUT_CITATION',
@@ -180,7 +183,8 @@ export class Ledger {
   readonly #resolutions = new Map<string, Resolution>();
   /** Execution id → exit code. */
   readonly #executions = new Map<string, number>();
-  readonly #derivations = new Set<string>();
+  /** Derivation id → the verdict its checker gave it. */
+  readonly #derivations = new Map<string, VerificationStatus>();
   /** `round|claim|participant` → commitment hash. */
   readonly #commitments = new Map<string, string>();
   readonly #reveals: RevealedPosition[] = [];
@@ -341,14 +345,21 @@ export class Ledger {
       }
 
       case 'derivation.recorded': {
-        const { derivationId } = event.payload;
+        const { derivationId, status, counts } = event.payload;
+        // Backing is decided on the status, so it must not contradict the steps.
+        if (counts.fail > 0 && status !== 'FAIL') {
+          throw new LedgerError(
+            'INCONSISTENT_DERIVATION',
+            `derivation ${derivationId} is recorded as ${status} with ${String(counts.fail)} failed step(s)`,
+          );
+        }
         if (this.#derivations.has(derivationId)) {
           throw new LedgerError(
             'DUPLICATE_DERIVATION',
             `derivation ${derivationId} is already recorded`,
           );
         }
-        this.#derivations.add(derivationId);
+        this.#derivations.set(derivationId, status);
         return;
       }
 
@@ -573,8 +584,17 @@ export class Ledger {
         return;
       }
       case 'DERIVATION': {
-        if (!this.#derivations.has(evidence.ref)) {
+        const status = this.#derivations.get(evidence.ref);
+        if (status === undefined) {
           throw new LedgerError('UNKNOWN_DERIVATION', `no derivation ${evidence.ref} was recorded`);
+        }
+        // An UNCHECKABLE derivation may still be cited: it is labelled as what
+        // it is wherever it is shown. One with a step that fails may not.
+        if (status === 'FAIL') {
+          throw new LedgerError(
+            'FAILED_DERIVATION',
+            `derivation ${evidence.ref} has a step that does not follow; a failed derivation backs nothing`,
+          );
         }
         return;
       }
