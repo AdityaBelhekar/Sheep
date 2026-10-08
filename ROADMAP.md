@@ -205,7 +205,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   → `chore(sandbox): bundle pinned cpython 3.12 runtime`
 - [x] **37. Runner protocol** — stdio JSON-RPC, live stdout/stderr streaming, structured result envelope.
   → `feat(sandbox): python runner with json-rpc protocol`
-- [ ] **38. Windows Job Object isolation** — memory cap, CPU rate cap, wall-clock timeout, kill-on-close, jailed working directory.
+- [x] **38. Windows Job Object isolation** — memory cap, CPU rate cap, wall-clock timeout, kill-on-close, jailed working directory.
   → `feat(sandbox): job object resource isolation`
 - [ ] **39. Network denial** — cleared proxy env, `sitecustomize.py` refusing non-loopback sockets, optional per-child firewall rule.
   *Note:* defense-in-depth against runaway jobs, **not** a hard boundary against hostile code. → `feat(sandbox): layered network denial`

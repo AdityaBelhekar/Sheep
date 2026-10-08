@@ -1,23 +1,38 @@
 // The ambient declaration has to travel with this file into other packages' programs.
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./raw.d.ts" />
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import { pipeline } from 'node:stream/promises';
+import { promisify } from 'node:util';
 import guardSource from '../python/guard.py?raw';
 import runnerSource from '../python/runner.py?raw';
 import type { PythonRuntime } from './runtime';
 
 /**
- * Runs Python in the bundled runtime and reports what happened.
+ * Runs Python in the bundled runtime, confined, and reports what happened.
  *
- * One process per run: Node starts the runner, hands it a single JSON-RPC
+ * One process tree per run: Node starts the runner, hands it a single JSON-RPC
  * `run` request on stdin, and reads `output` notifications from its stdout
  * until the result arrives. There is no long-lived interpreter to leak state
  * from one run into the next.
+ *
+ * Confinement is layered, and the layers do not trust each other:
+ *
+ * - a **Job Object** caps memory, CPU share and process count, and kills the
+ *   whole tree when the runner goes away for any reason;
+ * - a **wall clock** in the runner, backed by one here in case the runner is
+ *   the thing that hung;
+ * - a **low integrity level**, so the OS itself refuses writes outside the
+ *   jail directory;
+ * - an **audit hook** that refuses reads outside the jail and the runtime, and
+ *   refuses to start processes.
+ *
+ * It contains runaway code. It is not a boundary against code written to
+ * escape — see guard.py.
  */
 
 export type OutputStream = 'stdout' | 'stderr';
@@ -30,10 +45,11 @@ export interface OutputChunk {
 /**
  * - `ok` — the script exited 0.
  * - `error` — the script exited non-zero; `stderr` usually says why.
+ * - `timeout` — it ran out of wall clock and was killed.
  * - `cancelled` — the caller aborted it.
  * - `crashed` — the runner itself failed; `detail` says how.
  */
-export type RunStatus = 'ok' | 'error' | 'cancelled' | 'crashed';
+export type RunStatus = 'ok' | 'error' | 'timeout' | 'cancelled' | 'crashed';
 
 /** A file the script left in its working directory. */
 export interface RunArtifact {
@@ -43,10 +59,45 @@ export interface RunArtifact {
   readonly sha256: string;
 }
 
+export interface SandboxLimits {
+  /** Committed memory per process. Past it, allocation fails. */
+  readonly memoryMb: number;
+  /** Share of the whole machine's CPU, 1–100. A hard cap, not a priority. */
+  readonly cpuPercent: number;
+  /** Wall clock, after which the run is killed. */
+  readonly timeoutMs: number;
+}
+
+export const DEFAULT_LIMITS: SandboxLimits = {
+  memoryMb: 1024,
+  cpuPercent: 50,
+  timeoutMs: 60_000,
+};
+
+/**
+ * The runner and the script, and nothing else. The audit hook already refuses
+ * to start processes; this is what stops a script that got around the hook.
+ */
+const MAX_PROCESSES = 2;
+
+/**
+ * One thread per numeric library. Left alone, each BLAS reserves a buffer per
+ * core up front, which on a large machine exhausts the memory cap before the
+ * script has computed anything — and threaded reductions do not sum in a
+ * repeatable order anyway.
+ */
+const SINGLE_THREADED = Object.fromEntries(
+  ['OPENBLAS', 'OMP', 'MKL', 'NUMEXPR', 'VECLIB'].map((name) => [`${name}_NUM_THREADS`, '1']),
+);
+
+/** How long past its own deadline the runner gets before it is killed too. */
+const RUNNER_GRACE_MS = 5_000;
+
 export interface RunRequest {
   readonly code: string;
   /** Names the run; generated when absent. */
   readonly executionId?: string;
+  readonly limits?: Partial<SandboxLimits>;
   readonly signal?: AbortSignal;
   /** Called as the script prints, not after it finishes. */
   readonly onOutput?: (chunk: OutputChunk) => void;
@@ -64,6 +115,10 @@ export interface RunResult {
   readonly truncated: boolean;
   readonly artifacts: readonly RunArtifact[];
   readonly codeHash: string;
+  /** The limits the run was actually held to. */
+  readonly limits: SandboxLimits;
+  /** Largest committed memory of any one process in the run, when known. */
+  readonly peakMemoryBytes: number | null;
   /** Set when `status` needs explaining beyond the streams. */
   readonly detail?: string;
   /** Where the artifacts are, until `dispose`. */
@@ -78,12 +133,21 @@ export interface SandboxOptions {
   readonly root: string;
 }
 
+export class SandboxLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SandboxLimitError';
+  }
+}
+
 const ENTRY = 'main.py';
 
 interface RunnerReply {
   readonly exitCode: number;
+  readonly timedOut: boolean;
   readonly durationMs: number;
   readonly truncated: boolean;
+  readonly peakMemoryBytes: number | null;
 }
 
 type RunnerMessage =
@@ -91,39 +155,83 @@ type RunnerMessage =
   | { id: number; result: RunnerReply }
   | { id: number; error: { message: string } };
 
+type RunOutcome = Pick<
+  RunResult,
+  | 'status'
+  | 'exitCode'
+  | 'durationMs'
+  | 'stdout'
+  | 'stderr'
+  | 'truncated'
+  | 'peakMemoryBytes'
+  | 'detail'
+>;
+
 export class Sandbox {
   readonly runtime: PythonRuntime;
-  readonly #root: string;
   readonly #runner: string;
   readonly #guard: string;
+  /** The only tree a run can write to. Labelled low integrity, once. */
+  readonly #jail: string;
+  readonly #cache: string;
+  #labelled: Promise<void> | undefined;
 
   constructor(options: SandboxOptions) {
     this.runtime = options.runtime;
-    this.#root = options.root;
 
-    // Written from the bundle on every start, outside anything a run can
-    // write to, so the code that confines a script is never the script's to edit.
-    const runnerDir = join(this.#root, 'runner');
+    // Written from the bundle on every start, outside the jail, so the code
+    // that confines a script is never the script's to edit.
+    const runnerDir = join(options.root, 'runner');
     mkdirSync(runnerDir, { recursive: true });
     this.#runner = join(runnerDir, 'runner.py');
     writeFileSync(this.#runner, runnerSource);
     this.#guard = join(runnerDir, 'guard.py');
     writeFileSync(this.#guard, guardSource);
+
+    this.#jail = join(options.root, 'jail');
+    // Shared between runs: matplotlib's font cache takes seconds to build.
+    this.#cache = join(this.#jail, 'cache');
+    mkdirSync(join(this.#cache, 'mpl'), { recursive: true });
   }
 
   async run(request: RunRequest): Promise<RunResult> {
+    const limits = resolveLimits(request.limits);
+    await (this.#labelled ??= labelLowIntegrity(this.#jail));
+
     const executionId = request.executionId ?? randomUUID();
-    const runDir = join(this.#root, 'runs', executionId);
+    const runDir = join(this.#jail, 'runs', executionId);
     const workDir = join(runDir, 'work');
+    const tempDir = join(runDir, 'tmp');
     mkdirSync(workDir, { recursive: true });
+    mkdirSync(tempDir);
     writeFileSync(join(workDir, ENTRY), request.code);
 
-    const outcome = await this.#drive(request, {
+    const guardConfig = {
+      entry: ENTRY,
+      write: [runDir, this.#cache],
+      // Fonts, because matplotlib enumerates them; nothing else of the machine's.
+      read: [this.runtime.dir, join(process.env['SystemRoot'] ?? 'C:\\Windows', 'Fonts')],
+    };
+
+    const outcome = await this.#drive(request, limits, {
       python: this.runtime.python,
       // -s -P: no user site-packages, and no implicit sys.path entry.
       // -B: the runtime is never written to. -X utf8: output decodes one way.
-      args: ['-X', 'utf8', '-s', '-P', '-B', this.#guard, ENTRY],
+      args: ['-X', 'utf8', '-s', '-P', '-B', this.#guard, JSON.stringify(guardConfig)],
       workDir,
+      env: {
+        ...process.env,
+        ...SINGLE_THREADED,
+        TEMP: tempDir,
+        TMP: tempDir,
+        MPLCONFIGDIR: join(this.#cache, 'mpl'),
+      },
+      limits: {
+        memoryBytes: limits.memoryMb * 1024 * 1024,
+        cpuPercent: limits.cpuPercent,
+        timeoutMs: limits.timeoutMs,
+        maxProcesses: MAX_PROCESSES,
+      },
     });
 
     return {
@@ -131,6 +239,7 @@ export class Sandbox {
       ...outcome,
       artifacts: await collectArtifacts(workDir),
       codeHash: createHash('sha256').update(request.code).digest('hex'),
+      limits,
       workDir,
       dispose: () => {
         rmSync(runDir, { recursive: true, force: true });
@@ -140,13 +249,9 @@ export class Sandbox {
 
   #drive(
     request: RunRequest,
+    limits: SandboxLimits,
     params: Record<string, unknown>,
-  ): Promise<
-    Pick<
-      RunResult,
-      'status' | 'exitCode' | 'durationMs' | 'stdout' | 'stderr' | 'truncated' | 'detail'
-    >
-  > {
+  ): Promise<RunOutcome> {
     const started = Date.now();
     const child = spawn(this.runtime.python, ['-I', '-S', this.#runner], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -157,14 +262,22 @@ export class Sandbox {
     let reply: RunnerReply | undefined;
     let failure: string | undefined;
     let runnerStderr = '';
-    let cancelled = false;
+    let stopped: 'cancelled' | 'timeout' | undefined;
 
-    const abort = (): void => {
-      cancelled = true;
+    // Killing the runner closes the last handle on the job, and the kernel
+    // ends everything in it: there is no orphan to chase.
+    const stop = (why: 'cancelled' | 'timeout'): void => {
+      stopped ??= why;
       child.kill();
+    };
+    const abort = (): void => {
+      stop('cancelled');
     };
     if (request.signal?.aborted) abort();
     request.signal?.addEventListener('abort', abort, { once: true });
+    const backstop = setTimeout(() => {
+      stop('timeout');
+    }, limits.timeoutMs + RUNNER_GRACE_MS);
 
     child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
       runnerStderr += chunk;
@@ -197,32 +310,66 @@ export class Sandbox {
         failure = `the runner could not start: ${error.message}`;
       });
       child.on('close', () => {
+        clearTimeout(backstop);
         request.signal?.removeEventListener('abort', abort);
         const streams = { stdout: out.stdout, stderr: out.stderr };
 
-        if (reply && !cancelled) {
+        if (reply && !stopped) {
           resolve({
-            status: reply.exitCode === 0 ? 'ok' : 'error',
-            exitCode: reply.exitCode,
+            status: reply.timedOut ? 'timeout' : reply.exitCode === 0 ? 'ok' : 'error',
+            // A killed process has an exit code, but not one it chose.
+            exitCode: reply.timedOut ? -1 : reply.exitCode,
             durationMs: reply.durationMs,
             truncated: reply.truncated,
+            peakMemoryBytes: reply.peakMemoryBytes,
             ...streams,
           });
           return;
         }
         resolve({
-          status: cancelled ? 'cancelled' : 'crashed',
+          status: stopped ?? 'crashed',
           exitCode: -1,
           durationMs: Date.now() - started,
           truncated: false,
+          peakMemoryBytes: null,
           ...streams,
-          ...(cancelled
+          ...(stopped
             ? {}
             : { detail: failure ?? (runnerStderr.trim() || 'the runner exited without a result') }),
         });
       });
     });
   }
+}
+
+function resolveLimits(requested: Partial<SandboxLimits> = {}): SandboxLimits {
+  const limits = { ...DEFAULT_LIMITS, ...requested };
+  const within = (name: keyof SandboxLimits, min: number, max: number): void => {
+    const value = limits[name];
+    if (!Number.isInteger(value) || value < min || value > max) {
+      throw new SandboxLimitError(
+        `${name} must be a whole number from ${String(min)} to ${String(max)}`,
+      );
+    }
+  };
+  // The floor is what the interpreter itself needs to start.
+  within('memoryMb', 64, 65_536);
+  within('cpuPercent', 1, 100);
+  within('timeoutMs', 100, 3_600_000);
+  return limits;
+}
+
+/**
+ * Marks a directory, and everything later created in it, as writable by a
+ * low-integrity process. Nothing else on the machine is, which is the jail.
+ */
+async function labelLowIntegrity(directory: string): Promise<void> {
+  // ponytail: Windows only, like the Job Object; POSIX confinement is Phase 72.
+  if (process.platform !== 'win32') return;
+  const icacls = join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'icacls.exe');
+  await promisify(execFile)(icacls, [directory, '/setintegritylevel', '(OI)(CI)L'], {
+    windowsHide: true,
+  });
 }
 
 /**

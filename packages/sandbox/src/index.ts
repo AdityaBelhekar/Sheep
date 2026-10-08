@@ -21,3 +21,4 @@ export {
   type RunStatus,
   type SandboxOptions,
 } from './sandbox';
+export { DEFAULT_LIMITS, SandboxLimitError, type SandboxLimits } from './sandbox';
