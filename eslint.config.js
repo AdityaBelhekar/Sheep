@@ -5,7 +5,14 @@ import prettier from 'eslint-config-prettier/flat';
 
 export default tseslint.config(
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/.vite/**', '**/coverage/**'],
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/out/**',
+      '**/.vite/**',
+      '**/coverage/**',
+      'packages/sandbox/runtime/**',
+    ],
   },
   js.configs.recommended,
   tseslint.configs.recommended,

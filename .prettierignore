@@ -9,3 +9,6 @@ package-lock.json
 # hand-maintained prose and local tooling config
 *.md
 .claude/
+packages/sandbox/runtime/
+packages/sandbox/.runtime-cache/
+packages/sandbox/runtime.lock.json

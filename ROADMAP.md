@@ -201,7 +201,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 
 ## Stage 6 — Execution sandbox `Phases 36–42`
 
-- [ ] **36. Bundled Python runtime** — pinned CPython 3.12 (python-build-standalone) + locked wheels (numpy, scipy, sympy, pandas, matplotlib, scikit-learn, networkx), fetch script, lock hash. *Deliberately not system Python 3.14 — wheel availability is unreliable.*
+- [x] **36. Bundled Python runtime** — pinned CPython 3.12 (python-build-standalone) + locked wheels (numpy, scipy, sympy, pandas, matplotlib, scikit-learn, networkx), fetch script, lock hash. *Deliberately not system Python 3.14 — wheel availability is unreliable.*
   → `chore(sandbox): bundle pinned cpython 3.12 runtime`
 - [ ] **37. Runner protocol** — stdio JSON-RPC, live stdout/stderr streaming, structured result envelope.
   → `feat(sandbox): python runner with json-rpc protocol`
