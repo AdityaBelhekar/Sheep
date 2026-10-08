@@ -209,7 +209,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   → `feat(sandbox): job object resource isolation`
 - [x] **39. Network denial** — cleared proxy env, `sitecustomize.py` refusing non-loopback sockets, optional per-child firewall rule.
   *Note:* defense-in-depth against runaway jobs, **not** a hard boundary against hostile code. → `feat(sandbox): layered network denial`
-- [ ] **40. Determinism** — `PYTHONHASHSEED`, explicit numpy seeding, Agg backend, `SOURCE_DATE_EPOCH`, env-lock hash recorded per run.
+- [x] **40. Determinism** — `PYTHONHASHSEED`, explicit numpy seeding, Agg backend, `SOURCE_DATE_EPOCH`, env-lock hash recorded per run.
   *Done when:* the same script run twice produces byte-identical figures. → `feat(sandbox): deterministic execution environment`
 - [ ] **41. Execution records** — persist spec/code/env-lock/seed/exit/stdout/stderr, ingest artifacts into CAS, link to claims.
   → `feat(sandbox): execution records and artifact ingestion`

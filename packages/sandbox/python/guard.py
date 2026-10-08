@@ -213,6 +213,32 @@ def install_network_denial():
     sys.addaudithook(hook)
 
 
+def seed_everything(seed):
+    """Seeds every generator a script reaches for without thinking about it.
+
+    PYTHONHASHSEED is already fixed by the environment, so set and dict order
+    of strings repeats. This covers `random`, numpy's legacy global state, and
+    numpy's `default_rng()` — which, called with no seed, would otherwise draw
+    fresh entropy from the OS and make the run unrepeatable by design. Unseeded
+    generators are instead spawned from the run's seed, in the order they are
+    created. A script that passes its own seed gets exactly what it asked for.
+    """
+    import random
+
+    random.seed(seed)
+
+    import numpy
+
+    numpy.random.seed(seed)
+    root = numpy.random.SeedSequence(seed)
+    default_rng = numpy.random.default_rng
+
+    def seeded_default_rng(seed=None):
+        return default_rng(root.spawn(1)[0] if seed is None else seed)
+
+    numpy.random.default_rng = seeded_default_rng
+
+
 def execute(entry):
     sys.argv = [entry]
     scope = {"__name__": "__main__", "__file__": entry, "__builtins__": __builtins__}
@@ -243,6 +269,7 @@ def main():
         lower_integrity()
     install_jail(config)
     install_network_denial()
+    seed_everything(config["seed"])
     execute(config["entry"])
 
 

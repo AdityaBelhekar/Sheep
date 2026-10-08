@@ -102,6 +102,8 @@ export interface RunRequest {
   /** Names the run; generated when absent. */
   readonly executionId?: string;
   readonly limits?: Partial<SandboxLimits>;
+  /** Seeds hashing and every random generator. Same seed, same run. Default 0. */
+  readonly seed?: number;
   readonly signal?: AbortSignal;
   /** Called as the script prints, not after it finishes. */
   readonly onOutput?: (chunk: OutputChunk) => void;
@@ -119,6 +121,9 @@ export interface RunResult {
   readonly truncated: boolean;
   readonly artifacts: readonly RunArtifact[];
   readonly codeHash: string;
+  readonly seed: number;
+  /** Which interpreter and wheels ran it: the runtime's lock hash. */
+  readonly envLockHash: string;
   /** The limits the run was actually held to. */
   readonly limits: SandboxLimits;
   /** Largest committed memory of any one process in the run, when known. */
@@ -198,10 +203,16 @@ export class Sandbox {
     // Shared between runs: matplotlib's font cache takes seconds to build.
     this.#cache = join(this.#jail, 'cache');
     mkdirSync(join(this.#cache, 'mpl'), { recursive: true });
+    writeFileSync(join(this.#cache, 'mpl', 'matplotlibrc'), MATPLOTLIBRC);
   }
 
   async run(request: RunRequest): Promise<RunResult> {
     const limits = resolveLimits(request.limits);
+    const seed = request.seed ?? 0;
+    // The range PYTHONHASHSEED accepts.
+    if (!Number.isInteger(seed) || seed < 0 || seed > 0xffff_ffff) {
+      throw new SandboxLimitError('seed must be a whole number from 0 to 4294967295');
+    }
     await (this.#labelled ??= labelLowIntegrity(this.#jail));
 
     const executionId = request.executionId ?? randomUUID();
@@ -214,6 +225,7 @@ export class Sandbox {
 
     const guardConfig = {
       entry: ENTRY,
+      seed,
       write: [runDir, this.#cache],
       // Fonts, because matplotlib enumerates them; nothing else of the machine's.
       read: [this.runtime.dir, join(SYSTEM_ROOT, 'Fonts')],
@@ -228,6 +240,7 @@ export class Sandbox {
       env: {
         ...scrubbedEnv(tempDir),
         ...SINGLE_THREADED,
+        ...deterministicEnv(seed),
         MPLCONFIGDIR: join(this.#cache, 'mpl'),
       },
       limits: {
@@ -243,6 +256,8 @@ export class Sandbox {
       ...outcome,
       artifacts: await collectArtifacts(workDir),
       codeHash: createHash('sha256').update(request.code).digest('hex'),
+      seed,
+      envLockHash: this.runtime.lockHash,
       limits,
       workDir,
       dispose: () => {
@@ -344,6 +359,31 @@ export class Sandbox {
       });
     });
   }
+}
+
+/**
+ * A fixed moment for anything that stamps its output with the build time:
+ * matplotlib's PDF and SVG writers honour it. 2000-01-01T00:00:00Z — late
+ * enough for formats that cannot represent dates before 1980.
+ */
+const SOURCE_DATE_EPOCH = '946684800';
+
+/**
+ * Agg draws without a display and draws the same pixels everywhere. The
+ * hashsalt fixes the element ids matplotlib would otherwise randomise in SVG.
+ */
+const MATPLOTLIBRC = ['backend: Agg', 'svg.hashsalt: sheep', ''].join('\n');
+
+/** What has to hold in the environment for the same script to do the same thing twice. */
+function deterministicEnv(seed: number): Record<string, string> {
+  return {
+    // Without it, str hashes — and so set order — change on every start.
+    PYTHONHASHSEED: String(seed),
+    SOURCE_DATE_EPOCH,
+    TZ: 'UTC',
+    // For a script that builds its own generators.
+    SHEEP_SEED: String(seed),
+  };
 }
 
 /**
