@@ -12,7 +12,9 @@
       "pandas",
       "matplotlib",
       "scikit-learn",
-      "networkx"
+      "networkx",
+      "pint",
+      "z3-solver"
     ],
     "wheels": [
       {
@@ -32,6 +34,18 @@
         "version": "0.12.1",
         "url": "https://files.pythonhosted.org/packages/e7/05/c19819d5e3d95294a6f5947fb9b9629efb316b96de511b418c53d245aae6/cycler-0.12.1-py3-none-any.whl",
         "sha256": "85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30"
+      },
+      {
+        "name": "flexcache",
+        "version": "0.3",
+        "url": "https://files.pythonhosted.org/packages/27/cd/c883e1a7c447479d6e13985565080e3fea88ab5a107c21684c813dba1875/flexcache-0.3-py3-none-any.whl",
+        "sha256": "d43c9fea82336af6e0115e308d9d33a185390b8346a017564611f1466dcd2e32"
+      },
+      {
+        "name": "flexparser",
+        "version": "0.4",
+        "url": "https://files.pythonhosted.org/packages/fe/5e/3be305568fe5f34448807976dc82fc151d76c3e0e03958f34770286278c1/flexparser-0.4-py3-none-any.whl",
+        "sha256": "3738b456192dcb3e15620f324c447721023c0293f6af9955b481e91d00179846"
       },
       {
         "name": "fonttools",
@@ -100,6 +114,18 @@
         "sha256": "a2b55dd6b2a4c4b7d87ffa56bdb33fdc5fdb9a462173861a7bc097f17d91cb09"
       },
       {
+        "name": "Pint",
+        "version": "0.26.1",
+        "url": "https://files.pythonhosted.org/packages/6d/5c/9507ea3c732f8a259f45ddf190a741e9bf7d3fe229b5d473917ee6efbf1e/pint-0.26.1-py3-none-any.whl",
+        "sha256": "e982b129415c09c63308f314ae44697d83e5c96f253bcc0d5b833fc3329eb6d4"
+      },
+      {
+        "name": "platformdirs",
+        "version": "4.12.4",
+        "url": "https://files.pythonhosted.org/packages/f4/ba/223e00b885e960edd5d4b4d178c88acce019bd5b83786093681b8c393492/platformdirs-4.12.4-py3-none-any.whl",
+        "sha256": "78bfb9db2a8471ed7eebe3c3c932da413911042994e699b384fbb4493fa872d7"
+      },
+      {
         "name": "pyparsing",
         "version": "3.3.3",
         "url": "https://files.pythonhosted.org/packages/38/bb/d215ee7c73b61497b28a5503f9f53523f294fcc936762b7caf90e0c1c2b5/pyparsing-3.3.3-py3-none-any.whl",
@@ -142,10 +168,22 @@
         "sha256": "cd8b60b5641b45c67bbf73c64c843235fc2d8a480c87389f52f5dbee893b86be"
       },
       {
+        "name": "typing_extensions",
+        "version": "4.16.0",
+        "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+      },
+      {
         "name": "tzdata",
         "version": "2026.5",
         "url": "https://files.pythonhosted.org/packages/94/21/1e5995a1c920cce14e4bffae20c665ec10e7ed03ab25e006cd741092b718/tzdata-2026.5-py2.py3-none-any.whl",
         "sha256": "b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac"
+      },
+      {
+        "name": "z3-solver",
+        "version": "5.1.0.0",
+        "url": "https://files.pythonhosted.org/packages/3f/5a/e3651dc6c976bc44861f4ba0167366a1ce0b11b3bcbad7377f0d28f9f513/z3_solver-5.1.0.0-py3-none-win_amd64.whl",
+        "sha256": "1561efd36e06f4cb7cbf11b63a2fba8fc8fdeb9c5754df90c84f9bd7a4864552"
       }
     ]
   }

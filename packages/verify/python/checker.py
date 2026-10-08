@@ -418,6 +418,172 @@ def check_step(raw, previous, known, symbols):
         return stated, UNCHECKABLE, f"the checker failed: {type(error).__name__}: {error}", "none"
 
 
+# ── Dimensions ──────────────────────────────────────────────────────────────
+
+_registry = None
+
+
+def registry():
+    """pint's unit registry, built on first use: most derivations declare no units."""
+    global _registry
+    if _registry is None:
+        import pint
+
+        _registry = pint.UnitRegistry(cache_folder=None)
+    return _registry
+
+
+class Inconsistent(Exception):
+    """An expression that adds, compares or exponentiates unlike quantities."""
+
+
+class Undeclared(Exception):
+    """A symbol with no units to go on."""
+
+
+# Zero is zero metres and zero seconds alike: it fits whatever it is compared with.
+ANY = object()
+
+DIMENSION_PRESERVING = (
+    sympy.Abs,
+    sympy.re,
+    sympy.im,
+    sympy.conjugate,
+    sympy.floor,
+    sympy.ceiling,
+    sympy.Min,
+    sympy.Max,
+)
+
+
+def same(left, right):
+    """Equal as dimensions. Exponents are compared with a tolerance: a cube
+    root cubed is 0.333... three times over, and still a whole power."""
+    return all(
+        abs(left.get(key, 0) - right.get(key, 0)) < 1e-9 for key in set(left) | set(right)
+    )
+
+
+def show(dimension):
+    return str(dimension) if any(abs(power) > 1e-9 for power in dimension.values()) else "dimensionless"
+
+
+class Dimensions:
+    """Works out what kind of quantity an expression is, from its symbols' units."""
+
+    def __init__(self, declared):
+        self.none = registry().parse_units("").dimensionality
+        self.units = {}
+        for name, text in declared.items():
+            try:
+                self.units[name] = registry().parse_units(text).dimensionality
+            except Exception:
+                raise Unreadable(f"the units of {name} could not be read: {text}") from None
+
+    def common(self, parts, verb):
+        found = [dimension for dimension in map(self.of, parts) if dimension is not ANY]
+        for dimension in found[1:]:
+            if not same(dimension, found[0]):
+                raise Inconsistent(f"it {verb} {show(found[0])} and {show(dimension)}")
+        return found[0] if found else ANY
+
+    def pure(self, expression, what):
+        dimension = self.of(expression)
+        if dimension is not ANY and not same(dimension, self.none):
+            raise Inconsistent(f"{what} has to be dimensionless, but is {show(dimension)}")
+
+    def of(self, expression):
+        if expression.is_zero:
+            return ANY
+        if expression.is_number:
+            return self.none
+        if expression.is_Symbol:
+            if expression in _RATES:
+                return self.of(_RATES[expression])
+            if expression.name not in self.units:
+                raise Undeclared(expression.name)
+            return self.units[expression.name]
+        if expression.is_Add:
+            return self.common(expression.args, "adds")
+        if expression.is_Mul:
+            product = self.none
+            for factor in expression.args:
+                dimension = self.of(factor)
+                if dimension is ANY:
+                    return ANY
+                product = product * dimension
+            return product
+        if expression.is_Pow:
+            base, exponent = expression.args
+            if exponent.is_number:
+                dimension = self.of(base)
+                if dimension is ANY:
+                    return ANY
+                return dimension ** (int(exponent) if exponent.is_Integer else float(exponent))
+            self.pure(exponent, "an exponent")
+            self.pure(base, "the base of a symbolic power")
+            return self.none
+        if isinstance(expression, sympy.Derivative):
+            dimension = self.of(expression.expr)
+            for variable, count in expression.variable_count:
+                dimension = dimension / self.of(variable) ** int(count)
+            return dimension
+        if isinstance(expression, sympy.Integral):
+            dimension = self.of(expression.function)
+            for limit in expression.limits:
+                dimension = dimension * self.of(limit[0])
+            return dimension
+        if isinstance(expression, DIMENSION_PRESERVING):
+            return self.common(expression.args, "compares")
+        if expression.is_Function:
+            for argument in expression.args:
+                self.pure(argument, f"the argument of {expression.func.__name__}")
+            return self.none
+        raise Undeclared(sympy.sstr(expression))
+
+    def check(self, statement):
+        try:
+            sides = [side for side in map(self.of, statement.sides) if side is not ANY]
+        except Inconsistent as error:
+            return FAIL, str(error)
+        except Undeclared as error:
+            return UNCHECKABLE, f"no units are declared for {error}"
+        if not sides:
+            return PASS, "zero fits any dimension"
+        if len(sides) == 2 and not same(*sides):
+            return (
+                FAIL,
+                f"the left side is {show(sides[0])} but the right side is {show(sides[1])}",
+            )
+        return PASS, ("both sides are " if statement.is_equation else "it is ") + show(sides[0])
+
+
+def check_units(request, emit):
+    """Whether each reported quantity is the kind of quantity it was expected to be."""
+    for item in request["quantities"]:
+        finding = {"name": item["name"], "factor": None}
+        units, expected = item["units"], item["expected"]
+        try:
+            have, want = registry().parse_units(units), registry().parse_units(expected)
+        except Exception as error:
+            reason = f"the units could not be read: {error}"
+            emit({"quantity": {**finding, "status": UNCHECKABLE, "reason": reason}})
+            continue
+        if not same(have.dimensionality, want.dimensionality):
+            reason = (
+                f"{units} is {show(have.dimensionality)}, "
+                f"but {expected} is {show(want.dimensionality)}"
+            )
+            emit({"quantity": {**finding, "status": FAIL, "reason": reason}})
+            continue
+        try:
+            factor = float(registry().Quantity(1, have).to(want).magnitude)
+            reason = f"1 {units} = {factor:g} {expected}"
+        except Exception:
+            factor, reason = None, "the same kind of quantity, on a scale with an offset"
+        emit({"quantity": {**finding, "status": PASS, "reason": reason, "factor": factor}})
+
+
 def check_derivation(derivation, emit):
     symbols = {
         name: sympy.Symbol(name, **dict.fromkeys(spec.get("assumptions") or (), True))
@@ -426,9 +592,31 @@ def check_derivation(derivation, emit):
     known = {}
     previous = None
 
+    declared = {
+        name: spec["units"]
+        for name, spec in (derivation.get("symbols") or {}).items()
+        if spec.get("units") is not None
+    }
+    try:
+        dimensions = Dimensions(declared) if declared else None
+    except Unreadable as error:
+        dimensions = str(error)
+
+    def dimensional(statement):
+        """None when the derivation declares no units: the check was not asked for."""
+        if dimensions is None or statement is None:
+            return None
+        if isinstance(dimensions, str):
+            return {"status": UNCHECKABLE, "reason": dimensions}
+        try:
+            status, reason = dimensions.check(statement)
+        except Exception as error:
+            status, reason = UNCHECKABLE, f"the dimensional check failed: {error}"
+        return {"status": status, "reason": reason}
+
     def rendered(statement):
         latex, mathml = statement.render() if statement else (None, None)
-        return {"latex": latex, "mathml": mathml}
+        return {"latex": latex, "mathml": mathml, "dimensions": dimensional(statement)}
 
     for given in derivation["given"]:
         statement, problem = None, None
@@ -455,6 +643,11 @@ def check_derivation(derivation, emit):
             statement, status, reason, method = check_step(raw, previous, known, symbols)
             known[raw["id"]] = statement
             previous = raw["id"]
+        shown = rendered(statement)
+        # A step can follow algebraically and still equate a length to a time.
+        if status != FAIL and shown["dimensions"] and shown["dimensions"]["status"] == FAIL:
+            status, method = FAIL, "dimensional"
+            reason = "dimensionally inconsistent: " + shown["dimensions"]["reason"]
         emit(
             {
                 "step": {
@@ -462,13 +655,16 @@ def check_derivation(derivation, emit):
                     "status": status,
                     "reason": reason,
                     "method": method,
-                    **rendered(statement),
+                    **shown,
                 }
             }
         )
 
 
-HANDLERS = {"derivation": lambda request, emit: check_derivation(request["derivation"], emit)}
+HANDLERS = {
+    "derivation": lambda request, emit: check_derivation(request["derivation"], emit),
+    "units": check_units,
+}
 
 
 def main():

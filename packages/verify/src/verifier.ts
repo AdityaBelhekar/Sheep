@@ -3,9 +3,12 @@
 /// <reference path="./raw.d.ts" />
 import {
   derivationVerdictSchema,
+  quantityVerdictSchema,
   stepVerdictSchema,
   type Derivation,
   type DerivationVerdict,
+  type Quantity,
+  type QuantityVerdict,
   type StepVerdict,
   type VerificationStatus,
 } from '@sheep/core';
@@ -75,7 +78,13 @@ export class Verifier {
       return summarise(
         derivation.given.map(
           (premise) =>
-            given.get(premise.id) ?? { id: premise.id, problem: why, latex: null, mathml: null },
+            given.get(premise.id) ?? {
+              id: premise.id,
+              problem: why,
+              latex: null,
+              mathml: null,
+              dimensions: null,
+            },
         ),
         derivation.steps.map(
           (step) =>
@@ -86,10 +95,33 @@ export class Verifier {
               method: 'none',
               latex: null,
               mathml: null,
+              dimensions: null,
             },
         ),
       );
     });
+  }
+
+  /**
+   * Checks that each reported quantity is the kind of quantity expected of it:
+   * that a measured speed is in units of speed, whatever units those are.
+   */
+  async checkUnits(quantities: readonly Quantity[]): Promise<QuantityVerdict[]> {
+    const { findings, stopped } = await this.#run([{ kind: 'units', quantities }]);
+    const reported = (findings[0] ?? []).flatMap((finding) => {
+      const parsed = quantityVerdictSchema.safeParse(finding['quantity']);
+      return parsed.success ? [parsed.data] : [];
+    });
+    // Answered in order, one per quantity; a missing answer is an undecided one.
+    return quantities.map(
+      (quantity, index) =>
+        reported[index] ?? {
+          name: quantity.name,
+          status: 'UNCHECKABLE',
+          reason: stopped ?? 'the checker gave no verdict',
+          factor: null,
+        },
+    );
   }
 
   async #run(requests: readonly unknown[]): Promise<Outcome> {
@@ -138,7 +170,12 @@ function summarise(
   const counts = { pass: count('PASS'), fail: count('FAIL'), uncheckable: count('UNCHECKABLE') };
   return {
     // One failed step fails the derivation; one undecided step keeps it from passing.
-    status: counts.fail > 0 ? 'FAIL' : counts.uncheckable > 0 ? 'UNCHECKABLE' : 'PASS',
+    status:
+      counts.fail > 0 || given.some((premise) => premise.dimensions?.status === 'FAIL')
+        ? 'FAIL'
+        : counts.uncheckable > 0
+          ? 'UNCHECKABLE'
+          : 'PASS',
     counts,
     given,
     steps,
