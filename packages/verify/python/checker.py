@@ -102,11 +102,40 @@ def read_expression(source, symbols):
         raise Unreadable(f"{type(error).__name__}: {error}") from None
 
 
+# The derivative of a bare symbol, and the opaque symbol that stands in for it.
+_RATES = {}
+
+
+def freeze(expression):
+    """Replaces the derivative of a bare symbol with a symbol of its own.
+
+    `Derivative(y, x)` in a statement means "the rate at which y changes",
+    where y is whatever the derivation says it is. SymPy knows y only as a
+    symbol, and the derivative of a symbol is zero — so the moment anything
+    simplified it, dy/dx = 2x and dy/dx = -2x would both reduce to a claim
+    about 2x and compare equal up to sign. Standing a symbol in for it keeps
+    it the unknown it is.
+    """
+
+    def stand_in(derivative):
+        symbol = sympy.Symbol(f"<{sympy.sstr(derivative)}>")
+        _RATES[symbol] = derivative
+        return symbol
+
+    return expression.replace(
+        lambda node: isinstance(node, sympy.Derivative) and node.expr.is_Symbol, stand_in
+    )
+
+
+def thaw(expression):
+    return expression.xreplace(_RATES)
+
+
 class Statement:
     """An expression, or an equation between two."""
 
     def __init__(self, sides):
-        self.sides = tuple(sides)
+        self.sides = tuple(freeze(side) for side in sides)
 
     @property
     def is_equation(self):
@@ -122,9 +151,8 @@ class Statement:
 
     def render(self):
         try:
-            shown = (
-                sympy.Eq(*self.sides, evaluate=False) if self.is_equation else self.sides[0]
-            )
+            sides = [thaw(side) for side in self.sides]
+            shown = sympy.Eq(*sides, evaluate=False) if self.is_equation else sides[0]
             return sympy.latex(shown), sympy.mathml(shown, printer="presentation")
         except Exception:
             return None, None
@@ -287,10 +315,12 @@ def differentiate(step):
 
     def derive(side):
         # A lone symbol on one side of an equation is the quantity the other
-        # side defines. Its derivative is written down, not computed: computed,
-        # it would be zero, and every wrong derivative would "follow".
+        # side defines, so its derivative is written down rather than computed.
+        # ponytail: a defined symbol buried inside an expression is still
+        # treated as a constant — implicit differentiation is not modelled, and
+        # a correct implicit derivative will be reported as not following.
         if step.source.is_equation and side.is_Symbol and side != variable:
-            return sympy.Derivative(side, variable)
+            return sympy.Derivative(thaw(side), variable)
         return sympy.diff(side, variable)
 
     return matches(step.stated, step.source.map(derive))

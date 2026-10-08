@@ -1,0 +1,414 @@
+[
+  {
+    "name": "a sign slipped in an expansion",
+    "error": "the constant term of (x - 1)**2 is +1",
+    "given": ["(x - 1)**2"],
+    "steps": [
+      {
+        "statement": "x**2 - 2*x - 1",
+        "operation": "expand",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "the chain rule forgotten",
+    "error": "the inner derivative 2*x is missing",
+    "given": ["y = sin(x**2)"],
+    "steps": [
+      {
+        "statement": "Derivative(y, x) = cos(x**2)",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        },
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "only one side divided",
+    "error": "the right-hand side was not divided by 2",
+    "given": ["2*x = 6*y"],
+    "steps": [
+      {
+        "statement": "x = 6*y",
+        "operation": "divide",
+        "args": {
+          "value": "2"
+        },
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "a substitution that lost a factor",
+    "error": "V*I with V = I*R is I**2*R, not I*R",
+    "given": ["P = V*I", "V = I*R"],
+    "steps": [
+      {
+        "statement": "P = I*R",
+        "operation": "substitute",
+        "from": "g1",
+        "using": "g2",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "the third equation of motion with a dropped factor of two",
+    "error": "the last step turns 2*a*s into a*s",
+    "symbols": {
+      "a": {
+        "assumptions": ["nonzero"]
+      }
+    },
+    "given": ["v = u + a*t", "s = u*t + a*t**2/2"],
+    "steps": [
+      {
+        "statement": "(v - u)/a = t",
+        "operation": "solve",
+        "from": "g1",
+        "args": {
+          "for": "t"
+        },
+        "expect": "UNCHECKABLE"
+      },
+      {
+        "statement": "t = (v - u)/a",
+        "operation": "solve",
+        "from": "g1",
+        "args": {
+          "for": "t"
+        }
+      },
+      {
+        "statement": "s = u*(v - u)/a + a*((v - u)/a)**2/2",
+        "operation": "substitute",
+        "from": "g2",
+        "using": "s2"
+      },
+      {
+        "statement": "s = (v**2 - u**2)/(2*a)",
+        "operation": "simplify"
+      },
+      {
+        "statement": "a*s = v**2 - u**2",
+        "operation": "multiply",
+        "args": {
+          "value": "2*a"
+        },
+        "expect": "FAIL"
+      },
+      {
+        "statement": "v**2 = u**2 + a*s",
+        "operation": "rearrange"
+      }
+    ]
+  },
+  {
+    "name": "the power rule without its divisor",
+    "error": "the antiderivative of x**2 is x**3/3",
+    "given": ["x**2"],
+    "steps": [
+      {
+        "statement": "x**3",
+        "operation": "integrate",
+        "args": {
+          "var": "x"
+        },
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "a square root distributed over a sum",
+    "error": "sqrt(a**2 + b**2) is not a + b",
+    "symbols": {
+      "a": {
+        "assumptions": ["positive"]
+      },
+      "b": {
+        "assumptions": ["positive"]
+      }
+    },
+    "given": ["sqrt(a**2 + b**2)"],
+    "steps": [
+      {
+        "statement": "a + b",
+        "operation": "simplify",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "an exponential distributed over a sum",
+    "error": "exp(a + b) is exp(a)*exp(b)",
+    "given": ["exp(a + b)"],
+    "steps": [
+      {
+        "statement": "exp(a) + exp(b)",
+        "operation": "expand",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "a fraction split wrongly",
+    "error": "(a + b)/c is a/c + b/c",
+    "given": ["(a + b)/c"],
+    "steps": [
+      {
+        "statement": "a + b/c",
+        "operation": "rewrite",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "a cancellation that kept the wrong factor",
+    "error": "(x**2 - 1)/(x - 1) is x + 1",
+    "given": ["(x**2 - 1)/(x - 1)"],
+    "steps": [
+      {
+        "statement": "x - 1",
+        "operation": "simplify",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "a double angle halved",
+    "error": "sin(2*x) is 2*sin(x)*cos(x)",
+    "given": ["sin(2*x)"],
+    "steps": [
+      {
+        "statement": "2*sin(x)",
+        "operation": "rewrite",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "a root with the wrong sign",
+    "error": "2*x + 6 = 0 gives x = -3",
+    "given": ["2*x + 6 = 0"],
+    "steps": [
+      {
+        "statement": "x = 3",
+        "operation": "solve",
+        "args": {
+          "for": "x"
+        },
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "elimination with a sign error",
+    "error": "adding the equations gives 2*x = 6",
+    "given": ["x + y = 5", "x - y = 1"],
+    "steps": [
+      {
+        "statement": "2*x = 4",
+        "operation": "add-equations",
+        "from": "g1",
+        "using": "g2",
+        "expect": "FAIL"
+      },
+      {
+        "statement": "x = 2",
+        "operation": "divide",
+        "args": {
+          "value": "2"
+        }
+      }
+    ]
+  },
+  {
+    "name": "fractions added across numerators and denominators",
+    "error": "1/2 + 1/3 is 5/6",
+    "given": ["1/2 + 1/3"],
+    "steps": [
+      {
+        "statement": "2/5",
+        "operation": "simplify",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "the quotient rule with its terms swapped",
+    "error": "the numerator is x*cos(x) - sin(x)",
+    "given": ["f = sin(x)/x"],
+    "steps": [
+      {
+        "statement": "Derivative(f, x) = (sin(x) - x*cos(x))/x**2",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        },
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "a square root taken without knowing the sign",
+    "error": "sqrt(x**2) is |x|; it is x only when x is not negative",
+    "given": ["sqrt(x**2)"],
+    "steps": [
+      {
+        "statement": "x",
+        "operation": "simplify",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "a logarithm rule used outside its domain",
+    "error": "log(a*b) = log(a) + log(b) needs a and b positive",
+    "given": ["log(a*b)"],
+    "steps": [
+      {
+        "statement": "log(a) + log(b)",
+        "operation": "expand",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "an error in the middle of an otherwise sound chain",
+    "error": "the second derivative of x**4 is 12*x**2",
+    "given": ["x**4"],
+    "steps": [
+      {
+        "statement": "4*x**3",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      },
+      {
+        "statement": "8*x**2",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        },
+        "expect": "FAIL"
+      },
+      {
+        "statement": "16*x",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      },
+      {
+        "statement": "16",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      }
+    ]
+  },
+  {
+    "name": "a rate law with the wrong sign",
+    "error": "decay gives dN/dt = -k*N",
+    "given": ["N = N0*exp(-k*t)"],
+    "steps": [
+      {
+        "statement": "Derivative(N, t) = -k*N0*exp(-k*t)",
+        "operation": "differentiate",
+        "args": {
+          "var": "t"
+        }
+      },
+      {
+        "statement": "Derivative(N, t) = k*N",
+        "operation": "substitute",
+        "using": "g1",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "squaring a sum term by term",
+    "error": "(a + b)**2 has a cross term 2*a*b",
+    "given": ["y = a + b"],
+    "steps": [
+      {
+        "statement": "y**2 = a**2 + b**2",
+        "operation": "power",
+        "args": {
+          "value": "2"
+        },
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "an integral that dropped a term",
+    "error": "the antiderivative of cos(x) was left out",
+    "given": ["3*x**2 + cos(x)"],
+    "steps": [
+      {
+        "statement": "x**3",
+        "operation": "integrate",
+        "args": {
+          "var": "x"
+        },
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "a decimal rounded mid-derivation",
+    "error": "1/3 is not 0.33",
+    "given": ["y = x/3"],
+    "steps": [
+      {
+        "statement": "y = 0.33*x",
+        "operation": "rewrite",
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "dividing by a quantity that is zero",
+    "error": "x - x is zero, so the division proves nothing",
+    "given": ["a*(x - x) = b*(x - x)"],
+    "steps": [
+      {
+        "statement": "a = b",
+        "operation": "divide",
+        "args": {
+          "value": "x - x"
+        },
+        "expect": "FAIL"
+      }
+    ]
+  },
+  {
+    "name": "a second derivative with the wrong sign",
+    "error": "the second derivative of sin is -sin",
+    "given": ["y = sin(x)"],
+    "steps": [
+      {
+        "statement": "Derivative(y, x) = cos(x)",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      },
+      {
+        "statement": "Derivative(y, (x, 2)) = sin(x)",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        },
+        "expect": "FAIL"
+      }
+    ]
+  }
+]

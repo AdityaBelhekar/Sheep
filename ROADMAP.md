@@ -224,7 +224,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
 
 - [x] **43. SymPy step checker** — derivations as ordered steps with declared operations; per-step entailment check. **(P4)**
   → `feat(verify): sympy derivation step checker`
-- [ ] **44. Derivation corpus** — known-good **and known-bad** derivations. *The single most important test suite in the project: a checker that never fails manufactures false confidence.*
+- [x] **44. Derivation corpus** — known-good **and known-bad** derivations. *The single most important test suite in the project: a checker that never fails manufactures false confidence.*
   *Done when:* every planted error is caught and every valid derivation passes. → `test(verify): known-good and known-bad derivation corpus`
 - [ ] **45. Dimensional analysis** — `pint` unit checking across derivations and empirical results.
   → `feat(verify): dimensional analysis with pint`

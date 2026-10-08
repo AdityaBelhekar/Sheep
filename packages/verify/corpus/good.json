@@ -1,0 +1,420 @@
+[
+  {
+    "name": "kinetic energy from work",
+    "given": ["W = F*d", "F = m*a", "v**2 = 2*a*d"],
+    "steps": [
+      {
+        "statement": "W = m*a*d",
+        "operation": "substitute",
+        "from": "g1",
+        "using": "g2"
+      },
+      {
+        "statement": "a*d = v**2/2",
+        "operation": "divide",
+        "from": "g3",
+        "args": {
+          "value": "2"
+        }
+      },
+      {
+        "statement": "W = m*v**2/2",
+        "operation": "substitute",
+        "from": "s1",
+        "using": "s2"
+      }
+    ]
+  },
+  {
+    "name": "the third equation of motion",
+    "given": ["v = u + a*t", "s = u*t + a*t**2/2"],
+    "symbols": {
+      "a": {
+        "assumptions": ["nonzero"]
+      }
+    },
+    "steps": [
+      {
+        "statement": "v - u = a*t",
+        "operation": "subtract",
+        "from": "g1",
+        "args": {
+          "value": "u"
+        }
+      },
+      {
+        "statement": "(v - u)/a = t",
+        "operation": "divide",
+        "args": {
+          "value": "a"
+        }
+      },
+      {
+        "statement": "s = u*(v - u)/a + a*((v - u)/a)**2/2",
+        "operation": "substitute",
+        "from": "g2",
+        "using": "s2"
+      },
+      {
+        "statement": "s = (v**2 - u**2)/(2*a)",
+        "operation": "simplify"
+      },
+      {
+        "statement": "2*a*s = v**2 - u**2",
+        "operation": "multiply",
+        "args": {
+          "value": "2*a"
+        }
+      },
+      {
+        "statement": "v**2 = u**2 + 2*a*s",
+        "operation": "rearrange"
+      }
+    ]
+  },
+  {
+    "name": "completing the square",
+    "given": ["x**2 + 6*x + 5 = 0"],
+    "steps": [
+      {
+        "statement": "x**2 + 6*x + 9 = 4",
+        "operation": "add",
+        "args": {
+          "value": "4"
+        }
+      },
+      {
+        "statement": "(x + 3)**2 = 4",
+        "operation": "factor"
+      }
+    ]
+  },
+  {
+    "name": "electrical power in terms of current",
+    "given": ["P = V*I", "V = I*R"],
+    "steps": [
+      {
+        "statement": "P = I**2*R",
+        "operation": "substitute",
+        "from": "g1",
+        "using": "g2"
+      }
+    ]
+  },
+  {
+    "name": "a linear system by elimination",
+    "given": ["x + y = 5", "x - y = 1"],
+    "steps": [
+      {
+        "statement": "2*x = 6",
+        "operation": "add-equations",
+        "from": "g1",
+        "using": "g2"
+      },
+      {
+        "statement": "x = 3",
+        "operation": "divide",
+        "args": {
+          "value": "2"
+        }
+      },
+      {
+        "statement": "2*y = 4",
+        "operation": "subtract-equations",
+        "from": "g1",
+        "using": "g2"
+      },
+      {
+        "statement": "y = 2",
+        "operation": "solve",
+        "args": {
+          "for": "y"
+        }
+      }
+    ]
+  },
+  {
+    "name": "the chain rule",
+    "given": ["y = sin(x**2)"],
+    "steps": [
+      {
+        "statement": "Derivative(y, x) = 2*x*cos(x**2)",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      }
+    ]
+  },
+  {
+    "name": "the product rule, twice",
+    "given": ["x**2*exp(x)"],
+    "steps": [
+      {
+        "statement": "2*x*exp(x) + x**2*exp(x)",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      },
+      {
+        "statement": "(x**2 + 4*x + 2)*exp(x)",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      }
+    ]
+  },
+  {
+    "name": "the quotient rule",
+    "given": ["f = sin(x)/x"],
+    "steps": [
+      {
+        "statement": "Derivative(f, x) = (x*cos(x) - sin(x))/x**2",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      }
+    ]
+  },
+  {
+    "name": "antiderivatives, with any constant",
+    "given": ["3*x**2 + cos(x)"],
+    "steps": [
+      {
+        "statement": "x**3 + sin(x)",
+        "operation": "integrate",
+        "args": {
+          "var": "x"
+        }
+      },
+      {
+        "statement": "x**3 + sin(x) - 12",
+        "operation": "integrate",
+        "from": "g1",
+        "args": {
+          "var": "x"
+        }
+      }
+    ]
+  },
+  {
+    "name": "exponential decay obeys its rate law",
+    "given": ["N = N0*exp(-k*t)"],
+    "steps": [
+      {
+        "statement": "Derivative(N, t) = -k*N0*exp(-k*t)",
+        "operation": "differentiate",
+        "args": {
+          "var": "t"
+        }
+      },
+      {
+        "statement": "Derivative(N, t) = -k*N",
+        "operation": "substitute",
+        "using": "g1"
+      }
+    ]
+  },
+  {
+    "name": "the logistic function's derivative",
+    "given": ["s = 1/(1 + exp(-x))"],
+    "steps": [
+      {
+        "statement": "Derivative(s, x) = exp(-x)/(1 + exp(-x))**2",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      },
+      {
+        "statement": "Derivative(s, x) = s*(1 - s)",
+        "operation": "substitute",
+        "using": "g1"
+      }
+    ]
+  },
+  {
+    "name": "trigonometric identities",
+    "given": ["1 + tan(x)**2", "cos(2*x)", "sin(a + b)"],
+    "steps": [
+      {
+        "statement": "1/cos(x)**2",
+        "operation": "simplify",
+        "from": "g1"
+      },
+      {
+        "statement": "1 - 2*sin(x)**2",
+        "operation": "rewrite",
+        "from": "g2"
+      },
+      {
+        "statement": "sin(a)*cos(b) + cos(a)*sin(b)",
+        "operation": "expand",
+        "from": "g3"
+      }
+    ]
+  },
+  {
+    "name": "logarithm of a product, for positive arguments",
+    "symbols": {
+      "a": {
+        "assumptions": ["positive"]
+      },
+      "b": {
+        "assumptions": ["positive"]
+      }
+    },
+    "given": ["log(a*b)", "log(a**3)"],
+    "steps": [
+      {
+        "statement": "log(a) + log(b)",
+        "operation": "expand",
+        "from": "g1"
+      },
+      {
+        "statement": "3*log(a)",
+        "operation": "expand",
+        "from": "g2"
+      }
+    ]
+  },
+  {
+    "name": "a square root, where the sign is known",
+    "symbols": {
+      "x": {
+        "assumptions": ["positive"]
+      }
+    },
+    "given": ["sqrt(x**2)"],
+    "steps": [
+      {
+        "statement": "x",
+        "operation": "simplify"
+      }
+    ]
+  },
+  {
+    "name": "difference of squares and a legitimate cancellation",
+    "given": ["(x**2 - 1)/(x - 1)"],
+    "steps": [
+      {
+        "statement": "(x - 1)*(x + 1)/(x - 1)",
+        "operation": "factor"
+      },
+      {
+        "statement": "x + 1",
+        "operation": "simplify"
+      }
+    ]
+  },
+  {
+    "name": "area of a circle and its rate of change",
+    "given": ["A = pi*r**2"],
+    "steps": [
+      {
+        "statement": "Derivative(A, r) = 2*pi*r",
+        "operation": "differentiate",
+        "args": {
+          "var": "r"
+        }
+      }
+    ]
+  },
+  {
+    "name": "exact fractions",
+    "given": ["1/2 + 1/3", "0.1 + 0.2"],
+    "steps": [
+      {
+        "statement": "5/6",
+        "operation": "simplify",
+        "from": "g1"
+      },
+      {
+        "statement": "0.3",
+        "operation": "simplify",
+        "from": "g2"
+      }
+    ]
+  },
+  {
+    "name": "a quadratic with one admissible root",
+    "symbols": {
+      "t": {
+        "assumptions": ["positive"]
+      }
+    },
+    "given": ["t**2 - t - 6 = 0"],
+    "steps": [
+      {
+        "statement": "t = 3",
+        "operation": "solve",
+        "args": {
+          "for": "t"
+        }
+      }
+    ]
+  },
+  {
+    "name": "taking logs of both sides",
+    "symbols": {
+      "k": {
+        "assumptions": ["real"]
+      },
+      "t": {
+        "assumptions": ["real"]
+      }
+    },
+    "given": ["y = exp(k*t)"],
+    "steps": [
+      {
+        "statement": "log(y) = k*t",
+        "operation": "apply",
+        "args": {
+          "function": "log"
+        }
+      }
+    ]
+  },
+  {
+    "name": "the binomial cube",
+    "given": ["(a + b)**3"],
+    "steps": [
+      {
+        "statement": "a**3 + 3*a**2*b + 3*a*b**2 + b**3",
+        "operation": "expand"
+      },
+      {
+        "statement": "(a + b)*(a**2 + 2*a*b + b**2)",
+        "operation": "factor"
+      }
+    ]
+  },
+  {
+    "name": "a second derivative",
+    "given": ["y = sin(x)"],
+    "steps": [
+      {
+        "statement": "Derivative(y, x) = cos(x)",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      },
+      {
+        "statement": "Derivative(y, (x, 2)) = -sin(x)",
+        "operation": "differentiate",
+        "args": {
+          "var": "x"
+        }
+      },
+      {
+        "statement": "Derivative(y, (x, 2)) = -y",
+        "operation": "substitute",
+        "using": "g1"
+      }
+    ]
+  }
+]
