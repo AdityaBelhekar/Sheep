@@ -85,6 +85,13 @@ export {
 } from './connections';
 export { SettingsStore } from './settings';
 export { enforceLedger, readLedger } from './ledger';
+export { executionBlobRef, recordExecution, type FinishedRun } from './executions';
+export {
+  EXECUTIONS_DDL,
+  EXECUTIONS_PROJECTION,
+  getExecution,
+  listExecutions,
+} from './projections/executions';
 export {
   PROJECTIONS,
   ProjectionRunner,

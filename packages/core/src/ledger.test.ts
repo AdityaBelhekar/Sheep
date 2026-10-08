@@ -8,6 +8,7 @@ import {
   PARTICIPANT_A,
   PARTICIPANT_B,
   SESSION_ID,
+  CLEAN_RUN,
 } from './fixtures';
 import { Ledger, LedgerError, type LedgerErrorCode } from './ledger';
 
@@ -41,7 +42,13 @@ const openDispute = (disputeId = DISPUTE_ID, claimId = CLAIM_ID): DomainEvent =>
   });
 
 const executed = (exitCode = 0, executionId = EXECUTION_ID): DomainEvent =>
-  ev('execution.recorded', { sessionId: SESSION_ID, executionId, codeHash: HASH, exitCode });
+  ev('execution.recorded', {
+    sessionId: SESSION_ID,
+    executionId,
+    ...CLEAN_RUN,
+    exitCode,
+    status: exitCode === 0 ? 'ok' : 'error',
+  });
 
 const derived = (): DomainEvent =>
   ev('derivation.recorded', { sessionId: SESSION_ID, derivationId: DERIVATION_ID, bodyHash: HASH });
@@ -401,6 +408,21 @@ describe('claim type enforcement (P2)', () => {
       }),
       'UNKNOWN_EXECUTION',
     );
+  });
+
+  it('refuses an execution whose status and exit code disagree', () => {
+    const disagreeing = (status: 'ok' | 'timeout', exitCode: number): DomainEvent =>
+      ev('execution.recorded', {
+        sessionId: SESSION_ID,
+        executionId: EXECUTION_ID,
+        ...CLEAN_RUN,
+        status,
+        exitCode,
+      });
+
+    // Either would let a run that did not finish cleanly back a claim.
+    rejects(ledgerOf(), disagreeing('timeout', 0), 'INCONSISTENT_EXECUTION');
+    rejects(ledgerOf(), disagreeing('ok', 1), 'INCONSISTENT_EXECUTION');
   });
 
   it('refuses to record the same execution or derivation twice', () => {

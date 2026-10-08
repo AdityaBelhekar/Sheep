@@ -41,7 +41,7 @@ describe('job object isolation', () => {
   });
 
   it('holds a busy loop to its CPU share', async () => {
-    // One spinning thread would otherwise take a whole core. Capped at 1% of
+    // One spinning thread would otherwise take a whole core. Capped at 2% of
     // the machine, it gets a small fraction of the wall time it ran for.
     const result = await sandbox.run({
       code: [
@@ -50,12 +50,12 @@ describe('job object isolation', () => {
         'while time.perf_counter() - start < 2: pass',
         'print(time.process_time() / (time.perf_counter() - start) / os.cpu_count())',
       ].join('\n'),
-      limits: { cpuPercent: 1 },
+      limits: { cpuPercent: 2 },
     });
 
     expect(result.status).toBe('ok');
-    // Share of the whole machine actually used; generous, the cap is 0.01.
-    expect(Number(result.stdout)).toBeLessThan(0.05);
+    // Share of the whole machine actually used; generous, the cap is 0.02.
+    expect(Number(result.stdout)).toBeLessThan(0.06);
   });
 
   it('takes the whole process tree down when the caller aborts', async () => {

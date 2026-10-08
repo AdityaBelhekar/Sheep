@@ -1,11 +1,12 @@
 import { safeParseDomainEvent } from '@sheep/core';
 import type { EventLog } from '../events/log';
 import type { SqliteDatabase } from '../sqlite/types';
+import { EXECUTIONS_PROJECTION } from './executions';
 import { SESSIONS_PROJECTION } from './sessions';
 import type { Projection, ProjectionFailure, ProjectionReport, ProjectionStatus } from './types';
 
 /** Every projection the app maintains. */
-export const PROJECTIONS: readonly Projection[] = [SESSIONS_PROJECTION];
+export const PROJECTIONS: readonly Projection[] = [SESSIONS_PROJECTION, EXECUTIONS_PROJECTION];
 
 export interface ProjectionRunnerOptions {
   readonly projections?: readonly Projection[];

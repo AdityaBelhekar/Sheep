@@ -28,6 +28,28 @@ export const OPTION_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 export const EXECUTION_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 export const DERIVATION_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
+/**
+ * Everything about a run except which one it was: a clean exit that left one
+ * figure. Spread into an `execution.recorded` payload wherever a test needs a
+ * run to exist and does not care about the details.
+ */
+export const CLEAN_RUN: Omit<
+  EventPayload<'execution.recorded'>,
+  'sessionId' | 'executionId' | 'peakMemoryBytes'
+> = {
+  codeHash: 'c0de'.repeat(16),
+  exitCode: 0,
+  status: 'ok',
+  seed: 0,
+  envLockHash: '10c4'.repeat(16),
+  limits: { memoryMb: 1_024, cpuPercent: 50, timeoutMs: 60_000 },
+  durationMs: 1_840,
+  stdoutHash: '0a'.repeat(32),
+  stderrHash: '0b'.repeat(32),
+  truncated: false,
+  artifacts: [{ path: 'figures/perplexity.png', hash: 'f1'.repeat(32), bytes: 18_204 }],
+};
+
 export const ANTHROPIC_MODEL: ModelRef = {
   connectionId: CONNECTION_ID,
   vendorId: 'anthropic',
@@ -173,8 +195,8 @@ export const EVENT_FIXTURES: EventFixtures = {
   'execution.recorded': {
     sessionId: SESSION_ID,
     executionId: EXECUTION_ID,
-    codeHash: PROMPT_HASH,
-    exitCode: 0,
+    ...CLEAN_RUN,
+    peakMemoryBytes: 48_300_032,
   },
   'derivation.recorded': {
     sessionId: SESSION_ID,

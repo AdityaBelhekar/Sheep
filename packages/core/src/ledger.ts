@@ -72,6 +72,7 @@ export const LEDGER_ERROR_CODES = [
   'RESOLUTION_WITHOUT_EVIDENCE',
   'UNRESOLVED_WITHOUT_POSITIONS',
   'DUPLICATE_EXECUTION',
+  'INCONSISTENT_EXECUTION',
   'DUPLICATE_DERIVATION',
   'EMPIRICAL_WITHOUT_EXECUTION',
   'DERIVED_WITHOUT_DERIVATION',
@@ -321,7 +322,14 @@ export class Ledger {
 
     switch (event.type) {
       case 'execution.recorded': {
-        const { executionId, exitCode } = event.payload;
+        const { executionId, exitCode, status } = event.payload;
+        // Backing is decided on the exit code, so the two must tell one story.
+        if ((status === 'ok') !== (exitCode === 0)) {
+          throw new LedgerError(
+            'INCONSISTENT_EXECUTION',
+            `execution ${executionId} is recorded as ${status} with exit code ${String(exitCode)}`,
+          );
+        }
         if (this.#executions.has(executionId)) {
           throw new LedgerError(
             'DUPLICATE_EXECUTION',

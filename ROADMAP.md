@@ -211,7 +211,7 @@ RENDERER (React, sandboxed)  ──typed IPC──>  MAIN (thin)
   *Note:* defense-in-depth against runaway jobs, **not** a hard boundary against hostile code. → `feat(sandbox): layered network denial`
 - [x] **40. Determinism** — `PYTHONHASHSEED`, explicit numpy seeding, Agg backend, `SOURCE_DATE_EPOCH`, env-lock hash recorded per run.
   *Done when:* the same script run twice produces byte-identical figures. → `feat(sandbox): deterministic execution environment`
-- [ ] **41. Execution records** — persist spec/code/env-lock/seed/exit/stdout/stderr, ingest artifacts into CAS, link to claims.
+- [x] **41. Execution records** — persist spec/code/env-lock/seed/exit/stdout/stderr, ingest artifacts into CAS, link to claims.
   → `feat(sandbox): execution records and artifact ingestion`
 - [ ] **42. Lab UI + escape suite** — Monaco editor, run controls, live output, plot viewer; **escape tests: network, filesystem escape, fork bomb, memory bomb, infinite loop must all fail closed.**
   → `feat(ui): lab surface with sandbox escape test suite`

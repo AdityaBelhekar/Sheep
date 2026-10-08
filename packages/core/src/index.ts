@@ -149,6 +149,19 @@ export {
 } from './dispute';
 
 export {
+  EXECUTION_STATUSES,
+  executionArtifactSchema,
+  executionFields,
+  executionLimitsSchema,
+  executionRecordSchema,
+  executionStatusSchema,
+  type ExecutionArtifact,
+  type ExecutionLimits,
+  type ExecutionRecord,
+  type ExecutionStatus,
+} from './execution';
+
+export {
   LEDGER_ERROR_CODES,
   LEDGER_EVENT_TYPES,
   Ledger,

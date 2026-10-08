@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { domainEvent, LedgerError } from '@sheep/core';
-import { CLAIM_ID, EXECUTION_ID, SESSION_ID } from '@sheep/core/fixtures';
+import { CLAIM_ID, CLEAN_RUN, EXECUTION_ID, SESSION_ID } from '@sheep/core/fixtures';
 import { readLedger } from './ledger';
 import { openSheepStore } from './store';
 import { TESTABLE_DRIVERS, useTempDir } from './test-support';
@@ -16,8 +16,7 @@ const session = domainEvent('session.created', {
 const execution = domainEvent('execution.recorded', {
   sessionId: SESSION_ID,
   executionId: EXECUTION_ID,
-  codeHash: 'c'.repeat(64),
-  exitCode: 0,
+  ...CLEAN_RUN,
 });
 
 const empirical = domainEvent('claim.recorded', {
