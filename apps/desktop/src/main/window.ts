@@ -322,29 +322,38 @@ const CHAT_EXPRESSION = (sessionId: string, expected: string): string => `(async
   composer.dispatchEvent(new Event('input', { bubbles: true }));
   await settle(60);
 
-  pane().querySelector('[data-sheep-send]').click();
-
   // Watch for the live turn appearing, so streaming is observed rather than
-  // merely inferred from the finished message.
+  // merely inferred from the finished message. Observed, not polled: the whole
+  // answer streams in well under a second, and a window that is not in front
+  // has its timers throttled to one a second — a poll would sleep through it.
   let sawStreaming = false;
   let frames = 0;
   let lastLength = -1;
+  const watcher = new MutationObserver(() => {
+    if (pane()?.getAttribute('data-sheep-streaming') !== 'streaming') return;
+    sawStreaming = true;
+    const live = pane().querySelector('.chat__turn--live .chat__body');
+    const length = live ? live.textContent.length : -1;
+    if (length !== lastLength) {
+      frames += 1;
+      lastLength = length;
+    }
+  });
+  watcher.observe(pane(), {
+    attributes: true,
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
+
+  pane().querySelector('[data-sheep-send]').click();
+
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     await settle(20);
-    const root = document.querySelector('[data-sheep-ready]');
-    if (pane()?.getAttribute('data-sheep-streaming') === 'streaming') {
-      sawStreaming = true;
-      const live = pane().querySelector('.chat__turn--live .chat__body');
-      const length = live ? live.textContent.length : -1;
-      if (length !== lastLength) {
-        frames += 1;
-        lastLength = length;
-      }
-    } else if (sawStreaming) {
-      break;
-    }
+    if (sawStreaming && pane()?.getAttribute('data-sheep-streaming') !== 'streaming') break;
   }
+  watcher.disconnect();
 
   await settle(300);
   const messages = await window.sheep.invoke('sheep:messages-list', {
