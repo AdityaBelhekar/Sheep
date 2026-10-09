@@ -255,7 +255,12 @@ def identical(left, right):
         return UNCHECKABLE, f"SymPy could not work on it: {type(error).__name__}: {error}", "none"
     if equal:
         return PASS, "the difference is zero", "symbolic"
-    if equal is False:
+    # SymPy's own "not equal" comes from sampling at points of its choosing,
+    # complex ones included, whatever was assumed of the symbols — and it is
+    # sometimes wrong about identities that hold for reals. It is believed only
+    # when the sampling above, which does respect the assumptions, had nothing
+    # to say. Twelve agreeing points outrank it.
+    if equal is False and evaluated == 0:
         return FAIL, f"it differs from what the operation gives by {sympy.sstr(reduced)}", "symbolic"
     # Agreement at sampled points is evidence, not proof, and is reported as
     # exactly that.
