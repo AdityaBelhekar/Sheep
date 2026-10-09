@@ -195,8 +195,11 @@ describe('HYPOTHESIS', () => {
       selected: option === undefined ? [] : [option.optionId],
     });
 
+    const hypothesisPhase = (await engine.view(SESSION)).phases[1]?.phaseId;
     const claims = ports.events.flatMap((event) =>
-      event.type === 'claim.recorded' ? [event.payload] : [],
+      event.type === 'claim.recorded' && event.payload.phaseId === hypothesisPhase
+        ? [event.payload]
+        : [],
     );
     expect(claims).toHaveLength(1);
     const claim = claims[0];
@@ -216,7 +219,7 @@ describe('HYPOTHESIS', () => {
     expect(ports.events[closed - 1]?.type).toBe('claim.recorded');
     const ledger = new Ledger(SESSION);
     for (const event of ports.events) ledger.apply(event, '2026-09-15T10:00:00.000Z');
-    expect(ledger.claims()).toHaveLength(1);
+    expect(ledger.claims().filter((entry) => entry.phaseId === hypothesisPhase)).toHaveLength(1);
   });
 
   it('ignores a model that replies in prose instead of JSON', async () => {

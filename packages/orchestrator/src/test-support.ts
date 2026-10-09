@@ -331,6 +331,23 @@ export function methodCritiqueReply(participantId: string): string {
   });
 }
 
+/** What the scripted method prints when it is run. */
+export function scriptedRun(): { stdout: string } {
+  return { stdout: 'dense baseline 0.0\nperplexity delta 0.31\n' };
+}
+
+/** Findings in the shape the prompt asks for. One measured, one interpreted, by default. */
+export function findingsReply(
+  findings: readonly { statement: string; type: 'EMPIRICAL' | 'CONJECTURE' }[] = [
+    { statement: 'The perplexity delta is 0.31, above the 0.02 threshold.', type: 'EMPIRICAL' },
+    { statement: 'Sparsity probably harms long-range retrieval first.', type: 'CONJECTURE' },
+  ],
+): string {
+  return JSON.stringify({
+    findings: findings.map((finding) => ({ ...finding, hypothesis: 'H1', confidence: 0.7 })),
+  });
+}
+
 /**
  * Answers every prompt a session can ask.
  *
@@ -354,6 +371,7 @@ export function scriptedReply(request: TurnRequest): string {
     return hypothesisReply(participantId.slice(0, 4));
   }
   if (prompt.includes('Score each on three axes')) return scoringReply(prompt);
+  if (prompt.includes('State what the run found')) return findingsReply();
   if (prompt.includes('Critique the method before it is run')) {
     return methodCritiqueReply(participantId);
   }

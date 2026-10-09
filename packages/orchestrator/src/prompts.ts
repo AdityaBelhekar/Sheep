@@ -365,6 +365,87 @@ export const methodCritiquesSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// EXECUTION
+// ---------------------------------------------------------------------------
+
+/** How much of a run's output a prompt carries. The whole of it is in the store. */
+const OUTPUT_IN_PROMPT = 16_000;
+
+const clipOutput = (text: string): string =>
+  text.length <= OUTPUT_IN_PROMPT
+    ? text
+    : `${text.slice(0, OUTPUT_IN_PROMPT)}\n[… ${String(text.length - OUTPUT_IN_PROMPT)} more characters not shown]`;
+
+export interface PromptRun {
+  readonly stdout: string;
+  readonly execution: { readonly artifacts: readonly { readonly path: string }[] };
+}
+
+/** Sequential: the method's author reads its output and states what it found. */
+export function findingsPrompt(
+  charter: string,
+  hypotheses: readonly PromptClaim[],
+  method: MethodDraft,
+  run: PromptRun,
+): string {
+  const artifacts = run.execution.artifacts.map((artifact) => artifact.path);
+  return [
+    'The Charter for this session:',
+    '',
+    charter,
+    '',
+    'The hypotheses under test:',
+    '',
+    ...listClaims(hypotheses),
+    '',
+    'Your method, as it was run:',
+    '',
+    method.plan,
+    '',
+    'How you said the results should be read:',
+    '',
+    method.analysis,
+    '',
+    'The script ran to completion in the sandbox. Everything it printed:',
+    '',
+    '--- output ---',
+    clipOutput(run.stdout.trimEnd()),
+    '--- end of output ---',
+    '',
+    artifacts.length === 0
+      ? 'It saved no files.'
+      : `It saved these files: ${artifacts.join(', ')}.`,
+    '',
+    'State what the run found, as separate findings. Two kinds:',
+    '',
+    'EMPIRICAL — read directly off the output above. Quote figures exactly as',
+    'printed. A figure that does not appear in the output was not measured, and a',
+    'finding that quotes one will be refused.',
+    'CONJECTURE — what you think the output means beyond what it shows. Labelled',
+    'as conjecture because that is what it is.',
+    '',
+    'If the output refutes a hypothesis, say so: that is a finding. If it settles',
+    'nothing, say that. Each statement is one falsifiable sentence.',
+    '',
+    'Reply with JSON only, no prose and no code fence:',
+    '{"findings":[{"statement":"...","type":"EMPIRICAL","hypothesis":"H1","confidence":0.0}]}',
+  ].join('\n');
+}
+
+export const findingsSchema = z.object({
+  findings: z
+    .array(
+      z.object({
+        statement: z.string().min(1).max(2_000),
+        type: z.enum(['EMPIRICAL', 'CONJECTURE']),
+        hypothesis: z.string().max(40).optional(),
+        confidence: z.number().min(0).max(1).optional(),
+      }),
+    )
+    .max(12),
+});
+
+// ---------------------------------------------------------------------------
 // Parsing what comes back
 // ---------------------------------------------------------------------------
 

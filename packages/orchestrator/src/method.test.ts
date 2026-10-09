@@ -5,7 +5,6 @@ import type { TurnRequest } from './ports';
 import { reduceProtocol } from './state';
 import {
   fakePorts,
-  methodCritiqueReply,
   methodReply,
   runPastGates,
   scriptedReply,
@@ -242,8 +241,9 @@ describe('METHOD', () => {
     const resumed = await engineOn(reopened).run(SESSION);
 
     expect(resumed.state.phases.find((phase) => phase.kind === 'METHOD')?.status).toBe('complete');
-    expect(reopened.asked.map((request) => request.role)).toEqual(['PROPOSER']);
+    // The critics are not asked again, and neither is the first draft.
     expect(reopened.asked[0]!.prompt).toContain('Revise the method');
-    expect(methodCritiqueReply(ALICE)).toContain('Objection from');
+    expect(reopened.asked.filter((request) => request.role === 'CRITIC')).toEqual([]);
+    expect(askedIn(reopened, 'Design the method that will test them')).toEqual([]);
   });
 });

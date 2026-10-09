@@ -104,6 +104,8 @@ export {
 export {
   METHOD_AXES,
   SANDBOX_RULES,
+  findingsPrompt,
+  findingsSchema,
   methodCritiquePrompt,
   methodCritiquesSchema,
   methodPrompt,
@@ -112,6 +114,8 @@ export {
   type MethodDraft,
   type PromptClaim,
 } from './prompts';
+
+export { RUN_TIMEOUT_MS, unearnedNumbers } from './execution';
 
 export { SMOKE_TIMEOUT_MS, describeRun, finalMethod, parseMethod, type Method } from './method';
 

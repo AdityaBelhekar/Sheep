@@ -12,6 +12,7 @@ import {
   type SessionStatus,
 } from '@sheep/core';
 import { runBlindParallel } from './blind';
+import { stepExecution } from './execution';
 import { stepMethod } from './method';
 import type { OrchestratorPorts, SessionSnapshot, TurnRequest } from './ports';
 import {
@@ -134,6 +135,7 @@ export interface ApproveInput {
 /** The phases that run unattended, each in its own module. */
 const PHASE_BODIES: Readonly<Partial<Record<PhaseKind, PhaseBody>>> = {
   METHOD: stepMethod,
+  EXECUTION: stepExecution,
 };
 
 const IMPLEMENTED: ReadonlySet<PhaseKind> = new Set<PhaseKind>([

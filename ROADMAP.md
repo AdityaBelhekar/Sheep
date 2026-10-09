@@ -245,7 +245,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
 
 - [x] **49. METHOD phase** — proposer drafts an executable protocol; critics attack fixed axes (internal validity, confounds, leakage, power, baselines, reproducibility); verifier smoke-runs.
   → `feat(orchestrator): method design phase`
-- [ ] **50. EXECUTION phase** — protocol → sandbox → hashed artifacts, with the "no unearned results" invariant enforced end to end.
+- [x] **50. EXECUTION phase** — protocol → sandbox → hashed artifacts, with the "no unearned results" invariant enforced end to end.
   → `feat(orchestrator): execution phase wired to sandbox`
 - [ ] **51. CRITIQUE phase** — structured critique objects `{claim_id, axis, severity, argument, proposed_test}`, cross-vendor assignment.
   → `feat(orchestrator): structured cross-vendor critique phase`
