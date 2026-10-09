@@ -12,6 +12,7 @@ import {
   type SessionStatus,
 } from '@sheep/core';
 import { runBlindParallel } from './blind';
+import { stepMethod } from './method';
 import type { OrchestratorPorts, SessionSnapshot, TurnRequest } from './ports';
 import {
   charterPrompt,
@@ -24,7 +25,8 @@ import {
   parseJsonReply,
   systemFor,
 } from './prompts';
-import { solveRoles, UnsatisfiableRolesError, type SolverParticipant } from './roles';
+import { charterOf, turnsOf, type RecordedTurn } from './reading';
+import { solveRoles, UnsatisfiableRolesError, violations, type SolverParticipant } from './roles';
 import { clusterTexts, type ClusterItem } from './similarity';
 import {
   assertCanCloseRound,
@@ -41,6 +43,9 @@ import {
   type RoundState,
 } from './state';
 import { shouldTerminate, type TerminationReason, type TerminationRules } from './termination';
+import type { PhaseBody, PhaseTools, RoundSpec } from './tools';
+
+export { turnsOf, type RecordedTurn } from './reading';
 
 /**
  * The session driver.
@@ -52,9 +57,10 @@ import { shouldTerminate, type TerminationReason, type TerminationRules } from '
  * resumes from the same place. Resume is not a feature bolted on in Phase 29 —
  * it is what the loop already does every time round.
  *
- * Two phases are implemented here: FRAMING and HYPOTHESIS, the two that end at
- * a human gate. The rest need the sandbox and the verifier, so the loop stops
- * cleanly at the first phase it cannot run rather than pretending to.
+ * FRAMING and HYPOTHESIS, the two phases that end at a human gate, are written
+ * out below. Each later phase is a module of its own, given the same steps to
+ * take through `PhaseTools`. A phase with no body yet stops the loop cleanly
+ * rather than pretending to run.
  */
 
 export interface OrchestratorOptions {
@@ -125,11 +131,19 @@ export interface ApproveInput {
   readonly note?: string;
 }
 
-/** Phases this stage can actually run. The rest wait for the sandbox. */
-const IMPLEMENTED: ReadonlySet<PhaseKind> = new Set<PhaseKind>(['FRAMING', 'HYPOTHESIS']);
+/** The phases that run unattended, each in its own module. */
+const PHASE_BODIES: Readonly<Partial<Record<PhaseKind, PhaseBody>>> = {
+  METHOD: stepMethod,
+};
+
+const IMPLEMENTED: ReadonlySet<PhaseKind> = new Set<PhaseKind>([
+  'FRAMING',
+  'HYPOTHESIS',
+  ...(Object.keys(PHASE_BODIES) as PhaseKind[]),
+]);
 
 /** A ceiling on one call's work, not a target. */
-const DEFAULT_MAX_STEPS = 64;
+const DEFAULT_MAX_STEPS = 256;
 
 /** Bounded so one runaway model cannot fill the log with a single turn. */
 const MAX_TURN_CHARS = 60_000;
@@ -139,9 +153,23 @@ export class Orchestrator {
   readonly #options: OrchestratorOptions;
   readonly #cancelled = new Set<string>();
 
+  readonly #tools: PhaseTools;
+
   constructor(ports: OrchestratorPorts, options: OrchestratorOptions = {}) {
     this.#ports = ports;
     this.#options = options;
+    this.#tools = {
+      ports,
+      openRound: (snapshot, state, phase, spec) => this.#openRound(snapshot, state, phase, spec),
+      runBlindRound: (snapshot, phase, round, brief) =>
+        this.#runBlindRound(snapshot, phase, round, brief),
+      runTurn: (snapshot, phase, round, participantId, role, prompt) =>
+        this.#runTurn(snapshot, phase, round, participantId, role, prompt),
+      closeRound: (snapshot, state, phase, round, extra) =>
+        this.#closeRound(snapshot, state, phase, round, extra),
+      closePhase: (sessionId, state, phase, outcome, summary, extra) =>
+        this.#closePhase(sessionId, state, phase, outcome, summary, extra),
+    };
   }
 
   /**
@@ -192,7 +220,7 @@ export class Orchestrator {
           return {
             status: 'stopped',
             reason: 'not-implemented',
-            detail: `${kind} needs the execution sandbox and the verifier (Stages 6–8)`,
+            detail: `${kind} is not built yet`,
             state: toProtocolView(state),
           };
         }
@@ -277,7 +305,9 @@ export class Orchestrator {
   ): Promise<void> {
     if (phase.kind === 'FRAMING') return await this.#stepFraming(snapshot, state, phase);
     if (phase.kind === 'HYPOTHESIS') return await this.#stepHypothesis(snapshot, state, phase);
-    throw new Error(`${phase.kind} is not implemented in this stage`);
+    const body = PHASE_BODIES[phase.kind];
+    if (!body) throw new Error(`${phase.kind} is not built yet`);
+    return await body({ tools: this.#tools, snapshot, state, phase });
   }
 
   /**
@@ -296,9 +326,11 @@ export class Orchestrator {
     const statements = phase.rounds.find((round) => round.index === 0);
 
     if (!statements) {
-      await this.#openRound(snapshot, state, phase, 0, 'BLIND_PARALLEL', [
-        { role: 'PROPOSER', count: snapshot.roster.length },
-      ]);
+      await this.#openRound(snapshot, state, phase, {
+        index: 0,
+        mode: 'BLIND_PARALLEL',
+        demands: [{ role: 'PROPOSER', count: snapshot.roster.length }],
+      });
       return;
     }
 
@@ -327,9 +359,11 @@ export class Orchestrator {
         return;
       }
       this.#assertMayContinue(snapshot, phase, drafts.length);
-      await this.#openRound(snapshot, state, phase, phase.rounds.length, 'SEQUENTIAL', [
-        { role: 'REFEREE', count: 1 },
-      ]);
+      await this.#openRound(snapshot, state, phase, {
+        index: phase.rounds.length,
+        mode: 'SEQUENTIAL',
+        demands: [{ role: 'REFEREE', count: 1 }],
+      });
       return;
     }
 
@@ -392,9 +426,11 @@ export class Orchestrator {
       // fresh pair rather than needing a mode of its own.
       const generating = rounds.length % 2 === 0;
       this.#assertMayContinue(snapshot, phase, Math.floor(rounds.length / 2));
-      await this.#openRound(snapshot, state, phase, rounds.length, 'BLIND_PARALLEL', [
-        { role: generating ? 'PROPOSER' : 'VERIFIER', count: snapshot.roster.length },
-      ]);
+      await this.#openRound(snapshot, state, phase, {
+        index: rounds.length,
+        mode: 'BLIND_PARALLEL',
+        demands: [{ role: generating ? 'PROPOSER' : 'VERIFIER', count: snapshot.roster.length }],
+      });
       return;
     }
 
@@ -464,21 +500,39 @@ export class Orchestrator {
     snapshot: SessionSnapshot,
     state: ProtocolState,
     phase: PhaseState,
-    index: number,
-    mode: 'BLIND_PARALLEL' | 'SEQUENTIAL' | 'COLLECTIVE',
-    demands: readonly { role: ParticipantRole; count: number }[],
+    spec: RoundSpec,
   ): Promise<void> {
     assertCanOpenRound(state, phase.phaseId);
     const roundId = this.#ports.newId();
+    const { index, mode } = spec;
+    const participants = snapshot.roster.map(toSolverParticipant);
+    const staked = spec.authors === undefined ? {} : { authors: spec.authors };
 
     let assignments: readonly RoleAssignment[];
     try {
-      assignments = solveRoles({
-        participants: snapshot.roster.map(toSolverParticipant),
-        demands,
-        history: state.roleHistory,
-        ...(this.#options.seed === undefined ? {} : { seed: this.#options.seed }),
-      }).assignments;
+      const fixed = spec.fixed ?? [];
+      // Fixed assignments skip the search, never the rules.
+      const broken = violations(fixed, { participants, demands: [], ...staked });
+      if (broken.length > 0) {
+        throw new UnsatisfiableRolesError(broken.join('; '), [
+          ...new Set(fixed.map((entry) => entry.role)),
+        ]);
+      }
+      const taken = new Set(fixed.map((entry) => entry.participantId));
+      const solved =
+        spec.demands === undefined
+          ? []
+          : solveRoles({
+              participants: participants.filter((entry) => !taken.has(entry.participantId)),
+              demands: spec.demands,
+              ...staked,
+              history: state.roleHistory,
+              ...(this.#options.seed === undefined ? {} : { seed: this.#options.seed }),
+            }).assignments;
+      assignments = [...fixed, ...solved];
+      if (assignments.length === 0) {
+        throw new UnsatisfiableRolesError('the round asks for nobody', []);
+      }
     } catch (error) {
       if (error instanceof UnsatisfiableRolesError) {
         // Loud rather than silently relaxed: an assignment that broke P1 would
@@ -515,9 +569,12 @@ export class Orchestrator {
     state: ProtocolState,
     phase: PhaseState,
     round: RoundState,
+    /** Recorded in the same batch, so they land if and only if the round closes. */
+    extra: readonly DomainEvent[] = [],
   ): Promise<void> {
     assertCanCloseRound(state, phase.phaseId, round.roundId);
     await this.#ports.record(snapshot.sessionId, [
+      ...extra,
       domainEvent('round.closed', {
         sessionId: snapshot.sessionId,
         phaseId: phase.phaseId,
@@ -800,49 +857,6 @@ class StopPhase extends Error {
     super(detail);
     this.name = 'StopPhase';
   }
-}
-
-// ---------------------------------------------------------------------------
-// Reading turns back out of the log
-// ---------------------------------------------------------------------------
-
-export interface RecordedTurn {
-  readonly messageId: string;
-  readonly participantId: string;
-  readonly role: ParticipantRole | null;
-  readonly text: string;
-  readonly promptHash: string | null;
-}
-
-/** Model turns in one round, in log order. Text bodies only. */
-export function turnsOf(events: readonly DomainEvent[], roundId: string): readonly RecordedTurn[] {
-  const turns: RecordedTurn[] = [];
-  for (const event of events) {
-    if (event.type !== 'message.recorded') continue;
-    const payload = event.payload;
-    if (payload.roundId !== roundId) continue;
-    if (payload.author.kind !== 'MODEL') continue;
-    if (payload.body.kind !== 'text') continue;
-    turns.push({
-      messageId: payload.messageId,
-      participantId: payload.author.participantId,
-      role: payload.role ?? null,
-      text: payload.body.text,
-      promptHash: payload.promptHash ?? null,
-    });
-  }
-  return turns;
-}
-
-/** The approved charter, which HYPOTHESIS is written against. */
-function charterOf(snapshot: SessionSnapshot): string {
-  for (let i = snapshot.events.length - 1; i >= 0; i -= 1) {
-    const event = snapshot.events[i];
-    if (event?.type === 'phase.gate-raised' && event.payload.gate === 'charter') {
-      return event.payload.proposal;
-    }
-  }
-  throw new Error('no charter has been drafted; FRAMING must run first');
 }
 
 interface Candidate {

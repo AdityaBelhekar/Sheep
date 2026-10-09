@@ -164,6 +164,207 @@ export function hypothesisScoringPrompt(
 }
 
 // ---------------------------------------------------------------------------
+// METHOD
+// ---------------------------------------------------------------------------
+
+/** What a hypothesis or claim is called in a prompt, with what it says. */
+export interface PromptClaim {
+  readonly label: string;
+  readonly claim: { readonly statement: string };
+}
+
+const listClaims = (claims: readonly PromptClaim[]): string[] =>
+  claims.map((entry) => `[${entry.label}] ${entry.claim.statement}`);
+
+/** What a script may and may not do. Stated once, wherever a model writes code. */
+export const SANDBOX_RULES = [
+  'The script runs in a sandbox, and these are facts about it, not requests:',
+  '- Python 3.12 with numpy, scipy, pandas, scikit-learn, matplotlib, sympy and networkx.',
+  '- No network, no subprocesses, and no file access outside the working directory.',
+  '- Memory and wall-clock time are capped; it is killed when it exceeds either.',
+  '- It is seeded, so the same script gives the same output on every run.',
+  '- No data files are provided. Anything it analyses, it must generate or compute.',
+  '- Every number you will later want to state as a result must be printed.',
+  '- Figures are saved with plt.savefig("name.png"); there is no display.',
+].join('\n');
+
+/**
+ * The six axes a method is attacked along.
+ *
+ * Fixed, so that two critics' objections are comparable and so that none of
+ * the six can be skipped by a critic who would rather discuss something else.
+ */
+export const METHOD_AXES = [
+  'INTERNAL_VALIDITY',
+  'CONFOUNDS',
+  'LEAKAGE',
+  'POWER',
+  'BASELINES',
+  'REPRODUCIBILITY',
+] as const;
+
+const AXIS_QUESTIONS: Readonly<Record<(typeof METHOD_AXES)[number], string>> = {
+  INTERNAL_VALIDITY: 'does the script measure what the plan says it measures?',
+  CONFOUNDS: 'could something other than the hypothesised cause produce the result?',
+  LEAKAGE: 'does information reach the test that should not — tuning on test data, peeking?',
+  POWER: 'is there enough data, and enough repetition, to detect the effect at all?',
+  BASELINES: 'is the result compared with the obvious alternative, and a trivial one?',
+  REPRODUCIBILITY: 'would the same script give the same answer again, anywhere?',
+};
+
+export interface MethodDraft {
+  readonly plan: string;
+  readonly analysis: string;
+  readonly code: string;
+}
+
+export interface MethodCritique {
+  readonly axis: (typeof METHOD_AXES)[number];
+  readonly severity: 'blocking' | 'major' | 'minor';
+  readonly argument: string;
+}
+
+/**
+ * Sequential: one proposer drafts the method, or revises its own.
+ *
+ * A revision is shown what happened when the previous draft was actually run
+ * — not a description of what might happen — and every critique of it.
+ */
+export function methodPrompt(
+  charter: string,
+  hypotheses: readonly PromptClaim[],
+  revision?: {
+    readonly previous: MethodDraft | null;
+    readonly report: string;
+    readonly critiques: readonly MethodCritique[];
+  },
+): string {
+  const lines = [
+    'The Charter for this session:',
+    '',
+    charter,
+    '',
+    'The hypotheses the human running it selected to test:',
+    '',
+    ...listClaims(hypotheses),
+    '',
+    SANDBOX_RULES,
+    '',
+  ];
+
+  if (revision === undefined) {
+    lines.push('Design the method that will test them, and write the script that carries it out.');
+  } else {
+    if (revision.previous !== null) {
+      lines.push(
+        'Your previous method:',
+        '',
+        revision.previous.plan,
+        '',
+        '```python',
+        revision.previous.code.trimEnd(),
+        '```',
+        '',
+      );
+    }
+    lines.push('What happened when it was run in the sandbox:', '', revision.report, '');
+    if (revision.critiques.length > 0) {
+      lines.push('Models from other vendors critiqued it independently:', '');
+      for (const critique of revision.critiques) {
+        lines.push(`- ${critique.axis} (${critique.severity}): ${critique.argument}`);
+      }
+      lines.push('');
+    }
+    lines.push(
+      'Revise the method. Fix what failed, and answer each critique by changing the',
+      'method or by saying in the plan why it does not apply. Reply with the whole',
+      'method again, not a patch.',
+    );
+  }
+
+  lines.push(
+    '',
+    'Reply with one JSON object, then the complete script in one fenced python block:',
+    '',
+    '{"plan":"what will be done and why it tests the hypotheses",',
+    '"analysis":"for each hypothesis, what printed result would support it and what would refute it",',
+    '"seed":0}',
+    '',
+    '```python',
+    '# the whole script',
+    '```',
+  );
+  return lines.join('\n');
+}
+
+/** Blind: each critic sees the method and its smoke run, and no other critique. */
+export function methodCritiquePrompt(
+  charter: string,
+  hypotheses: readonly PromptClaim[],
+  method: MethodDraft,
+  report: string,
+): string {
+  return [
+    'The Charter for this session:',
+    '',
+    charter,
+    '',
+    'The hypotheses under test:',
+    '',
+    ...listClaims(hypotheses),
+    '',
+    'Another participant, from a different vendor, proposed this method:',
+    '',
+    method.plan,
+    '',
+    'How it says the results should be read:',
+    '',
+    method.analysis,
+    '',
+    '```python',
+    method.code.trimEnd(),
+    '```',
+    '',
+    'What happened when the script was smoke-run in the sandbox:',
+    '',
+    report,
+    '',
+    'Critique the method before it is run in full. You are working blind: no other',
+    'critic’s view is available to you. Consider each of these axes in turn:',
+    '',
+    ...METHOD_AXES.map((axis) => `${axis} — ${AXIS_QUESTIONS[axis]}`),
+    '',
+    'Raise a critique only where you can say specifically what is wrong and what',
+    'would fix it. An axis with no problem gets no entry; an empty list is an honest',
+    'answer when the method is sound.',
+    '',
+    'Reply with JSON only, no prose and no code fence:',
+    '{"critiques":[{"axis":"CONFOUNDS","severity":"blocking|major|minor",',
+    '"argument":"what is wrong and what would fix it"}]}',
+  ].join('\n');
+}
+
+export const methodSchema = z.object({
+  plan: z.string().min(1).max(8_000),
+  analysis: z.string().min(1).max(8_000),
+  seed: z.number().int().min(0).max(0xffff_ffff).optional(),
+  /** Accepted when a model inlines the script instead of fencing it. */
+  code: z.string().max(200_000).optional(),
+});
+
+export const methodCritiquesSchema = z.object({
+  critiques: z
+    .array(
+      z.object({
+        axis: z.enum(METHOD_AXES),
+        severity: z.enum(['blocking', 'major', 'minor']),
+        argument: z.string().min(1).max(4_000),
+      }),
+    )
+    .max(12),
+});
+
+// ---------------------------------------------------------------------------
 // Parsing what comes back
 // ---------------------------------------------------------------------------
 

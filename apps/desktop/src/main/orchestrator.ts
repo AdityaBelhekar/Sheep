@@ -1,18 +1,20 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, utilityProcess, type UtilityProcess } from 'electron';
-import { safeParseDomainEvent, type DomainEvent } from '@sheep/core';
 import {
   RpcPeer,
   type ApproveInput,
   type ProgressUpdate,
   type ProtocolView,
+  type RunCodeRequest,
+  type RunCodeResult,
   type RunOutcome,
   type RpcTransport,
   type SessionSnapshot,
   type TurnRequest,
 } from '@sheep/orchestrator';
-import { getSession, listParticipants } from '@sheep/store';
+import { getSandbox } from './lab';
 import { logError, logInfo, logWarn } from './log';
+import { createProtocolServices } from './protocol-services';
 import { recordSmokeCheck } from './smoke';
 import { getStore } from './store';
 import { runTurn } from './turn';
@@ -156,41 +158,28 @@ export async function protocolView(sessionId: string): Promise<ProtocolView> {
   return await call<ProtocolView>('view', { sessionId });
 }
 
+const services = createProtocolServices({
+  store: getStore,
+  sandbox: getSandbox,
+  onUnreadable(seq, reason) {
+    logError(`the orchestrator cannot read event ${String(seq)} -`, reason);
+  },
+});
+
 /** What the child may ask main to do. Nothing else crosses. */
 const HANDLERS = {
-  snapshot: (params: unknown): SessionSnapshot => {
-    const sessionId = requireSessionId(params);
-    const store = getStore();
-    const session = getSession(store.db, sessionId);
-    if (!session) throw new Error(`unknown session: ${sessionId}`);
-
-    return {
-      sessionId,
-      title: session.title,
-      question: session.question,
-      status: session.status,
-      budget: session.budget,
-      roster: listParticipants(store.db, sessionId, { attachedOnly: true }),
-      events: readSessionEvents(sessionId),
-    };
-  },
+  snapshot: (params: unknown): SessionSnapshot => services.snapshot(requireSessionId(params)),
 
   record: (params: unknown): { recorded: number } => {
-    requireSessionId(params);
     const raw = (params as { events?: unknown }).events;
     if (!Array.isArray(raw)) throw new Error('record requires an array of events');
+    return services.record(requireSessionId(params), raw);
+  },
 
-    // Parsed here, not trusted: this is the last point before the hash chain,
-    // where a malformed payload would be permanent.
-    const events = raw.map((entry) => {
-      const candidate = entry as { type?: unknown; payload?: unknown };
-      const parsed = safeParseDomainEvent(String(candidate.type), candidate.payload);
-      if (!parsed.ok) throw parsed.error;
-      return { type: parsed.event.type, payload: parsed.event.payload as never };
-    });
-
-    getStore().record(events);
-    return { recorded: events.length };
+  execute: async (params: unknown): Promise<RunCodeResult> => {
+    const request = (params as { request?: RunCodeRequest }).request;
+    if (!request || typeof request.code !== 'string') throw new Error('execute requires code');
+    return await services.execute(requireSessionId(params), request);
   },
 
   ask: async (params: unknown): Promise<Awaited<ReturnType<typeof runTurn>>> => {
@@ -221,23 +210,6 @@ const HANDLERS = {
     }
   },
 };
-
-/** This session's events, in chain order, already parsed against the schema. */
-function readSessionEvents(sessionId: string): DomainEvent[] {
-  const events: DomainEvent[] = [];
-  for (const record of getStore().events.stream({ sessionId })) {
-    const parsed = safeParseDomainEvent(record.type, record.payload);
-    if (parsed.ok) {
-      events.push(parsed.event);
-      continue;
-    }
-    // An entry this build cannot read is skipped rather than fatal — a log
-    // written by a newer version must not make the app unopenable — but it is
-    // said out loud, because the protocol state it produces is now incomplete.
-    logError(`the orchestrator cannot read event ${String(record.seq)} -`, parsed.error.message);
-  }
-  return events;
-}
 
 function requireSessionId(params: unknown): string {
   const sessionId = (params as { sessionId?: unknown }).sessionId;

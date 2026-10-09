@@ -101,10 +101,37 @@ export {
   systemFor,
 } from './prompts';
 
+export {
+  METHOD_AXES,
+  SANDBOX_RULES,
+  methodCritiquePrompt,
+  methodCritiquesSchema,
+  methodPrompt,
+  methodSchema,
+  type MethodCritique,
+  type MethodDraft,
+  type PromptClaim,
+} from './prompts';
+
+export { SMOKE_TIMEOUT_MS, describeRun, finalMethod, parseMethod, type Method } from './method';
+
+export {
+  charterOf,
+  claimsOfPhase,
+  completedPhase,
+  hypothesesOf,
+  ledgerOf,
+  type LabelledClaim,
+} from './reading';
+
+export type { PhaseBody, PhaseContext, PhaseTools, RoundSpec } from './tools';
+
 export type {
   OrchestratorPorts,
   ProgressKind,
   ProgressUpdate,
+  RunCodeRequest,
+  RunCodeResult,
   SessionSnapshot,
   TurnRequest,
   TurnResponse,

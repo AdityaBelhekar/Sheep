@@ -1,5 +1,6 @@
 import type {
   DomainEvent,
+  ExecutionRecord,
   MessageFinishReason,
   ModelRef,
   ParticipantRole,
@@ -13,7 +14,7 @@ import type {
  * The orchestrator runs in its own process. It owns no database handle and no
  * adapter registry — main owns both, because two owners of either would be two
  * answers to what happened and what it cost. So the protocol logic is written
- * against these four operations, and the process boundary is a detail of which
+ * against these few operations, and the process boundary is a detail of which
  * implementation is plugged in: the desktop app supplies one that forwards over
  * JSON-RPC, and the tests supply one backed by an array and a script.
  *
@@ -58,6 +59,21 @@ export interface TurnResponse {
   readonly params?: { readonly maxOutputTokens: number; readonly temperature?: number };
 }
 
+/** A script for the sandbox. */
+export interface RunCodeRequest {
+  readonly code: string;
+  readonly seed?: number;
+  /** Wall clock for this run. The sandbox's default when absent. */
+  readonly timeoutMs?: number;
+}
+
+/** What the sandbox did with it: the record that was written, and what it printed. */
+export interface RunCodeResult {
+  readonly execution: ExecutionRecord;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
 export type ProgressKind =
   | 'phase-opened'
   | 'round-opened'
@@ -85,6 +101,16 @@ export interface OrchestratorPorts {
    * same turn, so an implementation does not need its own idempotency.
    */
   ask(sessionId: string, request: TurnRequest): Promise<TurnResponse>;
+  /**
+   * Runs a script in the sandbox and records the run, whatever became of it.
+   *
+   * The one way anything in the protocol gets a result (P4). Unlike `ask`, the
+   * engine does not dedupe this itself: a run is seeded and its environment
+   * locked, so an implementation that has already recorded a clean run of the
+   * same code with the same seed returns that run again instead of repeating
+   * it. That is what lets a phase re-read a result after a restart.
+   */
+  execute(sessionId: string, request: RunCodeRequest): Promise<RunCodeResult>;
   newId(): string;
   /** Best-effort progress for the UI. Never awaited, never load-bearing. */
   progress?(update: ProgressUpdate): void;

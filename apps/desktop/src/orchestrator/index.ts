@@ -49,6 +49,7 @@ const ports: OrchestratorPorts = {
     await peer.call('record', { sessionId, events });
   },
   ask: (sessionId, request: TurnRequest) => peer.call('ask', { sessionId, request }),
+  execute: (sessionId, request) => peer.call('execute', { sessionId, request }),
   newId: () => randomUUID(),
   progress: (update) => {
     peer.notify('progress', update);

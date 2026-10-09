@@ -1,5 +1,20 @@
-import { domainEvent, type DomainEvent, type RosterEntry, type SessionStatus } from '@sheep/core';
-import type { OrchestratorPorts, ProgressUpdate, SessionSnapshot, TurnRequest } from './ports';
+import { createHash } from 'node:crypto';
+import {
+  domainEvent,
+  type DomainEvent,
+  type ExecutionRecord,
+  type ExecutionStatus,
+  type RosterEntry,
+  type SessionStatus,
+} from '@sheep/core';
+import type {
+  OrchestratorPorts,
+  ProgressUpdate,
+  RunCodeRequest,
+  RunCodeResult,
+  SessionSnapshot,
+  TurnRequest,
+} from './ports';
 
 /**
  * An in-memory session, standing in for the store, the gateway and main.
@@ -27,11 +42,22 @@ export interface FakeSessionOptions {
   /** What each turn costs. Zero by default, so budget stays out of the way. */
   readonly costPerTurnUsd?: number;
   readonly reply: ScriptedTurn;
+  /**
+   * Stands in for the sandbox: what a script does when run. A clean run that
+   * prints nothing, when absent.
+   */
+  readonly run?: (request: RunCodeRequest) => {
+    status?: ExecutionStatus;
+    stdout?: string;
+    stderr?: string;
+  };
 }
 
 export interface FakePorts extends OrchestratorPorts {
   readonly events: readonly DomainEvent[];
   readonly asked: readonly TurnRequest[];
+  /** Every script that was actually run, in order. Reused runs are not repeated here. */
+  readonly ran: readonly RunCodeRequest[];
   readonly progressLog: readonly ProgressUpdate[];
   /** Ids handed out so far, in order. Deterministic across runs. */
   readonly issuedIds: readonly string[];
@@ -43,6 +69,7 @@ export interface FakePorts extends OrchestratorPorts {
 }
 
 const CONNECTION_ID = '00000000-0000-4000-8000-0000000000c0';
+const RECORDED_AT = '2026-01-01T00:00:00.000Z';
 
 /**
  * Sequential UUID-shaped ids.
@@ -64,6 +91,9 @@ export function fakePorts(options: FakeSessionOptions): FakePorts {
   const sessionId = options.sessionId ?? '11111111-1111-4111-8111-111111111111';
   const events: DomainEvent[] = [];
   const asked: TurnRequest[] = [];
+  const ran: RunCodeRequest[] = [];
+  const outputs = new Map<string, { stdout: string; stderr: string }>();
+  const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
   const progressLog: ProgressUpdate[] = [];
   const issuedIds: string[] = [];
   const nextId = sequentialIds(options.idPrefix ?? 1);
@@ -100,6 +130,9 @@ export function fakePorts(options: FakeSessionOptions): FakePorts {
     },
     get asked() {
       return asked;
+    },
+    get ran() {
+      return ran;
     },
     get progressLog() {
       return progressLog;
@@ -159,6 +192,51 @@ export function fakePorts(options: FakeSessionOptions): FakePorts {
         finish: 'stop' as const,
       };
     },
+    execute(_id: string, request: RunCodeRequest): Promise<RunCodeResult> {
+      const codeHash = sha256(request.code);
+      const seed = request.seed ?? 0;
+      // As the real sandbox port does: a clean run of the same code with the
+      // same seed is returned again, not repeated.
+      for (const event of events) {
+        if (event.type !== 'execution.recorded') continue;
+        const prior = event.payload;
+        const output = outputs.get(prior.executionId);
+        if (prior.codeHash === codeHash && prior.seed === seed && prior.status === 'ok' && output) {
+          return Promise.resolve({
+            execution: { ...prior, peakMemoryBytes: null, recordedAt: RECORDED_AT },
+            ...output,
+          });
+        }
+      }
+
+      ran.push(request);
+      const outcome = options.run?.(request) ?? {};
+      const status = outcome.status ?? 'ok';
+      const output = { stdout: outcome.stdout ?? '', stderr: outcome.stderr ?? '' };
+      const payload = {
+        sessionId,
+        executionId: nextId(),
+        codeHash,
+        exitCode: status === 'ok' ? 0 : status === 'error' ? 1 : -1,
+        status,
+        seed,
+        envLockHash: sha256('fake runtime'),
+        limits: { memoryMb: 1024, cpuPercent: 50, timeoutMs: request.timeoutMs ?? 60_000 },
+        durationMs: 12,
+        stdoutHash: sha256(output.stdout),
+        stderrHash: sha256(output.stderr),
+        truncated: false,
+        artifacts: [],
+      };
+      events.push(domainEvent('execution.recorded', payload));
+      outputs.set(payload.executionId, output);
+      const execution: ExecutionRecord = {
+        ...payload,
+        peakMemoryBytes: null,
+        recordedAt: RECORDED_AT,
+      };
+      return Promise.resolve({ execution, ...output });
+    },
     newId() {
       const id = nextId();
       issuedIds.push(id);
@@ -212,5 +290,107 @@ export function scoringReply(prompt: string): string {
       feasibility: 0.8 - index * 0.05,
       note: 'scored blind',
     })),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// A whole scripted session
+// ---------------------------------------------------------------------------
+
+const FENCE = '```';
+
+/** A method reply in the shape the prompt asks for: a JSON object, then a fenced script. */
+export function methodReply(
+  script = 'import numpy as np\nprint("perplexity delta", 0.31)',
+  plan = 'Compare block-sparse with dense attention on a synthetic corpus.',
+): string {
+  return [
+    JSON.stringify({
+      plan,
+      analysis: 'A printed delta under 0.02 supports H1; anything above it refutes H1.',
+      seed: 3,
+    }),
+    '',
+    `${FENCE}python`,
+    script,
+    FENCE,
+  ].join('\n');
+}
+
+/** One critique per critic, on an axis that differs by critic so they are told apart. */
+export function methodCritiqueReply(participantId: string): string {
+  const axis = participantId.charCodeAt(0) % 2 === 0 ? 'BASELINES' : 'POWER';
+  return JSON.stringify({
+    critiques: [
+      {
+        axis,
+        severity: 'major',
+        argument: `Objection from ${participantId.slice(0, 4)}: the ${axis.toLowerCase()} are not addressed.`,
+      },
+    ],
+  });
+}
+
+/**
+ * Answers every prompt a session can ask.
+ *
+ * Keyed off what the prompt asks for rather than off a call counter, so the
+ * script does not silently go out of step when the engine reorders or retries a
+ * turn — which is exactly what a resume makes it do.
+ */
+export function scriptedReply(request: TurnRequest): string {
+  const { prompt, participantId } = request;
+  if (prompt.includes('write the problem statement')) return framingReply(participantId);
+  if (prompt.includes('Draft the Charter')) {
+    return [
+      'QUESTION — does block-sparse attention preserve perplexity at 128k?',
+      'SCOPE — decoder-only models under two billion parameters.',
+      'SUCCESS CRITERIA — a measured perplexity delta with a confidence interval.',
+      'ASSUMPTIONS — the sparsity pattern is fixed rather than learned.',
+      'OPEN DISAGREEMENTS — whether retrieval accuracy counts as in scope.',
+    ].join('\n');
+  }
+  if (prompt.includes('propose 3 candidate hypotheses')) {
+    return hypothesisReply(participantId.slice(0, 4));
+  }
+  if (prompt.includes('Score each on three axes')) return scoringReply(prompt);
+  if (prompt.includes('Critique the method before it is run')) {
+    return methodCritiqueReply(participantId);
+  }
+  if (prompt.includes('Revise the method')) {
+    return methodReply(
+      'import numpy as np\nprint("dense baseline", 0.0)\nprint("perplexity delta", 0.31)',
+      'As before, now with a dense baseline and five repetitions.',
+    );
+  }
+  if (prompt.includes('Design the method that will test them')) return methodReply();
+  throw new Error(`the script has no answer for this prompt:\n${prompt.slice(0, 200)}`);
+}
+
+/**
+ * Drives a session through both human gates, choosing the top-ranked
+ * hypothesis, and returns where the unattended phases then stopped.
+ */
+export async function runPastGates(
+  engine: {
+    run(sessionId: string): Promise<unknown>;
+    approve(
+      sessionId: string,
+      input: { gate: 'charter' | 'hypothesis'; decision: 'approved'; selected?: string[] },
+    ): Promise<unknown>;
+    view(sessionId: string): Promise<{
+      phases: { gate: { options: { optionId: string }[] } | null }[];
+    }>;
+  },
+  sessionId: string,
+): Promise<unknown> {
+  await engine.run(sessionId);
+  await engine.approve(sessionId, { gate: 'charter', decision: 'approved' });
+  const option = (await engine.view(sessionId)).phases[1]?.gate?.options[0];
+  if (!option) throw new Error('the hypothesis gate offered nothing to select');
+  return await engine.approve(sessionId, {
+    gate: 'hypothesis',
+    decision: 'approved',
+    selected: [option.optionId],
   });
 }

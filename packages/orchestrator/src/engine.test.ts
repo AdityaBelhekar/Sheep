@@ -4,13 +4,7 @@ import { Orchestrator, turnsOf } from './engine';
 import type { TurnRequest } from './ports';
 import { violations } from './roles';
 import { reduceProtocol } from './state';
-import {
-  fakePorts,
-  framingReply,
-  hypothesisReply,
-  scoringReply,
-  type FakePorts,
-} from './test-support';
+import { fakePorts, framingReply, scriptedReply, type FakePorts } from './test-support';
 
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const ALICE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -22,35 +16,6 @@ const ROSTER = [
   { participantId: BOB, vendorId: 'openai' },
   { participantId: CARA, vendorId: 'google' },
 ];
-
-/**
- * Answers every prompt the two phases can ask.
- *
- * Keyed off what the prompt asks for rather than off a call counter, so the
- * script does not silently go out of step when the engine reorders or retries a
- * turn — which is exactly what the resume test makes it do.
- */
-function scriptedReply(request: TurnRequest): string {
-  if (request.prompt.includes('write the problem statement')) {
-    return framingReply(request.participantId);
-  }
-  if (request.prompt.includes('Draft the Charter')) {
-    return [
-      'QUESTION — does block-sparse attention preserve perplexity at 128k?',
-      'SCOPE — decoder-only models under two billion parameters.',
-      'SUCCESS CRITERIA — a measured perplexity delta with a confidence interval.',
-      'ASSUMPTIONS — the sparsity pattern is fixed rather than learned.',
-      'OPEN DISAGREEMENTS — whether retrieval accuracy counts as in scope.',
-    ].join('\n');
-  }
-  if (request.prompt.includes('propose 3 candidate hypotheses')) {
-    return hypothesisReply(request.participantId.slice(0, 4));
-  }
-  if (request.prompt.includes('Score each on three axes')) {
-    return scoringReply(request.prompt);
-  }
-  throw new Error(`the script has no answer for this prompt:\n${request.prompt.slice(0, 200)}`);
-}
 
 function newPorts(overrides: Partial<Parameters<typeof fakePorts>[0]> = {}): FakePorts {
   return fakePorts({
@@ -198,7 +163,7 @@ describe('HYPOTHESIS', () => {
     }
   });
 
-  it('selecting hypotheses completes the phase and stops at the unbuilt phases', async () => {
+  it('selecting hypotheses completes the phase and hands over to the unattended ones', async () => {
     const ports = newPorts();
     const engine = engineOn(ports);
     await engine.run(SESSION);
@@ -212,11 +177,10 @@ describe('HYPOTHESIS', () => {
       selected: chosen === undefined ? [] : [chosen],
     });
 
-    expect(outcome.status).toBe('stopped');
-    expect(outcome.reason).toBe('not-implemented');
-    expect(outcome.detail).toContain('METHOD');
     expect(outcome.state.phases[1]?.status).toBe('complete');
-    expect(outcome.state.nextPhase).toBe('METHOD');
+    // No third gate: METHOD opened and ran without anyone being asked.
+    expect(outcome.status).not.toBe('awaiting-approval');
+    expect(outcome.state.phases[2]?.kind).toBe('METHOD');
   });
 
   it('records each selected hypothesis as a CONJECTURE claim with its proposing turn', async () => {
