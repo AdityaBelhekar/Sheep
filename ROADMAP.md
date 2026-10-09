@@ -251,7 +251,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
   → `feat(orchestrator): structured cross-vendor critique phase`
 - [x] **52. Test auto-routing** — a `proposed_test` routes automatically to the sandbox or SymPy. **(P4 in action.)**
   → `feat(orchestrator): auto-route proposed tests to verifiers`
-- [ ] **53. RESOLUTION phase** — disputes settled by discriminating evidence; no test that discriminates → `UNRESOLVED` with both positions preserved. Referee writes rationale but cannot overrule evidence. **(P6)**
+- [x] **53. RESOLUTION phase** — disputes settled by discriminating evidence; no test that discriminates → `UNRESOLVED` with both positions preserved. Referee writes rationale but cannot overrule evidence. **(P6)**
   → `feat(orchestrator): evidence-based dispute resolution`
 - [ ] **54. Full 7-phase E2E** — complete run against mock models in CI.
   → `test(e2e): full seven-phase session against mock models`

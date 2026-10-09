@@ -39,7 +39,15 @@ async function throughCritique(ports: FakePorts) {
   const outcome = (await runPastGates(engine, SESSION)) as RunOutcome;
   const critique = outcome.state.phases.find((phase) => phase.kind === 'CRITIQUE');
   if (!critique) throw new Error(`CRITIQUE never opened: ${outcome.detail}`);
-  const ledger = ledgerOf(await ports.snapshot(SESSION));
+  // The ledger as CRITIQUE left it, before RESOLUTION closed anything.
+  const closed = ports.events.findIndex(
+    (event) => event.type === 'phase.closed' && event.payload.phaseId === critique.phaseId,
+  );
+  const snapshot = await ports.snapshot(SESSION);
+  const ledger = ledgerOf({
+    ...snapshot,
+    events: closed === -1 ? snapshot.events : snapshot.events.slice(0, closed + 1),
+  });
   const author = ports.asked.find((request) =>
     request.prompt.includes('State what the run found'),
   )!.participantId;

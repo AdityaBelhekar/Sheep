@@ -542,6 +542,154 @@ export function critiquePrompt(
 }
 
 // ---------------------------------------------------------------------------
+// RESOLUTION
+// ---------------------------------------------------------------------------
+
+/** One dispute as a prompt describes it. */
+export interface PromptDispute {
+  readonly label: string;
+  /** The finding in dispute. */
+  readonly claim: string;
+  readonly axis: string;
+  readonly severity: string;
+  readonly argument: string;
+  /** What a checker found, when the proposed test was run. */
+  readonly test: {
+    readonly verdict: string;
+    readonly outcome: string;
+    readonly detail: string;
+  } | null;
+  /** What test was proposed, when there was one. */
+  readonly proposed: string | null;
+}
+
+interface PromptPosition {
+  readonly confidence: number;
+  readonly rationale?: string | undefined;
+}
+
+function describeTest(dispute: PromptDispute): string {
+  if (dispute.test === null) {
+    return dispute.proposed === null
+      ? 'No test was proposed.'
+      : `A test was proposed but could not be run here: ${dispute.proposed}`;
+  }
+  const meaning =
+    dispute.test.outcome === 'UPHELD'
+      ? 'the finding survived it'
+      : dispute.test.outcome === 'OVERTURNED'
+        ? 'it refuted the finding'
+        : 'it decided nothing';
+  return `The proposed test was run by a checker. Verdict ${dispute.test.verdict}: ${meaning}. ${dispute.test.detail}`;
+}
+
+const describeDispute = (dispute: PromptDispute): string[] => [
+  `[${dispute.label}] Finding: ${dispute.claim}`,
+  `Critique (${dispute.axis}, ${dispute.severity}): ${dispute.argument}`,
+  describeTest(dispute),
+  '',
+];
+
+/** Blind: each party to a dispute states its final position, unseen by the other side. */
+export function positionsPrompt(
+  charter: string,
+  side: 'author' | 'critic',
+  disputes: readonly PromptDispute[],
+): string {
+  return [
+    'The Charter for this session:',
+    '',
+    charter,
+    '',
+    side === 'author'
+      ? 'These critiques were raised against findings you recorded:'
+      : 'You raised these critiques of another participant’s findings:',
+    '',
+    ...disputes.flatMap(describeDispute),
+    'State your final position on each. You are working blind: the other side is',
+    'doing the same and neither of you will see the other’s answer first.',
+    '',
+    'Where a test was run, its result stands whatever anyone says about it; your',
+    'position is recorded beside it. Where none was, the dispute will be recorded',
+    'as an open question with both positions kept exactly as written — so write',
+    'yours for a reader who has to judge between them.',
+    '',
+    'Give your confidence, from 0 to 1, that ' +
+      (side === 'author' ? 'the finding is right.' : 'the finding is wrong.'),
+    ...(side === 'critic'
+      ? ['If the results have answered your critique, set "withdraw" to true.']
+      : []),
+    '',
+    'Reply with JSON only, no prose and no code fence:',
+    '{"positions":[{"dispute":"D1","confidence":0.0,"rationale":"..."' +
+      (side === 'critic' ? ',"withdraw":false' : '') +
+      '}]}',
+  ].join('\n');
+}
+
+/** Sequential: the referee explains each dispute's outcome. It does not choose it. */
+export function refereePrompt(
+  charter: string,
+  disputes: readonly (PromptDispute & {
+    readonly author: PromptPosition | null;
+    readonly critic: PromptPosition | null;
+  })[],
+): string {
+  const position = (who: string, held: PromptPosition | null): string =>
+    held === null
+      ? `${who}: no position on record.`
+      : `${who} (confidence ${held.confidence.toFixed(2)}): ${held.rationale ?? ''}`;
+
+  return [
+    'You are the REFEREE. The Charter for this session:',
+    '',
+    charter,
+    '',
+    'These disputes are being closed:',
+    '',
+    ...disputes.flatMap((dispute) => [
+      ...describeDispute(dispute).slice(0, -1),
+      position('Author', dispute.author),
+      position('Critic', dispute.critic),
+      '',
+    ]),
+    'The outcomes are already fixed, and not by you. A dispute whose test gave a',
+    'decisive verdict is resolved the way the test came out. A dispute with no',
+    'decisive test is recorded as unresolved, with both positions kept. You cannot',
+    'change either, and a rationale that argues for a different outcome will not',
+    'alter what is recorded.',
+    '',
+    'Write the rationale for each: what the evidence showed and why it bears on the',
+    'finding, or, for an unresolved one, what exactly separates the two positions',
+    'and what evidence would settle it.',
+    '',
+    'Reply with JSON only, no prose and no code fence:',
+    '{"rationales":[{"dispute":"D1","rationale":"..."}]}',
+  ].join('\n');
+}
+
+export const positionsSchema = z.object({
+  positions: z
+    .array(
+      z.object({
+        dispute: z.string().min(1).max(40),
+        confidence: z.number().min(0).max(1).optional(),
+        rationale: z.string().min(1).max(8_000).optional(),
+        withdraw: z.boolean().optional(),
+      }),
+    )
+    .max(100),
+});
+
+export const refereeSchema = z.object({
+  rationales: z
+    .array(
+      z.object({ dispute: z.string().min(1).max(40), rationale: z.string().min(1).max(8_000) }),
+    )
+    .max(100),
+});
+
+// ---------------------------------------------------------------------------
 // Parsing what comes back
 // ---------------------------------------------------------------------------
 

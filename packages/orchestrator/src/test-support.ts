@@ -406,6 +406,35 @@ export function critiqueReply(participantId: string): string {
   });
 }
 
+/** The disputes a prompt lists, by label. */
+const disputeLabels = (prompt: string): string[] => [
+  ...new Set([...prompt.matchAll(/^\[(D\d+)\]/gm)].map((match) => match[1] ?? '')),
+];
+
+/** A final position on every dispute the prompt lists, distinct per side. */
+export function positionsReply(request: TurnRequest): string {
+  const author = request.role === 'PROPOSER';
+  return JSON.stringify({
+    positions: disputeLabels(request.prompt).map((dispute) => ({
+      dispute,
+      confidence: author ? 0.8 : 0.6,
+      rationale: author
+        ? `Author on ${dispute}: the measured delta stands on the printed output.`
+        : `Critic on ${dispute}: the comparison this rests on was never made.`,
+    })),
+  });
+}
+
+/** A rationale for every dispute the prompt lists. */
+export function refereeReply(prompt: string): string {
+  return JSON.stringify({
+    rationales: disputeLabels(prompt).map((dispute) => ({
+      dispute,
+      rationale: `Referee on ${dispute}: the record shows what was and was not tested.`,
+    })),
+  });
+}
+
 /**
  * Answers every prompt a session can ask.
  *
@@ -431,6 +460,8 @@ export function scriptedReply(request: TurnRequest): string {
   if (prompt.includes('Score each on three axes')) return scoringReply(prompt);
   if (prompt.includes('State what the run found')) return findingsReply();
   if (prompt.includes('Critique the findings')) return critiqueReply(participantId);
+  if (prompt.includes('State your final position on each')) return positionsReply(request);
+  if (prompt.includes('Write the rationale for each')) return refereeReply(prompt);
   if (prompt.includes('Critique the method before it is run')) {
     return methodCritiqueReply(participantId);
   }

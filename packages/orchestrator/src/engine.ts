@@ -28,6 +28,7 @@ import {
   systemFor,
 } from './prompts';
 import { charterOf, turnsOf, type RecordedTurn } from './reading';
+import { stepResolution } from './resolution';
 import { solveRoles, UnsatisfiableRolesError, violations, type SolverParticipant } from './roles';
 import { clusterTexts, type ClusterItem } from './similarity';
 import {
@@ -138,6 +139,7 @@ const PHASE_BODIES: Readonly<Partial<Record<PhaseKind, PhaseBody>>> = {
   METHOD: stepMethod,
   EXECUTION: stepExecution,
   CRITIQUE: stepCritique,
+  RESOLUTION: stepResolution,
 };
 
 const IMPLEMENTED: ReadonlySet<PhaseKind> = new Set<PhaseKind>([

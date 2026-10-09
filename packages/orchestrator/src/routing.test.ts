@@ -107,16 +107,18 @@ describe('test auto-routing', () => {
 
   it('asks no model what a test showed', async () => {
     const ports = sessionWith([script(), { route: 'SMT', constraint: CONSTRAINT as never }]);
-    const before = ports.asked.length;
     await routed(ports);
 
-    // Every turn asked after the critics spoke belongs to a later phase.
-    const sinceCritique = ports.asked.slice(
-      ports.asked.findLastIndex((request) => request.prompt.includes('Critique the findings')) + 1,
-    );
-    expect(before).toBe(0);
-    expect(sinceCritique.every((request) => !request.prompt.includes('SHEEP_TEST'))).toBe(true);
-    expect(sinceCritique.filter((request) => request.role === 'CRITIC')).toEqual([]);
+    // Between the critic's turn and the last test result, the log holds
+    // checker output and nothing any model said.
+    const types = ports.events.map((event) => event.type);
+    const critique = ports.events.findLastIndex((event) => event.type === 'dispute.opened');
+    const lastResult = types.lastIndexOf('dispute.tested');
+    expect(lastResult).toBeGreaterThan(critique);
+    expect(types.slice(critique + 1, lastResult + 1)).not.toContain('message.recorded');
+    expect(
+      types.slice(critique + 1, lastResult + 1).filter((type) => type === 'dispute.tested'),
+    ).toHaveLength(2);
   });
 
   it('reads a script’s verdict from its last line, and only from there', async () => {

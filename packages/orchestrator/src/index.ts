@@ -104,6 +104,8 @@ export {
 export {
   METHOD_AXES,
   SANDBOX_RULES,
+  positionsPrompt,
+  refereePrompt,
   TEST_FORMATS,
   critiquePrompt,
   findingsPrompt,

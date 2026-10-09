@@ -132,6 +132,16 @@ export async function routeTest(
     };
   }
 
+  // A resolution has to cite evidence. A verdict nothing kept a record of
+  // cannot be cited, so it cannot be allowed to decide anything.
+  if (decided.verdict !== 'UNCHECKABLE' && decided.evidence === null) {
+    decided = {
+      verdict: 'UNCHECKABLE',
+      detail: `the checker answered ${decided.verdict} but kept no record of it: ${decided.detail}`,
+      evidence: null,
+    };
+  }
+
   return domainEvent('dispute.tested', {
     sessionId,
     disputeId: dispute.disputeId,
