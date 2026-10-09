@@ -247,7 +247,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
   → `feat(orchestrator): method design phase`
 - [x] **50. EXECUTION phase** — protocol → sandbox → hashed artifacts, with the "no unearned results" invariant enforced end to end.
   → `feat(orchestrator): execution phase wired to sandbox`
-- [ ] **51. CRITIQUE phase** — structured critique objects `{claim_id, axis, severity, argument, proposed_test}`, cross-vendor assignment.
+- [x] **51. CRITIQUE phase** — structured critique objects `{claim_id, axis, severity, argument, proposed_test}`, cross-vendor assignment.
   → `feat(orchestrator): structured cross-vendor critique phase`
 - [ ] **52. Test auto-routing** — a `proposed_test` routes automatically to the sandbox or SymPy. **(P4 in action.)**
   → `feat(orchestrator): auto-route proposed tests to verifiers`

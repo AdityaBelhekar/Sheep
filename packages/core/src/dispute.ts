@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { evidenceRefSchema } from './claim';
+import { constraintClaimSchema, derivationSchema } from './derivation';
 import { idSchema, proseSchema, timestampSchema } from './primitives';
 import { positionSchema } from './protocol';
+import { statisticalReportSchema } from './statistics';
 
 /**
  * The fixed axes a critique must attack along.
@@ -46,13 +48,45 @@ export const DISPUTE_OUTCOMES = ['UPHELD', 'OVERTURNED', 'UNRESOLVED'] as const;
 export const disputeOutcomeSchema = z.enum(DISPUTE_OUTCOMES);
 export type DisputeOutcome = z.infer<typeof disputeOutcomeSchema>;
 
-/** A test a critic proposes as the thing that would settle the question. */
+export const TEST_ROUTES = [
+  'SANDBOX',
+  'SYMBOLIC',
+  'NUMERIC',
+  'SMT',
+  'STATISTICAL',
+  'MANUAL',
+] as const;
+
+/**
+ * A test a critic proposes as the thing that would settle the question.
+ *
+ * The description is for people. What makes a test routable is the payload
+ * beside it — a script, a derivation, a constraint, a statistical report —
+ * which a checker can be handed as it stands. A test with no payload its route
+ * can run is a description of a test, and the dispute it belongs to stays open.
+ */
 export const proposedTestSchema = z.strictObject({
   /** Where this test can actually be decided. */
-  route: z.enum(['SANDBOX', 'SYMBOLIC', 'NUMERIC', 'SMT', 'STATISTICAL', 'MANUAL']),
+  route: z.enum(TEST_ROUTES),
   description: proseSchema,
   /** What outcome the critic says would falsify the claim. */
   falsifies: proseSchema.optional(),
+  /**
+   * Which result of the test falsifies the claim. `FAIL` when absent: the test
+   * is something the claim should pass if it is true.
+   */
+  claimFailsIf: z.enum(['PASS', 'FAIL']).optional(),
+  /**
+   * For `SANDBOX` and `NUMERIC`: a script whose last printed line is
+   * `SHEEP_TEST: PASS` or `SHEEP_TEST: FAIL`.
+   */
+  code: z.string().min(1).max(200_000).optional(),
+  /** For `SYMBOLIC`: passes when every step follows. */
+  derivation: derivationSchema.optional(),
+  /** For `SMT`: passes when the claim holds in every case the assumptions allow. */
+  constraint: constraintClaimSchema.optional(),
+  /** For `STATISTICAL`: passes when the audit finds nothing wrong. */
+  statistics: statisticalReportSchema.optional(),
 });
 export type ProposedTest = z.infer<typeof proposedTestSchema>;
 

@@ -12,6 +12,7 @@ import {
   type SessionStatus,
 } from '@sheep/core';
 import { runBlindParallel } from './blind';
+import { stepCritique } from './critique';
 import { stepExecution } from './execution';
 import { stepMethod } from './method';
 import type { OrchestratorPorts, SessionSnapshot, TurnRequest } from './ports';
@@ -136,6 +137,7 @@ export interface ApproveInput {
 const PHASE_BODIES: Readonly<Partial<Record<PhaseKind, PhaseBody>>> = {
   METHOD: stepMethod,
   EXECUTION: stepExecution,
+  CRITIQUE: stepCritique,
 };
 
 const IMPLEMENTED: ReadonlySet<PhaseKind> = new Set<PhaseKind>([

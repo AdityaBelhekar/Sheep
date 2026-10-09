@@ -349,6 +349,43 @@ export function findingsReply(
 }
 
 /**
+ * A critique of finding C1. Critics differ by participant, so a session has
+ * both kinds of dispute in it: one with a test a sandbox can run, and one
+ * whose test cannot be run here at all.
+ */
+export function critiqueReply(participantId: string): string {
+  const runnable = participantId.charCodeAt(0) % 2 === 0;
+  return JSON.stringify({
+    critiques: [
+      runnable
+        ? {
+            claim: 'C1',
+            axis: 'BASELINES',
+            severity: 'major',
+            argument: 'The delta is not compared against a dense baseline run under the same seed.',
+            proposedTest: {
+              route: 'SANDBOX',
+              description: 'Recompute the delta against the dense baseline.',
+              falsifies: 'A delta under 0.02 once the baseline is subtracted.',
+              claimFailsIf: 'FAIL',
+              code: 'print("SHEEP_TEST: PASS")',
+            },
+          }
+        : {
+            claim: 'C1',
+            axis: 'SCOPE',
+            severity: 'minor',
+            argument: 'A synthetic corpus says little about natural text.',
+            proposedTest: {
+              route: 'MANUAL',
+              description: 'Repeat on a held-out natural-language corpus.',
+            },
+          },
+    ],
+  });
+}
+
+/**
  * Answers every prompt a session can ask.
  *
  * Keyed off what the prompt asks for rather than off a call counter, so the
@@ -372,6 +409,7 @@ export function scriptedReply(request: TurnRequest): string {
   }
   if (prompt.includes('Score each on three axes')) return scoringReply(prompt);
   if (prompt.includes('State what the run found')) return findingsReply();
+  if (prompt.includes('Critique the findings')) return critiqueReply(participantId);
   if (prompt.includes('Critique the method before it is run')) {
     return methodCritiqueReply(participantId);
   }

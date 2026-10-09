@@ -132,6 +132,7 @@ export {
   DISPUTE_OUTCOMES,
   DISPUTE_SEVERITIES,
   DISPUTE_STATUSES,
+  TEST_ROUTES,
   critiqueAxisSchema,
   disputeOutcomeSchema,
   disputeSchema,

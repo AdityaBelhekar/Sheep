@@ -104,6 +104,8 @@ export {
 export {
   METHOD_AXES,
   SANDBOX_RULES,
+  TEST_FORMATS,
+  critiquePrompt,
   findingsPrompt,
   findingsSchema,
   methodCritiquePrompt,
@@ -114,6 +116,8 @@ export {
   type MethodDraft,
   type PromptClaim,
 } from './prompts';
+
+export { MAX_CRITIQUES_PER_CRITIC, disputesFrom } from './critique';
 
 export { RUN_TIMEOUT_MS, unearnedNumbers } from './execution';
 

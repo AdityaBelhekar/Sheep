@@ -446,6 +446,102 @@ export const findingsSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// CRITIQUE
+// ---------------------------------------------------------------------------
+
+/**
+ * How a critic writes a test a program can run. Stated once, in full, because
+ * a test in the wrong shape is a test that cannot be routed anywhere.
+ */
+export const TEST_FORMATS = [
+  'A test is something a program can run whose result would settle your point.',
+  'Give one wherever one exists. "route" says where it runs:',
+  '',
+  'SANDBOX — a python script, in "code". It runs under the same rules as the',
+  'method. Its last printed line must be exactly "SHEEP_TEST: PASS" or',
+  '"SHEEP_TEST: FAIL"; anything else is inconclusive.',
+  '',
+  'SYMBOLIC — a derivation, in "derivation", checked step by step by SymPy:',
+  '{"given":[{"id":"g1","statement":"y = x**2"}],"steps":[{"id":"s1",',
+  '"statement":"Derivative(y, x) = 2*x","operation":"differentiate","args":{"var":"x"}}]}',
+  'Statements are SymPy expressions. Operations: rewrite, substitute, add, subtract,',
+  'multiply, divide, power, apply, differentiate, integrate, solve. PASS means every',
+  'step follows.',
+  '',
+  'SMT — a logical claim, in "constraint", decided by Z3:',
+  '{"name":"...","variables":{"x":"real"},"assumptions":["x > 0"],"claim":"x*x > 0"}',
+  'PASS means the claim holds in every case the assumptions allow.',
+  '',
+  'STATISTICAL — reported statistics, in "statistics", audited for consistency:',
+  '{"name":"...","n":40,"tests":[{"name":"...","test":"t","statistic":2.1,"df":38,"p":0.04}]}',
+  'PASS means the numbers are complete and agree with each other.',
+  '',
+  'MANUAL — a test that cannot be run here. Describe it; it will be recorded and',
+  'the dispute will stay open as a question.',
+  '',
+  '"claimFailsIf" says which result would falsify the claim: "FAIL" if the claim',
+  'should pass your test, "PASS" if your test passing is what refutes it.',
+].join('\n');
+
+/** Blind: each critic sees the method, the run and the findings — and no other critique. */
+export function critiquePrompt(
+  charter: string,
+  hypotheses: readonly PromptClaim[],
+  method: MethodDraft,
+  run: PromptRun,
+  findings: readonly (PromptClaim & { readonly claim: { readonly claimType: string } })[],
+): string {
+  return [
+    'The Charter for this session:',
+    '',
+    charter,
+    '',
+    'The hypotheses under test:',
+    '',
+    ...listClaims(hypotheses),
+    '',
+    'Another participant, from a different vendor, ran this method:',
+    '',
+    method.plan,
+    '',
+    '```python',
+    method.code.trimEnd(),
+    '```',
+    '',
+    'Everything the script printed:',
+    '',
+    '--- output ---',
+    clipOutput(run.stdout.trimEnd()),
+    '--- end of output ---',
+    '',
+    'From that output it recorded these findings:',
+    '',
+    ...findings.map(
+      (entry) => `[${entry.label}] (${entry.claim.claimType}) ${entry.claim.statement}`,
+    ),
+    '',
+    'Critique the findings. You are working blind: no other critic’s view is',
+    'available to you. For each finding ask whether the output actually supports',
+    'it, and whether the method could have produced that output for another reason.',
+    '',
+    'Each critique names one finding and attacks along one axis:',
+    'INTERNAL_VALIDITY, CONFOUNDS, LEAKAGE, POWER, BASELINES, REPRODUCIBILITY,',
+    'DERIVATION, UNITS, STATISTICS, SCOPE, NOVELTY.',
+    '',
+    TEST_FORMATS,
+    '',
+    'A finding you can find nothing wrong with gets no critique; an empty list is an',
+    'honest answer. At most five critiques, most serious first.',
+    '',
+    'Reply with JSON only, no prose and no code fence:',
+    '{"critiques":[{"claim":"C1","axis":"BASELINES","severity":"blocking|major|minor",',
+    '"argument":"what is wrong",',
+    '"proposedTest":{"route":"SANDBOX","description":"what it checks",',
+    '"falsifies":"what result would refute the finding","claimFailsIf":"FAIL","code":"..."}}]}',
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Parsing what comes back
 // ---------------------------------------------------------------------------
 

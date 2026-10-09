@@ -233,9 +233,15 @@ describe('METHOD', () => {
     const full = newPorts();
     await throughMethod(full);
 
+    const methodPhase = reduceProtocol(SESSION, full.events).phases.find(
+      (phase) => phase.kind === 'METHOD',
+    )?.phaseId;
     // Cut the log just after the critics answered: a crash before the revision.
     const lastCritique = full.events.findLastIndex(
-      (event) => event.type === 'message.recorded' && event.payload.role === 'CRITIC',
+      (event) =>
+        event.type === 'message.recorded' &&
+        event.payload.role === 'CRITIC' &&
+        event.payload.phaseId === methodPhase,
     );
     const reopened = full.fork(full.events.slice(0, lastCritique + 1));
     const resumed = await engineOn(reopened).run(SESSION);
@@ -243,7 +249,7 @@ describe('METHOD', () => {
     expect(resumed.state.phases.find((phase) => phase.kind === 'METHOD')?.status).toBe('complete');
     // The critics are not asked again, and neither is the first draft.
     expect(reopened.asked[0]!.prompt).toContain('Revise the method');
-    expect(reopened.asked.filter((request) => request.role === 'CRITIC')).toEqual([]);
+    expect(askedIn(reopened, 'Critique the method before it is run')).toEqual([]);
     expect(askedIn(reopened, 'Design the method that will test them')).toEqual([]);
   });
 });
