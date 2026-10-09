@@ -253,7 +253,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
   → `feat(orchestrator): auto-route proposed tests to verifiers`
 - [x] **53. RESOLUTION phase** — disputes settled by discriminating evidence; no test that discriminates → `UNRESOLVED` with both positions preserved. Referee writes rationale but cannot overrule evidence. **(P6)**
   → `feat(orchestrator): evidence-based dispute resolution`
-- [ ] **54. Full 7-phase E2E** — complete run against mock models in CI.
+- [x] **54. Full 7-phase E2E** — complete run against mock models in CI.
   → `test(e2e): full seven-phase session against mock models`
 
 > **Stage gate:** a complete research session runs start to finish without human intervention beyond the two approval gates.

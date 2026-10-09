@@ -690,6 +690,42 @@ export const refereeSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// SYNTHESIS
+// ---------------------------------------------------------------------------
+
+/** Sequential: one scribe writes the account, from the ledger it is handed. */
+export function synthesisPrompt(question: string, charter: string, digest: string): string {
+  return [
+    'You are the SCRIBE. The research question was:',
+    '',
+    question,
+    '',
+    'The Charter:',
+    '',
+    charter,
+    '',
+    'This is the session’s ledger: every hypothesis, every finding with the status',
+    'the evidence gave it, and every dispute with how it ended.',
+    '',
+    '--- ledger ---',
+    digest,
+    '--- end of ledger ---',
+    '',
+    'Write the synthesis of this session, in prose, under these headings:',
+    '',
+    'ANSWER — what the session can and cannot say about the question.',
+    'WHAT STANDS — findings that are supported, and what backs each.',
+    'WHAT WAS REFUTED — findings a test overturned, and by what.',
+    'OPEN QUESTIONS — every unresolved dispute, with both positions stated fairly.',
+    'An unresolved dispute is a result of this session, not a failure of it; do not',
+    'resolve it, soften it, or leave it out.',
+    '',
+    'Refer to findings by their labels. Add nothing: no finding, no figure and no',
+    'conclusion that is not in the ledger above. Under 600 words.',
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Parsing what comes back
 // ---------------------------------------------------------------------------
 

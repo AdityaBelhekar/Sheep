@@ -106,6 +106,7 @@ export {
   SANDBOX_RULES,
   positionsPrompt,
   refereePrompt,
+  synthesisPrompt,
   TEST_FORMATS,
   critiquePrompt,
   findingsPrompt,
@@ -122,6 +123,8 @@ export {
 export { MAX_CRITIQUES_PER_CRITIC, disputesFrom } from './critique';
 
 export { RUN_TIMEOUT_MS, unearnedNumbers } from './execution';
+
+export { digestOf } from './synthesis';
 
 export { TEST_TIMEOUT_MS, awaitsRouting, outcomeOf, routeTest } from './routing';
 

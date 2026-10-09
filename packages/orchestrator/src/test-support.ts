@@ -65,6 +65,11 @@ export interface FakePorts extends OrchestratorPorts {
   readonly ran: readonly RunCodeRequest[];
   /** Everything handed to a checker, in order. */
   readonly checked: readonly CheckRequest[];
+  /**
+   * Log lengths at which an atomic write ended. A crash can leave the log at
+   * one of these and nowhere else: a batch lands whole or not at all.
+   */
+  readonly commitPoints: readonly number[];
   readonly progressLog: readonly ProgressUpdate[];
   /** Ids handed out so far, in order. Deterministic across runs. */
   readonly issuedIds: readonly string[];
@@ -100,6 +105,7 @@ export function fakePorts(options: FakeSessionOptions): FakePorts {
   const asked: TurnRequest[] = [];
   const ran: RunCodeRequest[] = [];
   const checked: CheckRequest[] = [];
+  const commitPoints: number[] = [];
   const outputs = new Map<string, { stdout: string; stderr: string }>();
   const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
   const progressLog: ProgressUpdate[] = [];
@@ -145,6 +151,9 @@ export function fakePorts(options: FakeSessionOptions): FakePorts {
     get checked() {
       return checked;
     },
+    get commitPoints() {
+      return commitPoints;
+    },
     get progressLog() {
       return progressLog;
     },
@@ -188,6 +197,7 @@ export function fakePorts(options: FakeSessionOptions): FakePorts {
         if (event.type === 'session.status-changed') status = event.payload.status;
         if (event.type === 'session.spend-recorded') spentUsd += event.payload.costUsd;
       }
+      commitPoints.push(events.length);
       return Promise.resolve();
     },
     async ask(_id: string, request: TurnRequest) {
@@ -240,6 +250,7 @@ export function fakePorts(options: FakeSessionOptions): FakePorts {
         artifacts: [],
       };
       events.push(domainEvent('execution.recorded', payload));
+      commitPoints.push(events.length);
       outputs.set(payload.executionId, output);
       const execution: ExecutionRecord = {
         ...payload,
@@ -352,9 +363,13 @@ export function methodCritiqueReply(participantId: string): string {
   });
 }
 
-/** What the scripted method prints when it is run. */
-export function scriptedRun(): { stdout: string } {
-  return { stdout: 'dense baseline 0.0\nperplexity delta 0.31\n' };
+/**
+ * What a script prints when it is run: the scripted method's two figures, or,
+ * for a critic's test, the verdict line that test prints.
+ */
+export function scriptedRun(request?: RunCodeRequest): { stdout: string } {
+  const verdict = /SHEEP_TEST: (?:PASS|FAIL)/.exec(request?.code ?? '');
+  return { stdout: verdict ? verdict[0] : 'dense baseline 0.0\nperplexity delta 0.31\n' };
 }
 
 /** Findings in the shape the prompt asks for. One measured, one interpreted, by default. */
@@ -435,6 +450,16 @@ export function refereeReply(prompt: string): string {
   });
 }
 
+/** A synthesis under the headings the prompt asks for, quoting only what was measured. */
+export function synthesisReply(): string {
+  return [
+    'ANSWER — the measured perplexity delta is 0.31; whether that holds on natural text is open.',
+    'WHAT STANDS — nothing beyond what C1 reports from the run.',
+    'WHAT WAS REFUTED — nothing.',
+    'OPEN QUESTIONS — whether a synthetic corpus says anything about natural language.',
+  ].join('\n');
+}
+
 /**
  * Answers every prompt a session can ask.
  *
@@ -462,6 +487,7 @@ export function scriptedReply(request: TurnRequest): string {
   if (prompt.includes('Critique the findings')) return critiqueReply(participantId);
   if (prompt.includes('State your final position on each')) return positionsReply(request);
   if (prompt.includes('Write the rationale for each')) return refereeReply(prompt);
+  if (prompt.includes('Write the synthesis of this session')) return synthesisReply();
   if (prompt.includes('Critique the method before it is run')) {
     return methodCritiqueReply(participantId);
   }

@@ -37,7 +37,7 @@ export const RESEARCH_PANES = [
     summary: 'The turns themselves: proposals, critiques, referee rulings.',
     detail:
       'Phases open blind-parallel, so a model cannot see another model’s answer before committing its own. The protocol strip at the top shows where the session is and stops at the two points where a human decides: the Charter, and which hypotheses to pursue.',
-    arriving: 'METHOD onwards arrives with the sandbox, Stages 6 to 8',
+    arriving: 'All seven phases run; the compiled paper arrives with Stage 10',
   },
   {
     id: 'ledger',

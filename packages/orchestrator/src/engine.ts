@@ -45,6 +45,7 @@ import {
   type ProtocolState,
   type RoundState,
 } from './state';
+import { stepSynthesis } from './synthesis';
 import { shouldTerminate, type TerminationReason, type TerminationRules } from './termination';
 import type { PhaseBody, PhaseTools, RoundSpec } from './tools';
 
@@ -62,8 +63,8 @@ export { turnsOf, type RecordedTurn } from './reading';
  *
  * FRAMING and HYPOTHESIS, the two phases that end at a human gate, are written
  * out below. Each later phase is a module of its own, given the same steps to
- * take through `PhaseTools`. A phase with no body yet stops the loop cleanly
- * rather than pretending to run.
+ * take through `PhaseTools`. After the second gate nothing stops for a person:
+ * the session runs to SYNTHESIS, or to the first thing that genuinely fails.
  */
 
 export interface OrchestratorOptions {
@@ -79,7 +80,7 @@ export type RunStatus = 'awaiting-approval' | 'stopped' | 'complete' | 'failed';
 
 export interface RunOutcome {
   readonly status: RunStatus;
-  readonly reason: TerminationReason | 'gate' | 'not-implemented' | 'error' | null;
+  readonly reason: TerminationReason | 'gate' | 'error' | null;
   readonly detail: string;
   readonly state: ProtocolView;
 }
@@ -135,18 +136,13 @@ export interface ApproveInput {
 }
 
 /** The phases that run unattended, each in its own module. */
-const PHASE_BODIES: Readonly<Partial<Record<PhaseKind, PhaseBody>>> = {
+const PHASE_BODIES: Readonly<Record<Exclude<PhaseKind, 'FRAMING' | 'HYPOTHESIS'>, PhaseBody>> = {
   METHOD: stepMethod,
   EXECUTION: stepExecution,
   CRITIQUE: stepCritique,
   RESOLUTION: stepResolution,
+  SYNTHESIS: stepSynthesis,
 };
-
-const IMPLEMENTED: ReadonlySet<PhaseKind> = new Set<PhaseKind>([
-  'FRAMING',
-  'HYPOTHESIS',
-  ...(Object.keys(PHASE_BODIES) as PhaseKind[]),
-]);
 
 /** A ceiling on one call's work, not a target. */
 const DEFAULT_MAX_STEPS = 256;
@@ -220,14 +216,6 @@ export class Orchestrator {
             reason: null,
             detail: 'every phase in the sequence has finished',
             state: toProtocolView(finished),
-          };
-        }
-        if (!IMPLEMENTED.has(kind)) {
-          return {
-            status: 'stopped',
-            reason: 'not-implemented',
-            detail: `${kind} is not built yet`,
-            state: toProtocolView(state),
           };
         }
         await this.#openPhase(snapshot, state, kind);
@@ -311,9 +299,7 @@ export class Orchestrator {
   ): Promise<void> {
     if (phase.kind === 'FRAMING') return await this.#stepFraming(snapshot, state, phase);
     if (phase.kind === 'HYPOTHESIS') return await this.#stepHypothesis(snapshot, state, phase);
-    const body = PHASE_BODIES[phase.kind];
-    if (!body) throw new Error(`${phase.kind} is not built yet`);
-    return await body({ tools: this.#tools, snapshot, state, phase });
+    return await PHASE_BODIES[phase.kind]({ tools: this.#tools, snapshot, state, phase });
   }
 
   /**
