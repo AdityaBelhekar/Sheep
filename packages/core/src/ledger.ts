@@ -48,6 +48,7 @@ export const LEDGER_EVENT_TYPES = [
   'claim.evidence-attached',
   'claim.status-changed',
   'dispute.opened',
+  'dispute.tested',
   'dispute.resolved',
   'dispute.withdrawn',
   'position.committed',
@@ -71,6 +72,9 @@ export const LEDGER_ERROR_CODES = [
   'UNKNOWN_DISPUTE',
   'DISPUTE_CLOSED',
   'RESOLUTION_WITHOUT_EVIDENCE',
+  'RESOLUTION_CONTRADICTS_TEST',
+  'DUPLICATE_TEST',
+  'INCONSISTENT_TEST',
   'UNRESOLVED_WITHOUT_POSITIONS',
   'DUPLICATE_EXECUTION',
   'INCONSISTENT_EXECUTION',
@@ -449,6 +453,7 @@ export class Ledger {
           severity: p.severity,
           argument: p.argument,
           proposedTest: p.proposedTest ?? null,
+          test: null,
           status: 'open',
           openedAt: at,
           resolvedAt: null,
@@ -457,11 +462,44 @@ export class Ledger {
         return;
       }
 
+      case 'dispute.tested': {
+        const { sessionId: _session, disputeId, evidence, ...result } = event.payload;
+        const dispute = this.#openDispute(disputeId);
+        if (dispute.test !== null) {
+          throw new LedgerError('DUPLICATE_TEST', `dispute ${disputeId} has already been tested`);
+        }
+        // An undecided test settles nothing; a decided one settles something.
+        if ((result.verdict === 'UNCHECKABLE') !== (result.outcome === 'UNRESOLVED')) {
+          throw new LedgerError(
+            'INCONSISTENT_TEST',
+            `a test with verdict ${result.verdict} cannot leave dispute ${disputeId} ${result.outcome}`,
+          );
+        }
+        if (evidence !== undefined) this.#checkEvidence(evidence, dispute.claimId);
+        this.#disputes.set(disputeId, {
+          ...dispute,
+          test: { ...result, evidence: evidence ?? null },
+        });
+        this.#touch(dispute.claimId, at);
+        return;
+      }
+
       case 'dispute.resolved': {
         const p = event.payload;
         const dispute = this.#openDispute(p.disputeId);
         const positions = p.positions ?? [];
         for (const evidence of p.evidence) this.#checkEvidence(evidence, dispute.claimId);
+
+        // The referee cannot overrule evidence. A test that decided the
+        // dispute has decided it; a resolution may explain that, not change it.
+        if (dispute.test !== null && dispute.test.outcome !== 'UNRESOLVED') {
+          if (p.outcome !== dispute.test.outcome) {
+            throw new LedgerError(
+              'RESOLUTION_CONTRADICTS_TEST',
+              `dispute ${p.disputeId} was tested and came out ${dispute.test.outcome}; it cannot be resolved as ${p.outcome}`,
+            );
+          }
+        }
 
         if (p.outcome === 'UNRESOLVED') {
           // P6: an open question ships with both sides, or it is not one.

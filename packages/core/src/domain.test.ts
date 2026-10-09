@@ -107,6 +107,7 @@ const dispute: Dispute = {
   severity: 'blocking',
   argument: 'No dense control was run.',
   proposedTest: { route: 'SANDBOX', description: 'Run the dense baseline at 128k.' },
+  test: null,
   status: 'open',
   openedAt: NOW,
   resolvedAt: null,

@@ -491,3 +491,85 @@ describe('ancestry', () => {
     expect(chain.ancestry(CLAIM_ID)).toEqual([]);
   });
 });
+
+describe('tested disputes', () => {
+  const tested = (
+    verdict: 'PASS' | 'FAIL' | 'UNCHECKABLE',
+    outcome: 'UPHELD' | 'OVERTURNED' | 'UNRESOLVED',
+  ): DomainEvent =>
+    ev('dispute.tested', {
+      sessionId: SESSION_ID,
+      disputeId: DISPUTE_ID,
+      route: 'SANDBOX',
+      verdict,
+      outcome,
+      detail: `the test script reported ${verdict}`,
+      evidence: { kind: 'EXECUTION', ref: EXECUTION_ID },
+    });
+
+  const resolved = (outcome: 'UPHELD' | 'OVERTURNED' | 'UNRESOLVED'): DomainEvent =>
+    ev('dispute.resolved', {
+      sessionId: SESSION_ID,
+      disputeId: DISPUTE_ID,
+      outcome,
+      rationale: 'As the referee sees it.',
+      evidence: [{ kind: 'EXECUTION', ref: EXECUTION_ID }],
+      positions: [
+        { participantId: PARTICIPANT_A, stance: 'SUPPORT', confidence: 0.7 },
+        { participantId: PARTICIPANT_B, stance: 'OPPOSE', confidence: 0.6 },
+      ],
+    });
+
+  const disputed = (...more: DomainEvent[]): Ledger =>
+    ledgerOf(executed(), empiricalClaim(), openDispute(), ...more);
+
+  it('keeps the result of a test on the dispute it was run for', () => {
+    const [dispute] = disputed(tested('FAIL', 'OVERTURNED')).disputes();
+
+    expect(dispute?.status).toBe('open');
+    expect(dispute?.test).toEqual({
+      route: 'SANDBOX',
+      verdict: 'FAIL',
+      outcome: 'OVERTURNED',
+      detail: 'the test script reported FAIL',
+      evidence: { kind: 'EXECUTION', ref: EXECUTION_ID },
+    });
+  });
+
+  it('does not let a resolution overrule the test that decided the dispute', () => {
+    // The test falsified the claim. No rationale turns that into a win for it.
+    rejects(
+      disputed(tested('FAIL', 'OVERTURNED')),
+      resolved('UPHELD'),
+      'RESOLUTION_CONTRADICTS_TEST',
+    );
+    rejects(
+      disputed(tested('FAIL', 'OVERTURNED')),
+      resolved('UNRESOLVED'),
+      'RESOLUTION_CONTRADICTS_TEST',
+    );
+    rejects(
+      disputed(tested('PASS', 'UPHELD')),
+      resolved('OVERTURNED'),
+      'RESOLUTION_CONTRADICTS_TEST',
+    );
+
+    expect(
+      disputed(tested('FAIL', 'OVERTURNED'), resolved('OVERTURNED')).claim(CLAIM_ID).status,
+    ).toBe('refuted');
+  });
+
+  it('leaves a dispute whose test decided nothing free to end unresolved', () => {
+    const ledger = disputed(tested('UNCHECKABLE', 'UNRESOLVED'), resolved('UNRESOLVED'));
+
+    expect(ledger.claim(CLAIM_ID).status).toBe('unresolved');
+    expect(ledger.disputes()[0]?.test?.verdict).toBe('UNCHECKABLE');
+  });
+
+  it('refuses a test result that does not add up, or a second one', () => {
+    rejects(disputed(), tested('UNCHECKABLE', 'OVERTURNED'), 'INCONSISTENT_TEST');
+    rejects(disputed(), tested('PASS', 'UNRESOLVED'), 'INCONSISTENT_TEST');
+    rejects(disputed(tested('PASS', 'UPHELD')), tested('FAIL', 'OVERTURNED'), 'DUPLICATE_TEST');
+    rejects(disputed(resolved('UNRESOLVED')), tested('PASS', 'UPHELD'), 'DISPUTE_CLOSED');
+  });
+});

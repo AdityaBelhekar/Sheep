@@ -5,6 +5,7 @@ import { executionFields } from './execution';
 import {
   critiqueAxisSchema,
   disputeOutcomeSchema,
+  disputeTestFields,
   disputeSeveritySchema,
   proposedTestSchema,
 } from './dispute';
@@ -277,6 +278,18 @@ export const EVENT_PAYLOADS = {
     argument: proseSchema,
     raisedByParticipantId: idSchema.optional(),
     proposedTest: proposedTestSchema.optional(),
+  }),
+  /**
+   * A dispute's proposed test was run by a checker (P4).
+   *
+   * Recorded on its own, before any resolution, so that the evidence is in the
+   * log before anyone writes a rationale about it.
+   */
+  'dispute.tested': z.strictObject({
+    ...sessionScope,
+    disputeId: idSchema,
+    ...disputeTestFields,
+    evidence: evidenceRefSchema.optional(),
   }),
   'dispute.resolved': z.strictObject({
     ...sessionScope,

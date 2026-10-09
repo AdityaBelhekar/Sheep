@@ -121,6 +121,8 @@ export { MAX_CRITIQUES_PER_CRITIC, disputesFrom } from './critique';
 
 export { RUN_TIMEOUT_MS, unearnedNumbers } from './execution';
 
+export { TEST_TIMEOUT_MS, awaitsRouting, outcomeOf, routeTest } from './routing';
+
 export { SMOKE_TIMEOUT_MS, describeRun, finalMethod, parseMethod, type Method } from './method';
 
 export {
@@ -135,6 +137,8 @@ export {
 export type { PhaseBody, PhaseContext, PhaseTools, RoundSpec } from './tools';
 
 export type {
+  CheckRequest,
+  CheckResult,
   OrchestratorPorts,
   ProgressKind,
   ProgressUpdate,

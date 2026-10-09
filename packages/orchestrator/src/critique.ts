@@ -9,6 +9,7 @@ import {
 import { z } from 'zod';
 import { RUN_TIMEOUT_MS } from './execution';
 import { finalMethod } from './method';
+import { awaitsRouting, routeTest } from './routing';
 import { critiquePrompt, ModelOutputError, parseJsonReply } from './prompts';
 import {
   charterOf,
@@ -29,7 +30,8 @@ import type { PhaseBody } from './tools';
  * A critique is not a paragraph. It names the claim it is about, the axis it
  * attacks along, how serious it is, the argument — and, wherever one exists, a
  * test: something a program can run whose result would settle the point. Each
- * becomes a dispute in the ledger, attributed to the critic that raised it.
+ * becomes a dispute in the ledger, attributed to the critic that raised it,
+ * and every test that can be run is then run — by a checker, not by asking.
  *
  * The critics work blind and at once, and none of them shares a vendor with
  * the author of what they are reviewing. That is P1 doing its job: a model
@@ -161,12 +163,24 @@ export const stepCritique: PhaseBody = async ({ tools, snapshot, state, phase })
   const raised = ledgerOf(snapshot)
     .disputes()
     .filter((dispute) => claims.some((entry) => entry.claim.claimId === dispute.claimId));
+
+  // Every test a program can run is run before the phase closes — one per
+  // step, so each result is in the log before the next is started.
+  const next = raised.find(awaitsRouting);
+  if (next) {
+    await tools.ports.record(snapshot.sessionId, [
+      await routeTest(tools.ports, snapshot.sessionId, next),
+    ]);
+    return;
+  }
+  const tested = raised.filter((dispute) => dispute.test !== null);
+  const decided = tested.filter((dispute) => dispute.test?.outcome !== 'UNRESOLVED');
   const blocking = raised.filter((dispute) => dispute.severity === 'blocking').length;
   await tools.closePhase(
     snapshot.sessionId,
     state,
     phase,
     'complete',
-    `${String(round.spoke.length)} critic(s) from other vendors raised ${String(raised.length)} dispute(s) against ${String(claims.length)} finding(s), ${String(blocking)} of them blocking`,
+    `${String(round.spoke.length)} critic(s) from other vendors raised ${String(raised.length)} dispute(s) against ${String(claims.length)} finding(s), ${String(blocking)} of them blocking. ${String(tested.length)} proposed test(s) were run by a checker, and ${String(decided.length)} gave a decisive result`,
   );
 };

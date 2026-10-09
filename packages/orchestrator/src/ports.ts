@@ -1,11 +1,16 @@
 import type {
+  ConstraintClaim,
+  Derivation,
   DomainEvent,
+  EvidenceRef,
   ExecutionRecord,
   MessageFinishReason,
   ModelRef,
   ParticipantRole,
   RosterEntry,
   SessionStatus,
+  StatisticalReport,
+  VerificationStatus,
 } from '@sheep/core';
 
 /**
@@ -74,6 +79,20 @@ export interface RunCodeResult {
   readonly stderr: string;
 }
 
+/** Something for a checker to decide. One shape per checker. */
+export type CheckRequest =
+  | { readonly kind: 'derivation'; readonly derivation: Derivation }
+  | { readonly kind: 'constraint'; readonly claim: ConstraintClaim }
+  | { readonly kind: 'statistics'; readonly report: StatisticalReport };
+
+export interface CheckResult {
+  readonly status: VerificationStatus;
+  /** The checker's account of what it found, for the record and for people. */
+  readonly detail: string;
+  /** Where the full verdict is kept. */
+  readonly evidence: EvidenceRef | null;
+}
+
 export type ProgressKind =
   | 'phase-opened'
   | 'round-opened'
@@ -111,6 +130,11 @@ export interface OrchestratorPorts {
    * it. That is what lets a phase re-read a result after a restart.
    */
   execute(sessionId: string, request: RunCodeRequest): Promise<RunCodeResult>;
+  /**
+   * Hands a derivation, a constraint or a statistical report to its checker —
+   * SymPy, Z3, the audit — and stores the verdict. No model is involved.
+   */
+  check(sessionId: string, request: CheckRequest): Promise<CheckResult>;
   newId(): string;
   /** Best-effort progress for the UI. Never awaited, never load-bearing. */
   progress?(update: ProgressUpdate): void;

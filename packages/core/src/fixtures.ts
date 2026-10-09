@@ -269,6 +269,14 @@ export const EVENT_FIXTURES: EventFixtures = {
       falsifies: 'A dense baseline within 0.05 nats would refute the claimed gap.',
     },
   },
+  'dispute.tested': {
+    sessionId: SESSION_ID,
+    disputeId: DISPUTE_ID,
+    route: 'SANDBOX',
+    verdict: 'UNCHECKABLE',
+    outcome: 'UNRESOLVED',
+    detail: 'the test script ran but did not end with SHEEP_TEST: PASS or SHEEP_TEST: FAIL',
+  },
   'dispute.resolved': {
     sessionId: SESSION_ID,
     disputeId: DISPUTE_ID,

@@ -249,7 +249,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
   → `feat(orchestrator): execution phase wired to sandbox`
 - [x] **51. CRITIQUE phase** — structured critique objects `{claim_id, axis, severity, argument, proposed_test}`, cross-vendor assignment.
   → `feat(orchestrator): structured cross-vendor critique phase`
-- [ ] **52. Test auto-routing** — a `proposed_test` routes automatically to the sandbox or SymPy. **(P4 in action.)**
+- [x] **52. Test auto-routing** — a `proposed_test` routes automatically to the sandbox or SymPy. **(P4 in action.)**
   → `feat(orchestrator): auto-route proposed tests to verifiers`
 - [ ] **53. RESOLUTION phase** — disputes settled by discriminating evidence; no test that discriminates → `UNRESOLVED` with both positions preserved. Referee writes rationale but cannot overrule evidence. **(P6)**
   → `feat(orchestrator): evidence-based dispute resolution`

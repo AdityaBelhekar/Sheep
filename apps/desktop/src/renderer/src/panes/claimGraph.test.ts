@@ -47,6 +47,7 @@ const disputes: Dispute[] = [
     severity: 'major',
     argument: 'No baseline.',
     proposedTest: null,
+    test: null,
     status: 'open',
     openedAt: AT,
     resolvedAt: null,

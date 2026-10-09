@@ -3,6 +3,8 @@ import { app, BrowserWindow, utilityProcess, type UtilityProcess } from 'electro
 import {
   RpcPeer,
   type ApproveInput,
+  type CheckRequest,
+  type CheckResult,
   type ProgressUpdate,
   type ProtocolView,
   type RunCodeRequest,
@@ -180,6 +182,12 @@ const HANDLERS = {
     const request = (params as { request?: RunCodeRequest }).request;
     if (!request || typeof request.code !== 'string') throw new Error('execute requires code');
     return await services.execute(requireSessionId(params), request);
+  },
+
+  check: async (params: unknown): Promise<CheckResult> => {
+    const request = (params as { request?: CheckRequest }).request;
+    if (!request || typeof request.kind !== 'string') throw new Error('check requires a request');
+    return await services.check(requireSessionId(params), request);
   },
 
   ask: async (params: unknown): Promise<Awaited<ReturnType<typeof runTurn>>> => {

@@ -42,6 +42,10 @@ async function throughExecution(ports: FakePorts) {
   return { outcome, execution, ledger, findings };
 }
 
+/** Runs of the method itself, leaving out the tests critics proposed later. */
+const methodRuns = (ports: FakePorts) =>
+  ports.ran.filter((run) => !run.code.includes('SHEEP_TEST'));
+
 const answering = (statements: Parameters<typeof findingsReply>[0]) => ({
   reply: (request: Parameters<typeof scriptedReply>[0]) =>
     request.prompt.includes('State what the run found')
@@ -61,9 +65,12 @@ describe('EXECUTION', () => {
     const runs = ports.events.flatMap((event) =>
       event.type === 'execution.recorded' ? [event.payload] : [],
     );
-    const final = runs.at(-1)!;
+    const [support] = findings[0]!.support;
+    const final = runs.find((run) => run.executionId === support?.ref)!;
+    expect(support?.kind).toBe('EXECUTION');
     expect(final.status).toBe('ok');
-    expect(findings[0]!.support).toEqual([{ kind: 'EXECUTION', ref: final.executionId }]);
+    // The method's own run, not some later one: it was the last made before the findings.
+    expect(final).toBe(runs.filter((run) => run.seed === 3).at(-1));
     // An interpretation is recorded as what it is, with no run behind it.
     expect(findings[1]!.support).toEqual([]);
     // Nothing the engine wrote was refused by the ledger's own rules.
@@ -92,7 +99,7 @@ describe('EXECUTION', () => {
 
     // The draft and the revision were each run once, by METHOD's smoke run.
     // The revision finished, so EXECUTION is handed that run, not a second one.
-    expect(ports.ran).toHaveLength(2);
+    expect(methodRuns(ports)).toHaveLength(2);
 
     const slow = newPorts({
       run: (request) =>
@@ -100,7 +107,7 @@ describe('EXECUTION', () => {
     });
     await throughExecution(slow);
     // Still running at the smoke limit, so it is run again with the full clock.
-    expect(slow.ran.at(-1)!.timeoutMs).toBe(RUN_TIMEOUT_MS);
+    expect(methodRuns(slow).at(-1)!.timeoutMs).toBe(RUN_TIMEOUT_MS);
   });
 
   it('refuses a finding that quotes a figure the run never printed', async () => {

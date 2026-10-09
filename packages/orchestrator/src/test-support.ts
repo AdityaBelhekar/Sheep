@@ -3,11 +3,14 @@ import {
   domainEvent,
   type DomainEvent,
   type ExecutionRecord,
+  type VerificationStatus,
   type ExecutionStatus,
   type RosterEntry,
   type SessionStatus,
 } from '@sheep/core';
 import type {
+  CheckRequest,
+  CheckResult,
   OrchestratorPorts,
   ProgressUpdate,
   RunCodeRequest,
@@ -46,6 +49,8 @@ export interface FakeSessionOptions {
    * Stands in for the sandbox: what a script does when run. A clean run that
    * prints nothing, when absent.
    */
+  /** Stands in for the checkers. Passes everything, when absent. */
+  readonly check?: (request: CheckRequest) => { status: VerificationStatus; detail?: string };
   readonly run?: (request: RunCodeRequest) => {
     status?: ExecutionStatus;
     stdout?: string;
@@ -58,6 +63,8 @@ export interface FakePorts extends OrchestratorPorts {
   readonly asked: readonly TurnRequest[];
   /** Every script that was actually run, in order. Reused runs are not repeated here. */
   readonly ran: readonly RunCodeRequest[];
+  /** Everything handed to a checker, in order. */
+  readonly checked: readonly CheckRequest[];
   readonly progressLog: readonly ProgressUpdate[];
   /** Ids handed out so far, in order. Deterministic across runs. */
   readonly issuedIds: readonly string[];
@@ -92,6 +99,7 @@ export function fakePorts(options: FakeSessionOptions): FakePorts {
   const events: DomainEvent[] = [];
   const asked: TurnRequest[] = [];
   const ran: RunCodeRequest[] = [];
+  const checked: CheckRequest[] = [];
   const outputs = new Map<string, { stdout: string; stderr: string }>();
   const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
   const progressLog: ProgressUpdate[] = [];
@@ -133,6 +141,9 @@ export function fakePorts(options: FakeSessionOptions): FakePorts {
     },
     get ran() {
       return ran;
+    },
+    get checked() {
+      return checked;
     },
     get progressLog() {
       return progressLog;
@@ -236,6 +247,16 @@ export function fakePorts(options: FakeSessionOptions): FakePorts {
         recordedAt: RECORDED_AT,
       };
       return Promise.resolve({ execution, ...output });
+    },
+    check(_id: string, request: CheckRequest): Promise<CheckResult> {
+      checked.push(request);
+      const outcome = options.check?.(request) ?? { status: 'PASS' as const };
+      return Promise.resolve({
+        status: outcome.status,
+        detail: outcome.detail ?? `the ${request.kind} check came back ${outcome.status}`,
+        // As main does: the verdict is stored, and addressed by its hash.
+        evidence: { kind: 'ARTIFACT', ref: sha256(JSON.stringify([request, outcome])) },
+      });
     },
     newId() {
       const id = nextId();

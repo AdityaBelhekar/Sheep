@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { evidenceRefSchema } from './claim';
-import { constraintClaimSchema, derivationSchema } from './derivation';
+import { constraintClaimSchema, derivationSchema, verificationStatusSchema } from './derivation';
 import { idSchema, proseSchema, timestampSchema } from './primitives';
 import { positionSchema } from './protocol';
 import { statisticalReportSchema } from './statistics';
@@ -90,6 +90,28 @@ export const proposedTestSchema = z.strictObject({
 });
 export type ProposedTest = z.infer<typeof proposedTestSchema>;
 
+/**
+ * What happened when a dispute's test was run.
+ *
+ * `verdict` is the checker's: the test passed, failed, or could not be
+ * decided. `outcome` is what that means for the dispute, given which result
+ * the critic said would falsify the claim. No model contributes to either.
+ */
+export const disputeTestFields = {
+  route: z.enum(TEST_ROUTES),
+  verdict: verificationStatusSchema,
+  outcome: disputeOutcomeSchema,
+  /** The checker's own account: what it ran and what it found. */
+  detail: proseSchema,
+} as const;
+
+export const disputeTestSchema = z.strictObject({
+  ...disputeTestFields,
+  /** The run or the stored verdict behind it; null when the test never ran. */
+  evidence: evidenceRefSchema.nullable(),
+});
+export type DisputeTest = z.infer<typeof disputeTestSchema>;
+
 export const disputeSchema = z.strictObject({
   disputeId: idSchema,
   sessionId: idSchema,
@@ -100,6 +122,8 @@ export const disputeSchema = z.strictObject({
   severity: disputeSeveritySchema,
   argument: proseSchema,
   proposedTest: proposedTestSchema.nullable(),
+  /** The result of running that test; null until it has been, or if it cannot be. */
+  test: disputeTestSchema.nullable(),
   status: disputeStatusSchema,
   openedAt: timestampSchema,
   resolvedAt: timestampSchema.nullable(),
@@ -110,8 +134,8 @@ export type Dispute = z.infer<typeof disputeSchema>;
  * The record of a settled — or deliberately unsettled — dispute.
  *
  * The referee writes `rationale`, but `evidence` is what decides: a resolution
- * that overturns a claim with no discriminating evidence is exactly what
- * Phase 53 refuses to accept.
+ * with no discriminating evidence, or one that contradicts the result of the
+ * dispute's own test, is refused by the ledger.
  */
 export const resolutionSchema = z.strictObject({
   disputeId: idSchema,
