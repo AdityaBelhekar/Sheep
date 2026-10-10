@@ -29,6 +29,7 @@ import {
 import type { MermaidPageReply } from '../shared/mermaid';
 import { getSandbox } from './lab';
 import { bundlePath, toolsPath } from './paths';
+import { isAppUrl, rendererDevServerUrl } from './security';
 import { getStore } from './store';
 
 /**
@@ -97,6 +98,9 @@ export async function renderMermaid(source: string): Promise<Rendering> {
   });
   // The page has no reason to open, or go, anywhere.
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!isAppUrl(url)) event.preventDefault();
+  });
 
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -106,8 +110,7 @@ export async function renderMermaid(source: string): Promise<Rendering> {
   });
 
   const render = async (): Promise<Rendering> => {
-    const devServer = process.env['ELECTRON_RENDERER_URL'];
-    if (devServer) await window.loadURL(`${devServer}/mermaid.html`);
+    if (rendererDevServerUrl) await window.loadURL(`${rendererDevServerUrl}/mermaid.html`);
     else await window.loadFile(bundlePath('renderer', 'mermaid.html'));
 
     const reply = (await window.webContents.executeJavaScript(

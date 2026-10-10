@@ -1,4 +1,3 @@
-import { shell } from 'electron';
 import {
   credentialKindForConfig,
   usesInteractiveSignIn,
@@ -21,6 +20,7 @@ import {
 } from '@sheep/gateway';
 import { deleteCredential, getVault, readCredential, saveCredential } from './credentials';
 import { logInfo, logWarn } from './log';
+import { openExternalLink } from './security';
 import { getStore } from './store';
 
 /**
@@ -325,9 +325,7 @@ export async function signInConnection(connectionId: string): Promise<Connection
 
   const client = createGoogleOAuthClient({ clientId: connection.config.clientId });
   const tokens = await client.signIn({
-    openBrowser: (url) => {
-      void shell.openExternal(url);
-    },
+    openBrowser: openExternalLink,
     // Without it, a second sign-in returns an access token and no way to renew.
     prompt: 'consent',
   });

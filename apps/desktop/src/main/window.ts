@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, rmSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { BrowserWindow, nativeImage, nativeTheme, shell } from 'electron';
+import { BrowserWindow, nativeImage, nativeTheme } from 'electron';
 import { domainEvent } from '@sheep/core';
 import { listSessions } from '@sheep/store';
 import { DEFAULT_PANE, PANE_IDS } from '../shared/panes';
@@ -17,6 +17,7 @@ import { createConnection } from './connections';
 import { setLiteratureOrigin } from './literature';
 import { logInfo, logWarn, redactor } from './log';
 import { bundlePath, resourcePath } from './paths';
+import { lockNavigation, rendererDevServerUrl } from './security';
 import { isSmokeRun, recordSmokeCheck } from './smoke';
 import {
   SMOKE_MODEL_ID,
@@ -29,9 +30,6 @@ import { checkForUpdate } from './update';
 
 /** What the navigability check expects to find, taken from the shared list. */
 const PANE_COUNT = PANE_IDS.length;
-
-/** Renderer dev-server URL, injected by electron-vite in `dev` mode only. */
-export const rendererDevServerUrl = process.env['ELECTRON_RENDERER_URL'];
 
 export function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -64,10 +62,7 @@ export function createMainWindow(): BrowserWindow {
   });
 
   // Links open in the user's browser; nothing navigates the app window away.
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  lockNavigation(window.webContents);
 
   if (rendererDevServerUrl) {
     void window.loadURL(rendererDevServerUrl);

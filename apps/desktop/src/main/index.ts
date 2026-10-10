@@ -11,11 +11,11 @@ import { bindIpcRegistry, createIpcRegistry } from './ipc';
 import { cancelAllLabRuns } from './lab';
 import { logError, logInfo } from './log';
 import { startOrchestrator, stopOrchestrator } from './orchestrator';
-import { applyRendererSecurityPolicy } from './security';
+import { applyRendererSecurityPolicy, rendererDevServerUrl } from './security';
 import { bundleArgument, openBundleFromSystem } from './session-files';
 import { beginSmokeRun, expectSmokeCheck, isSmokeRun, recordSmokeCheck } from './smoke';
 import { closeStore, openStore, recordLaunch } from './store';
-import { createMainWindow, rendererDevServerUrl } from './window';
+import { createMainWindow } from './window';
 
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('dev.sheep.app');

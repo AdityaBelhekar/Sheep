@@ -34,7 +34,8 @@ export const sourceSchema = z.strictObject({
   year: z.number().int().min(1000).max(3000).nullable(),
   venue: z.string().min(1).max(300).nullable(),
   doi: z.string().min(1).max(300).nullable(),
-  url: z.url().max(1_000),
+  /** Shown as a link, so a web address and nothing a shell would run. */
+  url: z.url({ protocol: /^https?$/ }).max(1_000),
   abstract: z
     .string()
     .max(MAX_ABSTRACT_LENGTH + 40)

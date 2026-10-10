@@ -48,7 +48,8 @@ import { exportSessionFile, importSessionFile } from './session-files';
 import { readLiterature, searchForLiterature, searchSession } from './literature';
 import { compilePaper, exportPaper, paperTemplates } from './paper';
 import { checkDerivation, getDerivationDetail, readDerivations } from './verification';
-import { logError } from './log';
+import { logError, logWarn } from './log';
+import { isTrustedFrame } from './security';
 import { getEventLog, getStore } from './store';
 
 /** Builds the main-process registry with every handler this app serves. */
@@ -507,6 +508,12 @@ export function bindIpcRegistry(registry: IpcRegistry): void {
 
   for (const channel of registry.registeredChannels()) {
     ipcMain.handle(channel, async (event, payload: unknown) => {
+      if (!isTrustedFrame(event.senderFrame)) {
+        logWarn(
+          `refused ${channel} from a frame that is not the app: ${event.senderFrame?.url ?? 'gone'}`,
+        );
+        throw new Error(`IPC_FORBIDDEN: ${channel}`);
+      }
       try {
         return await registry.dispatch(channel, payload, { senderId: event.sender.id });
       } catch (error) {
