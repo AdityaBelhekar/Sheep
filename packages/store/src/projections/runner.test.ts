@@ -360,9 +360,13 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
       h.catchUp();
       expect(h.runner.status()[0]?.lastSeq).toBe(1);
 
-      // A later build ships the same tables under a new version number.
+      // A later build ships a new column under a new version number.
       const reshaped: Projection = {
         ...SESSIONS_PROJECTION,
+        ddl: SESSIONS_PROJECTION.ddl.replace(
+          'participant_count INTEGER NOT NULL,',
+          'participant_count INTEGER NOT NULL, added_later TEXT,',
+        ),
         ddlVersion: SESSIONS_PROJECTION.ddlVersion + 1,
       };
       const later = new ProjectionRunner(h.db, h.log, { projections: [reshaped] });
@@ -379,6 +383,10 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
         },
       ]);
       expect(getSession(h.db, SESSION_ID)).toBeDefined();
+      // The table has the new shape, not the old one emptied and refilled.
+      expect(
+        h.db.all<{ name: string }>('PRAGMA table_info(sessions)').map((column) => column.name),
+      ).toContain('added_later');
     } finally {
       h.close();
     }

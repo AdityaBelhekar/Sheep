@@ -117,7 +117,10 @@ const HANDLED = new Set<DomainEventType>([
  */
 export const SESSIONS_PROJECTION: Projection = {
   name: 'sessions',
-  ddlVersion: 4,
+  // 5 changes no column. It retires stores that reached 4 while the runner
+  // still emptied a stale table instead of dropping it, and so kept the old
+  // shape under the new number.
+  ddlVersion: 5,
   // Children first: these are the tables a future foreign key would depend on.
   tables: ['participants', 'messages', 'sessions'],
   ddl: SESSIONS_DDL,

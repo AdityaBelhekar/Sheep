@@ -79,13 +79,18 @@ export class ProjectionRunner {
       const state = this.#state(projection.name);
       const missing = this.#missingTables(projection);
 
-      if (missing.length > 0) this.#db.exec(projection.ddl);
-
       // No watermark means nothing is known about how far these rows go, and a
       // shape change means they were built to a different plan. Either way the
       // honest move is to throw them away rather than fold new events into rows
       // of uncertain provenance.
       const stale = state === undefined || state.ddl_version !== projection.ddlVersion;
+
+      // Thrown away means dropped, not emptied: the DDL is `IF NOT EXISTS`, so a
+      // table left standing keeps its old columns whatever the new plan says.
+      if (stale) {
+        for (const table of projection.tables) this.#db.exec(`DROP TABLE IF EXISTS ${table}`);
+      }
+      if (missing.length > 0 || stale) this.#db.exec(projection.ddl);
       const needsRebuild = missing.length > 0 || stale;
 
       const report = needsRebuild ? this.rebuild(projection) : this.catchUp(projection);
