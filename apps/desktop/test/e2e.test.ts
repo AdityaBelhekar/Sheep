@@ -15,8 +15,10 @@ import {
 import { framingReply, hypothesisReply, scoringReply } from '@sheep/orchestrator/test-support';
 import {
   buildDocument,
+  emitBody,
   emitLatex,
   templateById,
+  TEMPLATES,
   typesetPaper,
   type Block,
   type PaperDocument,
@@ -708,5 +710,23 @@ describe('a full seven-phase session against mock models', () => {
       for (const { claimId } of document.labels) expect(tex).toContain(claimId);
       expect(tex).toContain('\\section{Open Questions}');
     }, 300_000);
+
+    it.each(TEMPLATES.filter((template) => template.id !== 'sheep'))(
+      'typesets the same record as $label, saying the same thing',
+      async (template) => {
+        const source = readPaperSource(store, sessionId);
+        const paper = await typesetPaper(document, template, tools, source.read);
+
+        expect(Buffer.from(paper.pdf.subarray(0, 5)).toString('latin1')).toBe('%PDF-');
+        expect(paper.warnings.map((warning) => warning.message).join('\n')).not.toMatch(
+          /undefined|Missing character/i,
+        );
+        // The page is the template's. The text is not: every claim is there, under the same id.
+        const tex = emitLatex(document, template);
+        for (const { claimId } of document.labels) expect(tex).toContain(claimId);
+        expect(tex).toContain(emitBody(document));
+      },
+      300_000,
+    );
   });
 });

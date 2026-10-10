@@ -13,7 +13,7 @@ import { abstractText, BODY_PREAMBLE, emitBody, escapeLatex, mono } from './late
  * model, with the version each reported.
  */
 
-export const TEMPLATE_IDS = ['sheep'] as const;
+export const TEMPLATE_IDS = ['sheep', 'neurips', 'icml', 'iclr'] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 
 export interface PaperTemplate {
@@ -38,6 +38,22 @@ type Author = PaperDocument['authors'][number];
 const title = (document: PaperDocument): string => escapeLatex(document.title);
 const name = (author: Author): string => escapeLatex(author.name);
 const detail = (author: Author): string => escapeLatex(author.detail);
+
+const abstract = (document: PaperDocument): string =>
+  `\\begin{abstract}\n${abstractText(document)}\n\\end{abstract}`;
+
+/** `\title`, `\author` joined the way the class wants, `\maketitle`, then the abstract. */
+const standardFront =
+  (join: string, author: (value: Author) => string) =>
+  (document: PaperDocument): string =>
+    [
+      `\\title{${title(document)}}`,
+      `\\author{${document.authors.map(author).join(join) || 'No participants recorded'}}`,
+      '\\maketitle',
+      abstract(document),
+    ].join('\n');
+
+const stacked = (author: Author): string => `${name(author)} \\\\ ${detail(author)}`;
 
 const SHEEP: PaperTemplate = {
   id: 'sheep',
@@ -79,7 +95,56 @@ const SHEEP: PaperTemplate = {
   },
 };
 
-export const TEMPLATES: readonly PaperTemplate[] = [SHEEP];
+const NEURIPS: PaperTemplate = {
+  id: 'neurips',
+  label: 'NeurIPS',
+  description: 'The official NeurIPS 2025 style, as a preprint.',
+  styleFiles: ['neurips/neurips_2025.sty'],
+  head: '\\documentclass{article}',
+  preamble: '\\usepackage[preprint]{neurips_2025}',
+  front: standardFront(' \\And ', stacked),
+};
+
+const ICML: PaperTemplate = {
+  id: 'icml',
+  label: 'ICML',
+  description: 'The official ICML 2026 style, two columns.',
+  styleFiles: ['icml/icml2026.sty', 'icml/algorithm.sty', 'icml/algorithmic.sty'],
+  head: '\\documentclass{article}',
+  preamble: '\\usepackage[accepted]{icml2026}',
+  front(document) {
+    return [
+      `\\icmltitlerunning{${title(document)}}`,
+      '\\twocolumn[',
+      `\\icmltitle{${title(document)}}`,
+      '\\begin{icmlauthorlist}',
+      ...document.authors.map(
+        (author, index) => `\\icmlauthor{${name(author)}}{m${String(index + 1)}}`,
+      ),
+      '\\end{icmlauthorlist}',
+      ...document.authors.map(
+        (author, index) => `\\icmlaffiliation{m${String(index + 1)}}{${detail(author)}}`,
+      ),
+      '\\icmlkeywords{Sheep Research Record}',
+      '\\vskip 0.3in',
+      ']',
+      '\\printAffiliationsAndNotice{}',
+      abstract(document),
+    ].join('\n');
+  },
+};
+
+const ICLR: PaperTemplate = {
+  id: 'iclr',
+  label: 'ICLR',
+  description: 'The official ICLR 2026 conference style.',
+  styleFiles: ['iclr/iclr2026_conference.sty'],
+  head: '\\documentclass{article}',
+  preamble: '\\usepackage{iclr2026_conference,times}\n\\iclrfinalcopy',
+  front: standardFront(' \\And ', stacked),
+};
+
+export const TEMPLATES: readonly PaperTemplate[] = [SHEEP, NEURIPS, ICML, ICLR];
 
 /** The template with this id. Takes any string: the id arrives from outside. */
 export function templateById(id: string): PaperTemplate {
