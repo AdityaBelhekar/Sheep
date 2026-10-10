@@ -1,5 +1,5 @@
 import { safeParseDomainEvent, type DomainEvent } from '@sheep/core';
-import type { PaperSource } from '@sheep/paper';
+import type { LoggedEvent, PaperSource } from '@sheep/paper';
 import {
   claimsOnArtifacts,
   getSession,
@@ -54,4 +54,22 @@ export function readPaperSource(store: SheepStore, sessionId: string): PaperSour
     head: store.events.head() ?? null,
     read: (hash) => store.blobs.read(hash),
   };
+}
+
+/**
+ * The session's entries of the event log, with the hashes that chain them.
+ *
+ * The chain runs through every session in the store, so these entries alone do
+ * not re-verify it end to end; each still carries the hash of its own payload.
+ */
+export function readSessionLog(store: SheepStore, sessionId: string): LoggedEvent[] {
+  return [...store.events.stream({ sessionId })].map((record) => ({
+    seq: record.seq,
+    type: record.type,
+    payload: record.payload,
+    recordedAt: record.recordedAt,
+    payloadHash: record.payloadHash,
+    prevHash: record.prevHash,
+    entryHash: record.entryHash,
+  }));
 }

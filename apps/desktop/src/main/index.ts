@@ -29,6 +29,12 @@ if (isSmokeRun) {
   app.setPath('userData', smokeDataDir);
   app.setPath('sessionData', smokeDataDir);
 
+  // A launch check must not depend on the window being in front. Occluded, or
+  // on a locked screen, Chromium stops animation frames, and the PDF previews
+  // are drawn on them: the checks would wait for pages that never paint.
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
+
   for (const check of [
     'store-ready',
     'event-log',

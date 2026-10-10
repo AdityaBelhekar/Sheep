@@ -26,7 +26,24 @@ export {
   type Sentence,
 } from './ir';
 export { emitBody, escapeLatex } from './latex';
-export { paperFiles, typesetPaper, type TypesetPaper } from './paper';
+export { bundleFiles, zip, type LoggedEvent } from './bundle';
+export {
+  buildPaper,
+  paperFiles,
+  typesetPaper,
+  type BuiltPaper,
+  type PaperOptions,
+  type TypesetPaper,
+} from './paper';
+export {
+  assertProvenanced,
+  provenanceAppendix,
+  ProvenanceError,
+  unprovenanced,
+  withoutUnprovenanced,
+  type BuildFacts,
+  type Unprovenanced,
+} from './provenance';
 export {
   emitLatex,
   templateById,

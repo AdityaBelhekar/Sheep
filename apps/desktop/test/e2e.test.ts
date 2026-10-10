@@ -1,9 +1,16 @@
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { devToolsDir, locateTools, matplotlibScript, renderGraphviz } from '@sheep/artifacts';
+import {
+  devToolsDir,
+  locateTools,
+  matplotlibScript,
+  renderGraphviz,
+  renderTikz,
+} from '@sheep/artifacts';
 import { domainEvent, PHASE_KINDS, type Claim } from '@sheep/core';
 import {
   Orchestrator,
@@ -15,11 +22,16 @@ import {
 import { framingReply, hypothesisReply, scoringReply } from '@sheep/orchestrator/test-support';
 import {
   buildDocument,
+  buildPaper,
+  bundleFiles,
   emitBody,
   emitLatex,
+  ProvenanceError,
   templateById,
   TEMPLATES,
   typesetPaper,
+  withoutUnprovenanced,
+  zip,
   type Block,
   type PaperDocument,
 } from '@sheep/paper';
@@ -36,7 +48,7 @@ import {
   recordFigures,
   type SheepStore,
 } from '@sheep/store';
-import { readPaperSource } from '../src/main/paper-source';
+import { readPaperSource, readSessionLog } from '../src/main/paper-source';
 import { createProtocolServices } from '../src/main/protocol-services';
 
 /**
@@ -569,6 +581,22 @@ describe('a full seven-phase session against mock models', () => {
         }),
       ]);
 
+      const picture = '\\draw[->] (0,0) -- node[above] {$n^{-1/2}$} (3,0);';
+      const tikz = recordArtifact(store, sessionId, {
+        artifactId: randomUUID(),
+        kind: 'tikz',
+        title: 'The rate, drawn',
+        source: picture,
+        ...(await renderTikz(tools, picture)),
+      });
+      store.record([
+        domainEvent('claim.evidence-attached', {
+          sessionId,
+          claimId: plotClaimId,
+          evidence: { kind: 'ARTIFACT', ref: tikz.artifactId },
+        }),
+      ]);
+
       document = buildDocument(readPaperSource(store, sessionId));
     }, 300_000);
 
@@ -679,6 +707,7 @@ describe('a full seven-phase session against mock models', () => {
       expect(figures.map((figure) => [figure.section, figure.title, figure.file])).toEqual([
         ['findings', 'How the estimate is formed', 'figures/figure-1.pdf'],
         ['other-claims', 'Expected error against samples', 'figures/figure-2.pdf'],
+        ['other-claims', 'The rate, drawn', 'figures/figure-3.pdf'],
       ]);
       expect(figures[0]!.labels).toEqual([
         document.labels.find((entry) => ledger().claim(entry.claimId).status === 'supported')!
@@ -693,13 +722,15 @@ describe('a full seven-phase session against mock models', () => {
     it('typesets as a Sheep Research Record, with every claim id in the source', async () => {
       const source = readPaperSource(store, sessionId);
       const template = templateById('sheep');
-      const paper = await typesetPaper(document, template, tools, source.read);
+      const { document: provenanced } = withoutUnprovenanced(document);
+      const paper = await typesetPaper(provenanced, template, tools, source.read);
 
       expect(Buffer.from(paper.pdf.subarray(0, 5)).toString('latin1')).toBe('%PDF-');
       expect(paper.files.map((file) => file.path)).toEqual([
         'paper.tex',
         'figures/figure-1.pdf',
         'figures/figure-2.pdf',
+        'figures/figure-3.pdf',
       ]);
       // What a model wrote reached the engine as text, and nothing went missing in it.
       expect(paper.warnings.map((warning) => warning.message).join('\n')).not.toMatch(
@@ -715,7 +746,8 @@ describe('a full seven-phase session against mock models', () => {
       'typesets the same record as $label, saying the same thing',
       async (template) => {
         const source = readPaperSource(store, sessionId);
-        const paper = await typesetPaper(document, template, tools, source.read);
+        const { document: provenanced } = withoutUnprovenanced(document);
+        const paper = await typesetPaper(provenanced, template, tools, source.read);
 
         expect(Buffer.from(paper.pdf.subarray(0, 5)).toString('latin1')).toBe('%PDF-');
         expect(paper.warnings.map((warning) => warning.message).join('\n')).not.toMatch(
@@ -728,5 +760,112 @@ describe('a full seven-phase session against mock models', () => {
       },
       300_000,
     );
+
+    it('refuses to build while the scribe’s unlabelled sentence is in it', async () => {
+      const source = readPaperSource(store, sessionId);
+      const refused = await buildPaper(source, tools, { template: 'sheep' }).catch(
+        (error: unknown) => error,
+      );
+
+      expect(refused).toBeInstanceOf(ProvenanceError);
+      // Exactly the one sentence, named, with where it is and why.
+      expect((refused as ProvenanceError).sentences).toEqual([
+        {
+          section: 'Synthesis',
+          text: 'sampling estimates pi to two places in this run.',
+          reason: 'it names no claim in the ledger',
+        },
+      ]);
+    });
+
+    it('builds without that sentence when told to, and states the session’s provenance', async () => {
+      const source = readPaperSource(store, sessionId);
+      const paper = await buildPaper(source, tools, { template: 'sheep', omitUnprovenanced: true });
+
+      expect(paper.omitted.map((sentence) => sentence.text)).toEqual([
+        'sampling estimates pi to two places in this run.',
+      ]);
+      const tex = emitLatex(paper.document, templateById('sheep'));
+      expect(tex).not.toContain('sampling estimates pi to two places in this run');
+      // The rest of the synthesis is still there.
+      expect(tex).toContain('the rate of convergence, raised against C1.');
+
+      const facts = paper.document.appendix.flatMap((section) =>
+        section.blocks.flatMap((block) => (block.kind === 'facts' ? block.facts : [])),
+      );
+      const valuesOf = (term: string): string[] =>
+        facts.filter((fact) => fact.term === term).map((fact) => fact.value);
+
+      expect(paper.document.appendix.map((section) => section.id)).toEqual([
+        'provenance',
+        'provenance-participants',
+        'provenance-runs',
+        'provenance-derivations',
+        'provenance-artifacts',
+      ]);
+      expect(valuesOf('Root hash')).toEqual([store.events.head()!.entryHash]);
+      expect(valuesOf('Left out')[0]).toMatch(/^1 sentence/);
+      expect(valuesOf('Tools lock')).toEqual([tools.lockHash]);
+      // Every run, with its seed and environment lock; every artifact, with its source.
+      const runs = listExecutions(store.db, sessionId);
+      expect(valuesOf('Execution').sort()).toEqual(runs.map((run) => run.executionId).sort());
+      expect(valuesOf('Seed')).toContain('11');
+      expect(new Set(valuesOf('Environment lock'))).toEqual(
+        new Set([...runs, ...listDerivations(store.db, sessionId)].map((r) => r.envLockHash)),
+      );
+      expect(valuesOf('Artifact')).toHaveLength(3);
+      expect(valuesOf('Participant').sort()).toEqual([ALICE, BOB, CARA].sort());
+    }, 300_000);
+
+    it('emits a bundle whose script redraws every figure from scratch, byte for byte', async () => {
+      const source = readPaperSource(store, sessionId);
+      const paper = await buildPaper(source, tools, { template: 'sheep', omitUnprovenanced: true });
+      const files = bundleFiles(source, paper.document, paper, paper.build, {
+        log: readSessionLog(store, sessionId),
+        omitted: paper.omitted,
+      });
+
+      // Unpacked by another tool, into a directory that holds nothing else.
+      const dir = join(root, 'bundle');
+      mkdirSync(dir);
+      writeFileSync(join(dir, 'bundle.zip'), zip(files));
+      const tar = join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'tar.exe');
+      execFileSync(tar, ['-xf', 'bundle.zip'], { cwd: dir });
+      // The figures the paper shipped are deleted: nothing can be compared with itself.
+      rmSync(join(dir, 'figures'), { recursive: true });
+
+      const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as {
+        eventLog: { rootHash: string; entries: number };
+        figures: { kind: string; source: string; outputs: unknown[] }[];
+        omitted: { text: string }[];
+      };
+      expect(manifest.eventLog.rootHash).toBe(store.events.head()!.entryHash);
+      expect(manifest.figures.map((figure) => figure.kind)).toEqual([
+        'graphviz',
+        'matplotlib',
+        'tikz',
+      ]);
+      expect(manifest.omitted).toHaveLength(1);
+      expect(readFileSync(join(dir, 'events.jsonl'), 'utf8').trim().split('\n')).toHaveLength(
+        manifest.eventLog.entries,
+      );
+      expect(readFileSync(join(dir, 'paper.pdf')).equals(Buffer.from(paper.pdf))).toBe(true);
+
+      const runtime = locateRuntime(devRuntimeDir());
+      const report = execFileSync(
+        runtime.python,
+        ['reproduce.py', '--dot', tools.dot, '--tectonic', tools.tectonic],
+        {
+          cwd: dir,
+          encoding: 'utf8',
+          env: { ...process.env, TECTONIC_CACHE_DIR: tools.texCache },
+        },
+      );
+
+      const lines = report.split(/\r?\n/).filter((line) => /^[A-Z]+ {2,}figures\//.test(line));
+      expect(lines).toHaveLength(3);
+      for (const line of lines) expect(line).toMatch(/^IDENTICAL /);
+      expect(report).toContain('every redrawn figure is byte-identical');
+    }, 600_000);
   });
 });

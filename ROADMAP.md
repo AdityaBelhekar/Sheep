@@ -278,7 +278,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
 - [x] **62. IR → LaTeX + house template** — the native "Sheep Research Record" format. → `feat(paper): latex emitter and sheep research record template`
 - [x] **63. ML conference templates** — NeurIPS, ICML, ICLR. → `feat(paper): neurips, icml and iclr templates`
 - [x] **64. IEEE / ACM / arXiv templates** → `feat(paper): ieee, acm and arxiv templates`
-- [ ] **65. Provenance appendix + repro bundle + compile-time enforcement** — auto-generated appendix (roster, versions, params, cost, seeds, env lock, artifact hashes, event-log root hash); zip bundle with replay script; **a claim-bearing sentence with no ledger id fails the build.** **(P5)**
+- [x] **65. Provenance appendix + repro bundle + compile-time enforcement** — auto-generated appendix (roster, versions, params, cost, seeds, env lock, artifact hashes, event-log root hash); zip bundle with replay script; **a claim-bearing sentence with no ledger id fails the build.** **(P5)**
   → `feat(paper): provenance appendix and reproduction bundle`
 
 > **Stage gate:** an unprovenanced sentence breaks the build, and the emitted bundle reproduces every figure from scratch.

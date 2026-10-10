@@ -5,10 +5,11 @@ import { PdfPreview } from '../components/PdfPreview';
 
 type Templates = IpcResponse<'sheep:paper-templates'>;
 type Compiled = IpcResponse<'sheep:paper-compile'>;
+type Exported = Extract<IpcResponse<'sheep:paper-export'>, { ok: true }>;
 type TemplateId = string;
 
 /** Which template was last chosen, kept across navigation. */
-const draft: { template: TemplateId } = { template: 'sheep' };
+const draft: { template: TemplateId; omit: boolean } = { template: 'sheep', omit: false };
 
 /**
  * The session, compiled into a paper.
@@ -16,6 +17,10 @@ const draft: { template: TemplateId } = { template: 'sheep' };
  * Nothing is written here and nothing can be: the paper is built from the
  * ledger and the log each time it is compiled, in whichever template is
  * chosen. What can differ between two templates is the page, never the text.
+ *
+ * A sentence that asserts something and names no claim in the ledger stops the
+ * build, and the pane shows the sentence. The only other choice offered is to
+ * leave it out, which the paper then says it did.
  */
 export function PaperPane({ client }: { client: IpcClient | undefined }): ReactElement {
   const pane = paneById('paper');
@@ -25,8 +30,11 @@ export function PaperPane({ client }: { client: IpcClient | undefined }): ReactE
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Compiled | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [omit, setOmit] = useState(draft.omit);
+  const [exported, setExported] = useState<Exported | null>(null);
 
   draft.template = template;
+  draft.omit = omit;
 
   useEffect(() => {
     if (!client) return;
@@ -57,10 +65,37 @@ export function PaperPane({ client }: { client: IpcClient | undefined }): ReactE
     if (!client || sessionId === null || busy) return;
     setProblem(null);
     setBusy(true);
+    setExported(null);
     try {
-      setResult(await client.invoke('sheep:paper-compile', { sessionId, template }));
+      setResult(
+        await client.invoke('sheep:paper-compile', {
+          sessionId,
+          template,
+          omitUnprovenanced: omit,
+        }),
+      );
     } catch (error) {
       setResult(null);
+      setProblem(describe(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportBundle = async (): Promise<void> => {
+    if (!client || sessionId === null || busy) return;
+    setProblem(null);
+    setBusy(true);
+    try {
+      const reply = await client.invoke('sheep:paper-export', {
+        sessionId,
+        template,
+        omitUnprovenanced: omit,
+      });
+      // A refusal to export is the same refusal as to compile, and is shown the same way.
+      if (reply.ok) setExported(reply);
+      else setResult(reply);
+    } catch (error) {
       setProblem(describe(error));
     } finally {
       setBusy(false);
@@ -136,8 +171,38 @@ export function PaperPane({ client }: { client: IpcClient | undefined }): ReactE
             >
               {busy ? 'Compiling…' : 'Compile'}
             </button>
+            <button
+              type="button"
+              className="button button--quiet"
+              data-sheep-paper-export
+              disabled={busy || !templates.available}
+              onClick={() => {
+                void exportBundle();
+              }}
+            >
+              Export reproduction bundle
+            </button>
             {templates.available && <span className="lab__muted">{templates.detail}</span>}
           </div>
+          <label className="verify__toggle">
+            <input
+              type="checkbox"
+              data-sheep-paper-omit
+              checked={omit}
+              onChange={(event) => {
+                setOmit(event.target.checked);
+              }}
+            />
+            Leave out sentences that name no claim in the ledger, instead of refusing to build
+          </label>
+
+          {exported && (
+            <p className="notice" data-sheep-paper-exported={String(exported.saved)}>
+              {exported.saved
+                ? `Saved ${String(exported.files)} files (${formatBytes(exported.bytes)}) to ${exported.path ?? ''}. Run reproduce.py from the unpacked bundle to redraw every figure and compare.`
+                : 'Nothing was saved.'}
+            </p>
+          )}
 
           {problem !== null && (
             <p className="notice notice--error" role="alert">
@@ -148,6 +213,25 @@ export function PaperPane({ client }: { client: IpcClient | undefined }): ReactE
           {result && !result.ok && (
             <div className="notice notice--error" role="alert">
               <strong>The paper was not compiled.</strong>
+              {result.unprovenanced.length > 0 && (
+                <>
+                  <p className="verify__reason">
+                    {result.unprovenanced.length === 1
+                      ? 'This sentence asserts'
+                      : 'These sentences assert'}{' '}
+                    something with no claim in the ledger behind{' '}
+                    {result.unprovenanced.length === 1 ? 'it' : 'them'}. A paper cannot say what its
+                    ledger does not hold.
+                  </p>
+                  <ul className="artifacts__files">
+                    {result.unprovenanced.map((entry, index) => (
+                      <li key={index} data-sheep-paper-unprovenanced>
+                        <em>{entry.section}:</em> &ldquo;{entry.text}&rdquo; — {entry.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
               <ul className="artifacts__files">
                 {result.problems.map((entry, index) => (
                   <li key={index} data-sheep-paper-problem>
@@ -173,6 +257,10 @@ export function PaperPane({ client }: { client: IpcClient | undefined }): ReactE
                   ` · ${String(result.warnings.length)} remark${
                     result.warnings.length === 1 ? '' : 's'
                   } from the engine`}
+                {result.omitted.length > 0 &&
+                  ` · ${String(result.omitted.length)} unprovenanced sentence${
+                    result.omitted.length === 1 ? '' : 's'
+                  } left out`}
               </p>
               {result.warnings.length > 0 && (
                 <details className="lab__muted">

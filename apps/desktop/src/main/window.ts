@@ -51,6 +51,8 @@ export function createMainWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true,
+      // See the switches set for a smoke run in index.ts.
+      backgroundThrottling: !isSmokeRun,
     },
   });
 
@@ -71,7 +73,13 @@ export function createMainWindow(): BrowserWindow {
     void window.loadFile(bundlePath('renderer', 'index.html'));
   }
 
-  if (isSmokeRun) void runRendererSmokeChecks(window);
+  if (isSmokeRun) {
+    // A check that waits on the page says nothing about why the page never got there; the page's own errors do.
+    window.webContents.on('console-message', (details) => {
+      if (details.level === 'error') logWarn('renderer console -', details.message);
+    });
+    void runRendererSmokeChecks(window);
+  }
 
   return window;
 }
@@ -883,8 +891,9 @@ const VERIFICATION_EXPRESSION = `(async () => {
  */
 const ARTIFACTS_EXPRESSION = `(async () => {
   const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const until = async (probe) => {
-    for (let i = 0; i < 300; i += 1) {
+  const until = async (probe, seconds = 20) => {
+    const deadline = Date.now() + seconds * 1000;
+    while (Date.now() < deadline) {
       const found = probe();
       if (found) return found;
       await settle(50);
@@ -969,12 +978,13 @@ const ARTIFACTS_EXPRESSION = `(async () => {
 /**
  * Compiles a paper from the pane, as a person would: a session with a claim and
  * a figure the claim cites, the default template, the Compile button, and then
- * the pages drawn on screen.
+ * the pages drawn on screen. Then the bundle, exported with the pane's button.
  */
 const PAPER_EXPRESSION = `(async () => {
   const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const until = async (probe, tries = 600) => {
-    for (let i = 0; i < tries; i += 1) {
+  const until = async (probe, seconds = 40) => {
+    const deadline = Date.now() + seconds * 1000;
+    while (Date.now() < deadline) {
       const found = probe();
       if (found) return found;
       await settle(50);
@@ -1019,11 +1029,16 @@ const PAPER_EXPRESSION = `(async () => {
 
     click(pane.querySelector('[data-sheep-paper-compile]'));
     await until(() => pane.getAttribute('data-sheep-paper'));
-    const drawn = await until(() => pane.querySelector('[data-sheep-pdf]'), 200);
+    const drawn = await until(() => pane.querySelector('[data-sheep-pdf]'), 10);
     const summary = pane.querySelector('[data-sheep-paper-summary]');
     const canvas = pane.querySelector('[data-sheep-pdf] canvas');
 
+    click(pane.querySelector('[data-sheep-paper-export]'));
+    const exported = await until(() => pane.querySelector('[data-sheep-paper-exported]'));
+
     return {
+      exported: exported ? exported.getAttribute('data-sheep-paper-exported') : null,
+      exportedText: exported ? exported.textContent : '',
       engine: listed.available ? listed.detail : 'unavailable: ' + listed.detail,
       offered: offered.join(','),
       state: pane.getAttribute('data-sheep-paper'),
@@ -1486,6 +1501,8 @@ async function checkPaperPane(window: BrowserWindow): Promise<void> {
         pages: number;
         pageWidth: number;
         summary: string;
+        exported: string | null;
+        exportedText: string;
       }
     | { error: string }
     | undefined;
@@ -1501,8 +1518,11 @@ async function checkPaperPane(window: BrowserWindow): Promise<void> {
   const ok =
     result.offered.split(',').includes('sheep') &&
     result.state === 'compiled' &&
-    result.pages >= 1 &&
+    // The record and its provenance appendix do not fit on one page.
+    result.pages >= 2 &&
     result.pageWidth > 0 &&
+    result.exported === 'true' &&
+    /Saved \d+ files .*sheep-record-[0-9a-f]{8}-sheep\.zip/.test(result.exportedText) &&
     result.summary.includes('1 claim') &&
     result.summary.includes('1 figure');
 
@@ -1511,7 +1531,9 @@ async function checkPaperPane(window: BrowserWindow): Promise<void> {
     ok,
     `${result.engine} · templates ${result.offered} · ${result.state ?? 'no result'}${
       result.problems === '' ? '' : ` (${result.problems})`
-    } · ${String(result.pages)} page(s) drawn at ${String(result.pageWidth)}px · ${result.summary}`,
+    } · ${String(result.pages)} page(s) drawn at ${String(result.pageWidth)}px · ${result.summary} · bundle ${
+      result.exported === 'true' ? result.exportedText.replace(/ to .*$/, '') : 'not exported'
+    }`,
   );
 }
 

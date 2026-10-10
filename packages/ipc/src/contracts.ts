@@ -114,6 +114,31 @@ const latexProblemSchema = z.object({
   message: z.string(),
 });
 
+/** How a paper is asked for: which session, which page, and what to do about an unprovenanced sentence. */
+const paperRequest = z.object({
+  sessionId: idSchema,
+  template: z.string().min(1).max(40),
+  /**
+   * Leave out sentences that assert something and name no ledger claim, rather
+   * than refuse to build. Absent means refuse.
+   */
+  omitUnprovenanced: z.boolean().optional(),
+});
+
+/** An asserting sentence with no ledger claim behind it. */
+const unprovenancedSchema = z.object({
+  section: z.string(),
+  text: z.string(),
+  reason: z.string(),
+});
+
+/** Why there is no paper: the engine refused the LaTeX, or the document broke the provenance rule. */
+const paperRefusal = z.object({
+  ok: z.literal(false),
+  problems: z.array(latexProblemSchema),
+  unprovenanced: z.array(unprovenancedSchema),
+});
+
 /** One phase of the protocol, as the renderer draws it. */
 const phaseViewSchema = z.object({
   phaseId: idSchema,
@@ -646,7 +671,7 @@ export const IPC_CONTRACTS = {
    * answer rather than an error: `ok: false` carries what is wrong and where.
    */
   'sheep:paper-compile': {
-    request: z.object({ sessionId: idSchema, template: z.string().min(1).max(40) }),
+    request: paperRequest,
     response: z.discriminatedUnion('ok', [
       z.object({
         ok: z.literal(true),
@@ -656,8 +681,31 @@ export const IPC_CONTRACTS = {
         claims: z.number().int().nonnegative(),
         figures: z.number().int().nonnegative(),
         warnings: z.array(latexProblemSchema),
+        /** What `omitUnprovenanced` left out of this paper. */
+        omitted: z.array(unprovenancedSchema),
       }),
-      z.object({ ok: z.literal(false), problems: z.array(latexProblemSchema) }),
+      paperRefusal,
+    ]),
+  },
+  /**
+   * Export the reproduction bundle: the paper, its LaTeX, every figure with
+   * its source, the session's event log, and a script that draws each figure
+   * again and compares it with the hash the paper recorded.
+   *
+   * Main asks where to save it; the renderer never names a path. `saved:
+   * false` with no refusal means the person closed the dialog.
+   */
+  'sheep:paper-export': {
+    request: paperRequest,
+    response: z.discriminatedUnion('ok', [
+      z.object({
+        ok: z.literal(true),
+        saved: z.boolean(),
+        path: z.string().nullable(),
+        files: z.number().int().nonnegative(),
+        bytes: z.number().int().nonnegative(),
+      }),
+      paperRefusal,
     ]),
   },
   'sheep:chat-send': {
