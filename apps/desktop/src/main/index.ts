@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { APP_NAME } from '../shared/product';
+import { isAcceptanceRun, runAcceptance } from './acceptance';
 import { cancelAllChats } from './chat';
 import { syncConnections } from './connections';
 import { openVault, runCredentialSelfTest } from './credentials';
@@ -145,6 +146,16 @@ if (!hasInstanceLock) {
       void startOrchestrator().catch((error: unknown) => {
         logError('the orchestrator could not start -', error);
         recordSmokeCheck('orchestrator-ready', false, String(error));
+      });
+    }
+
+    // An acceptance run drives one session through the channels the panes use,
+    // reports, and exits with the verdict. It starts once the window is up.
+    if (isAcceptanceRun && storeOpened) {
+      mainWindow.webContents.once('did-finish-load', () => {
+        void runAcceptance(registry).then((exitCode) => {
+          app.exit(exitCode);
+        });
       });
     }
 

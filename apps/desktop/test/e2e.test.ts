@@ -52,6 +52,7 @@ import {
   recordRetrieval,
   type SheepStore,
 } from '@sheep/store';
+import { verifySessionRecord } from '../src/main/acceptance-verify';
 import { readPaperSource, readSessionLog } from '../src/main/paper-source';
 import { createProtocolServices } from '../src/main/protocol-services';
 
@@ -954,6 +955,71 @@ describe('a full seven-phase session against mock models', () => {
       } finally {
         elsewhere.close();
       }
+    }, 300_000);
+
+    it('passes every check an acceptance run is held to', async () => {
+      const report = await verifySessionRecord({
+        store,
+        sessionId,
+        tools,
+        python: locateRuntime(devRuntimeDir()).python,
+        outDir: join(root, 'acceptance'),
+      });
+
+      expect(report.checks.filter((check) => !check.ok)).toEqual([]);
+      expect(report.ok).toBe(true);
+      expect(report.checks.map((check) => check.name)).toEqual([
+        'protocol',
+        'log',
+        'attribution (P1)',
+        'evidence (P2)',
+        'disagreement (P6)',
+        'paper (P5)',
+        'reproduction bundle',
+        'portable',
+      ]);
+      const detail = (name: string): string =>
+        report.checks.find((check) => check.name === name)!.detail;
+      // The strict build refused the scribe's unlabelled sentence, and said so.
+      expect(detail('paper (P5)')).toMatch(/strict build refused 1 sentence/);
+      expect(detail('reproduction bundle')).toMatch(
+        /^3 figures redrawn from source byte-identical/,
+      );
+      expect(detail('disagreement (P6)')).toMatch(/1 open question kept with both positions/);
+
+      for (const path of Object.values(report.files)) {
+        expect(readFileSync(path).byteLength, path).toBeGreaterThan(0);
+      }
+      expect(readFileSync(report.files.report, 'utf8')).toContain(
+        '# Sheep acceptance run — PASSED',
+      );
+    }, 600_000);
+
+    it('fails a session that did not finish, and says which promise it broke', async () => {
+      const unfinished = randomUUID();
+      store.record([
+        domainEvent('session.created', {
+          sessionId: unfinished,
+          title: 'Stopped early',
+          question: 'Does a session that never ran pass?',
+        }),
+      ]);
+      const report = await verifySessionRecord({
+        store,
+        sessionId: unfinished,
+        tools,
+        python: locateRuntime(devRuntimeDir()).python,
+        outDir: join(root, 'acceptance-unfinished'),
+      });
+
+      expect(report.ok).toBe(false);
+      const failed = report.checks.filter((check) => !check.ok).map((check) => check.name);
+      expect(failed).toEqual(
+        expect.arrayContaining(['protocol', 'attribution (P1)', 'evidence (P2)']),
+      );
+      expect(report.checks.find((check) => check.name === 'protocol')!.detail).toMatch(
+        /did not complete all seven phases/,
+      );
     }, 300_000);
   });
 });

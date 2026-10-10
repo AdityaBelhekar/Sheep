@@ -305,6 +305,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
   *Built, and its decisions tested; never exercised for real. No certificate exists yet, so no build has been signed and no update has been downloaded, verified or installed. The first signed release is the first real test.*
 - [ ] **74. Documentation** — README, user guide, architecture doc, contributing guide. → `docs: user guide and architecture documentation`
 - [ ] **75. Acceptance run** — two cloud models + one local, a real research question end to end, exported paper, bundle verified to reproduce. → `test(e2e): full acceptance run`
+  *Not run yet. The harness exists (`npm run acceptance -- --question "…"`) and is held to its checks by the scripted end-to-end session, but this needs two cloud connections and a local one saved in the app, and spends real money up to its cap. It is ticked when it has been run for real and has passed.*
 
 ---
 

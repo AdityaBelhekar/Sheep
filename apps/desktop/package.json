@@ -12,7 +12,8 @@
     "smoke": "electron-vite build && node scripts/smoke.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "dist": "electron-vite build && electron-builder --config electron-builder.config.cjs --publish never",
-    "smoke:packaged": "node scripts/smoke.mjs --packaged"
+    "smoke:packaged": "node scripts/smoke.mjs --packaged",
+    "acceptance": "electron-vite build && node scripts/acceptance.mjs"
   },
   "dependencies": {
     "@sheep/artifacts": "*",
