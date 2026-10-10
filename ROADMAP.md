@@ -299,7 +299,8 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
 
 - [x] **70. Session export/import** — portable session bundles with full event log and blobs. → `feat(store): session export and import bundles`
 - [x] **71. Windows installer** — electron-builder, NSIS, icons, file associations. → `chore(build): windows installer`
-- [ ] **72. macOS + Linux builds** → `chore(build): macos and linux packaging`
+- [x] **72. macOS + Linux builds** → `chore(build): macos and linux packaging`
+  *Packaging only, and untested, by decision (2026-10-10): dmg and AppImage targets and a CI workflow that builds them. Neither has ever been built or run. Still to do before either platform is usable — a POSIX sandbox (the current one is Windows Job Objects), a pinned Python runtime and wheels per platform, and pinned Graphviz and Tectonic per platform. Until then the Lab, Verification and the renderers report themselves unavailable there.*
 - [ ] **73. Auto-update + signing** → `chore(build): signed auto-update`
 - [ ] **74. Documentation** — README, user guide, architecture doc, contributing guide. → `docs: user guide and architecture documentation`
 - [ ] **75. Acceptance run** — two cloud models + one local, a real research question end to end, exported paper, bundle verified to reproduce. → `test(e2e): full acceptance run`

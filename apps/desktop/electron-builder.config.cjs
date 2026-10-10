@@ -17,13 +17,24 @@
  * package.json, and the app will only ever update itself if it was: an
  * unsigned build has no publisher to verify an update against.
  */
+/* eslint-disable @typescript-eslint/no-require-imports */
+const { existsSync } = require('node:fs');
+const { join } = require('node:path');
+
 const signed = Boolean(process.env.CSC_LINK || process.env.WIN_CSC_LINK);
+
+/**
+ * The runtime and the tools are pinned for Windows x64 only. On a platform
+ * that has neither, the app is packaged without them and says so itself: the
+ * Lab, Verification and the renderers report that they are not installed.
+ */
+const runtime = join(__dirname, '../../packages/sandbox/runtime');
+const tools = join(__dirname, '../../packages/artifacts/tools');
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
   appId: 'dev.sheep.app',
   // The Electron this checkout has installed and tested against, not a range.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   electronVersion: require('electron/package.json').version,
   productName: 'Sheep',
   copyright: 'Copyright © 2026 Aditya Belhekar',
@@ -38,12 +49,16 @@ module.exports = {
 
   extraResources: [
     { from: 'resources', to: '.' },
-    { from: '../../packages/sandbox/runtime', to: 'python' },
-    {
-      from: '../../packages/artifacts/tools',
-      to: 'tools',
-      filter: ['graphviz/**', 'tectonic/**', 'tex-cache/**', 'styles/**', 'sheep-tools.json'],
-    },
+    ...(existsSync(runtime) ? [{ from: runtime, to: 'python' }] : []),
+    ...(existsSync(tools)
+      ? [
+          {
+            from: tools,
+            to: 'tools',
+            filter: ['graphviz/**', 'tectonic/**', 'tex-cache/**', 'styles/**', 'sheep-tools.json'],
+          },
+        ]
+      : []),
   ],
   extraMetadata: { sheep: { signed } },
 
@@ -68,6 +83,20 @@ module.exports = {
     allowToChangeInstallationDirectory: true,
     artifactName: 'Sheep-Setup-${version}.${ext}',
     shortcutName: 'Sheep',
+  },
+
+  // UNTESTED. These two targets have never been built or run: they are here so
+  // that CI produces a package on each platform to start from. Neither carries
+  // a sandbox, so neither can run code, check a derivation or draw a figure yet.
+  mac: {
+    target: [{ target: 'dmg', arch: ['arm64', 'x64'] }],
+    category: 'public.app-category.education',
+    icon: 'build/icon.png',
+  },
+  linux: {
+    target: ['AppImage'],
+    category: 'Science',
+    icon: 'build/icon.png',
   },
 
   // Releases live on GitHub. Nothing is uploaded by a build: `--publish never`

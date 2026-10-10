@@ -1,0 +1,95 @@
+# Builds Sheep for every platform, on a version tag or by hand.
+#
+# Nothing here publishes. Each job leaves its package as a workflow artifact;
+# attaching one to a release is a person's decision.
+#
+# Windows is the platform Sheep is developed and tested on: that job runs the
+# whole suite and then the launch checks against the packaged app.
+#
+# The macOS and Linux jobs are UNTESTED. This file has never been run, and the
+# packages those jobs produce have never been opened by anyone. They exist so
+# that the first run on those platforms starts from a build rather than from
+# nothing. On both, the code sandbox is not available yet (it is built on
+# Windows Job Objects, and there is no pinned Python or Graphviz for them), so
+# the Lab, Verification and most of Artifacts will say they are unavailable.
+name: build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Pinned by sha256 in the two lock files; nothing else is downloaded.
+      - run: npm run fetch-runtime
+      - run: npm run fetch-tools
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      # The unpacked app first, and the launch checks against it: this is what
+      # proves an installer's contents before one is built.
+      - run: npm run dist -- --dir
+      - run: npm run smoke:packaged
+      - run: npm run dist
+        env:
+          # Signed when the repository has a certificate; unsigned otherwise,
+          # and an unsigned build never updates itself.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sheep-windows
+          path: |
+            apps/desktop/dist/*.exe
+            apps/desktop/dist/*.blockmap
+            apps/desktop/dist/latest.yml
+          if-no-files-found: error
+
+  # UNTESTED — see the note at the top of this file.
+  unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: sheep-macos
+          - os: ubuntu-latest
+            name: sheep-linux
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # keytar builds against the system keyring's headers on Linux.
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      # Only the suites that need neither the Python runtime nor the rendering
+      # tools: neither is pinned for these platforms yet.
+      - run: npx vitest run packages/core packages/ipc packages/gateway packages/orchestrator packages/retrieval
+      - run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.AppImage
+          if-no-files-found: error
