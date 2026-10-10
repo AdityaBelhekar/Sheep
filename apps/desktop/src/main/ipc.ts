@@ -43,6 +43,7 @@ import { cancelChat, sendChat } from './chat';
 import { cancelLabRun, labStatus, readExecutionBlob, readExecutions, startLabRun } from './lab';
 import { approveGate, cancelSession, protocolView, runSession } from './orchestrator';
 import { getVault } from './credentials';
+import { compilePaper, paperTemplates } from './paper';
 import { checkDerivation, getDerivationDetail, readDerivations } from './verification';
 import { logError } from './log';
 import { getEventLog, getStore } from './store';
@@ -315,6 +316,8 @@ export function createIpcRegistry(): IpcRegistry {
       linkArtifact(request.sessionId, request.artifactId, request.claimId);
       return readArtifacts(request.sessionId);
     })
+    .register('sheep:paper-templates', () => paperTemplates())
+    .register('sheep:paper-compile', (request) => compilePaper(request))
     .register('sheep:chat-cancel', (request) => ({ cancelled: cancelChat(request.runId) }))
     .register('sheep:connections-list', () => readConnections())
     .register('sheep:connection-create', async (request) => {

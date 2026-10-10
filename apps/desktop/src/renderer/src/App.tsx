@@ -17,6 +17,7 @@ import { ArtifactsPane } from './panes/ArtifactsPane';
 import { ConnectionsPane } from './panes/ConnectionsPane';
 import { ConversationPane } from './panes/ConversationPane';
 import { LabPane } from './panes/LabPane';
+import { PaperPane } from './panes/PaperPane';
 import { LedgerPane } from './panes/LedgerPane';
 import { SessionsPane } from './panes/SessionsPane';
 import { StubPane } from './panes/StubPane';
@@ -130,6 +131,7 @@ export function App(): ReactElement {
             <VerificationPane client={client} onStoreChanged={refreshLog} />
           )}
           {paneId === 'artifacts' && <ArtifactsPane client={client} onStoreChanged={refreshLog} />}
+          {paneId === 'paper' && <PaperPane client={client} />}
           {paneId === 'connections' && <ConnectionsPane client={client} />}
           {paneId !== 'sessions' &&
             paneId !== 'conversation' &&
@@ -137,6 +139,7 @@ export function App(): ReactElement {
             paneId !== 'lab' &&
             paneId !== 'verification' &&
             paneId !== 'artifacts' &&
+            paneId !== 'paper' &&
             paneId !== 'connections' && <StubPane paneId={paneId} />}
         </main>
       </div>

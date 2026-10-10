@@ -106,6 +106,14 @@ const artifactsReply = z.object({
   backing: z.array(z.object({ artifactId: idSchema, claimIds: z.array(idSchema) })),
 });
 
+/** Something the LaTeX engine said about a line of the paper. */
+const latexProblemSchema = z.object({
+  severity: z.enum(['error', 'warning']),
+  file: z.string().nullable(),
+  line: z.number().int().nullable(),
+  message: z.string(),
+});
+
 /** One phase of the protocol, as the renderer draws it. */
 const phaseViewSchema = z.object({
   phaseId: idSchema,
@@ -612,6 +620,45 @@ export const IPC_CONTRACTS = {
   'sheep:artifact-link': {
     request: z.object({ sessionId: idSchema, artifactId: idSchema, claimId: idSchema }),
     response: artifactsReply,
+  },
+  /**
+   * The Paper.
+   *
+   * The templates a session can be compiled in, and whether the engine that
+   * compiles them is installed. `available: false` is an answer, as it is for
+   * the Lab.
+   */
+  'sheep:paper-templates': {
+    request: z.object({}),
+    response: z.object({
+      available: z.boolean(),
+      detail: z.string(),
+      templates: z.array(
+        z.object({ id: z.string().min(1), label: z.string(), description: z.string() }),
+      ),
+    }),
+  },
+  /**
+   * Compile a session into a paper.
+   *
+   * Built from the ledger and the log as they stand, every time; nothing about
+   * a paper is kept between compilations. A paper that cannot be compiled is an
+   * answer rather than an error: `ok: false` carries what is wrong and where.
+   */
+  'sheep:paper-compile': {
+    request: z.object({ sessionId: idSchema, template: z.string().min(1).max(40) }),
+    response: z.discriminatedUnion('ok', [
+      z.object({
+        ok: z.literal(true),
+        pdf: z.string(),
+        bytes: z.number().int().nonnegative(),
+        /** How many ledger claims the paper names, and how many figures it includes. */
+        claims: z.number().int().nonnegative(),
+        figures: z.number().int().nonnegative(),
+        warnings: z.array(latexProblemSchema),
+      }),
+      z.object({ ok: z.literal(false), problems: z.array(latexProblemSchema) }),
+    ]),
   },
   'sheep:chat-send': {
     request: z.object({

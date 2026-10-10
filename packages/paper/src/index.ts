@@ -25,3 +25,13 @@ export {
   type Section,
   type Sentence,
 } from './ir';
+export { emitBody, escapeLatex } from './latex';
+export { paperFiles, typesetPaper, type TypesetPaper } from './paper';
+export {
+  emitLatex,
+  templateById,
+  TEMPLATE_IDS,
+  TEMPLATES,
+  type PaperTemplate,
+  type TemplateId,
+} from './templates';

@@ -4,14 +4,24 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
 const SCALE = 2;
 
 /**
- * The first page of a PDF, drawn on a canvas.
+ * A PDF, drawn on canvases: its first page, or every page.
  *
- * A figure typeset by TeX exists only as a PDF, and this is how it is seen
- * without leaving the app. pdf.js draws it; the embedded viewer would need
- * plugins and frames the content-security policy is right to refuse.
+ * A figure typeset by TeX exists only as a PDF, and so does a paper; this is
+ * how either is seen without leaving the app. pdf.js draws it; the embedded
+ * viewer would need plugins and frames the content-security policy is right to
+ * refuse.
  */
-export function PdfPreview({ data, label }: { data: Uint8Array; label: string }): ReactElement {
-  const canvas = useRef<HTMLCanvasElement>(null);
+export function PdfPreview({
+  data,
+  label,
+  allPages = false,
+}: {
+  data: Uint8Array;
+  label: string;
+  /** Every page, one under the other. A figure has one; a paper does not. */
+  allPages?: boolean;
+}): ReactElement {
+  const host = useRef<HTMLDivElement>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,16 +32,25 @@ export function PdfPreview({ data, label }: { data: Uint8Array; label: string })
         const { getDocument } = await import('./pdf');
         // A copy: pdf.js hands the buffer it is given to its worker.
         const document = await getDocument({ data: data.slice() }).promise;
-        const page = await document.getPage(1);
-        const viewport = page.getViewport({ scale: SCALE });
-        const target = canvas.current;
+        const target = host.current;
         if (signal.cancelled || !target) return;
+        target.replaceChildren();
+        delete target.dataset['sheepPdf'];
 
-        target.width = Math.ceil(viewport.width);
-        target.height = Math.ceil(viewport.height);
-        target.style.width = `${String(Math.ceil(viewport.width / SCALE))}px`;
-        await page.render({ canvas: target, viewport }).promise;
-        if (!signal.cancelled) target.dataset['sheepPdf'] = 'drawn';
+        const pages = allPages ? document.numPages : 1;
+        for (let number = 1; number <= pages; number += 1) {
+          const page = await document.getPage(number);
+          const viewport = page.getViewport({ scale: SCALE });
+          const canvas = window.document.createElement('canvas');
+          canvas.className = 'lab__plot';
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+          canvas.style.width = `${String(Math.ceil(viewport.width / SCALE))}px`;
+          await page.render({ canvas, viewport }).promise;
+          if (signal.cancelled) return;
+          target.append(canvas);
+        }
+        target.dataset['sheepPdf'] = String(pages);
       } catch (error) {
         if (!signal.cancelled) setProblem(error instanceof Error ? error.message : String(error));
       }
@@ -39,10 +58,10 @@ export function PdfPreview({ data, label }: { data: Uint8Array; label: string })
     return () => {
       signal.cancelled = true;
     };
-  }, [data]);
+  }, [data, allPages]);
 
   if (problem !== null) {
     return <p className="notice notice--error">This PDF could not be drawn: {problem}</p>;
   }
-  return <canvas ref={canvas} className="lab__plot" role="img" aria-label={label} />;
+  return <div ref={host} className="pdf" role="img" aria-label={label} />;
 }

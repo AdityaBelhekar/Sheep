@@ -275,7 +275,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
 
 - [x] **60. Tectonic driver** — bundle the engine, compile pipeline, error surfacing. → `chore(paper): bundle tectonic latex engine`
 - [x] **61. Ledger → IR** — sections, claims, figures, references as an intermediate representation. → `feat(paper): ledger to document ir`
-- [ ] **62. IR → LaTeX + house template** — the native "Sheep Research Record" format. → `feat(paper): latex emitter and sheep research record template`
+- [x] **62. IR → LaTeX + house template** — the native "Sheep Research Record" format. → `feat(paper): latex emitter and sheep research record template`
 - [ ] **63. ML conference templates** — NeurIPS, ICML, ICLR. → `feat(paper): neurips, icml and iclr templates`
 - [ ] **64. IEEE / ACM / arXiv templates** → `feat(paper): ieee, acm and arxiv templates`
 - [ ] **65. Provenance appendix + repro bundle + compile-time enforcement** — auto-generated appendix (roster, versions, params, cost, seeds, env lock, artifact hashes, event-log root hash); zip bundle with replay script; **a claim-bearing sentence with no ledger id fails the build.** **(P5)**

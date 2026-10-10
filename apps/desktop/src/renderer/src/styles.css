@@ -1547,3 +1547,19 @@ select.field__input {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+.paper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.pdf {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+  max-width: 100%;
+  overflow-x: auto;
+}

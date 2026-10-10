@@ -13,7 +13,14 @@ import {
   type TurnRequest,
 } from '@sheep/orchestrator';
 import { framingReply, hypothesisReply, scoringReply } from '@sheep/orchestrator/test-support';
-import { buildDocument, type Block, type PaperDocument } from '@sheep/paper';
+import {
+  buildDocument,
+  emitLatex,
+  templateById,
+  typesetPaper,
+  type Block,
+  type PaperDocument,
+} from '@sheep/paper';
 import { devRuntimeDir, locateRuntime, Sandbox } from '@sheep/sandbox';
 import {
   getSession,
@@ -680,5 +687,26 @@ describe('a full seven-phase session against mock models', () => {
       ]);
       for (const figure of figures) expect(store.blobs.has(figure.hash)).toBe(true);
     });
+
+    it('typesets as a Sheep Research Record, with every claim id in the source', async () => {
+      const source = readPaperSource(store, sessionId);
+      const template = templateById('sheep');
+      const paper = await typesetPaper(document, template, tools, source.read);
+
+      expect(Buffer.from(paper.pdf.subarray(0, 5)).toString('latin1')).toBe('%PDF-');
+      expect(paper.files.map((file) => file.path)).toEqual([
+        'paper.tex',
+        'figures/figure-1.pdf',
+        'figures/figure-2.pdf',
+      ]);
+      // What a model wrote reached the engine as text, and nothing went missing in it.
+      expect(paper.warnings.map((warning) => warning.message).join('\n')).not.toMatch(
+        /undefined|Missing character/i,
+      );
+
+      const tex = emitLatex(document, template);
+      for (const { claimId } of document.labels) expect(tex).toContain(claimId);
+      expect(tex).toContain('\\section{Open Questions}');
+    }, 300_000);
   });
 });

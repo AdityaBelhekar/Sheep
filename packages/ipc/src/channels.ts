@@ -44,6 +44,8 @@ export const IPC_CHANNELS = [
   'sheep:artifact-blob',
   'sheep:artifact-rerender',
   'sheep:artifact-link',
+  'sheep:paper-templates',
+  'sheep:paper-compile',
   'sheep:chat-send',
   'sheep:chat-cancel',
   'sheep:connections-list',

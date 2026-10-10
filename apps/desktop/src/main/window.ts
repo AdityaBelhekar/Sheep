@@ -939,7 +939,7 @@ const ARTIFACTS_EXPRESSION = `(async () => {
     });
 
     click(pane.querySelector('[data-sheep-artifact="' + tikzId + '"]'));
-    const canvas = await until(() => pane.querySelector('canvas[data-sheep-pdf="drawn"]'));
+    const canvas = await until(() => pane.querySelector('[data-sheep-pdf] canvas'));
     const linked = pane.querySelector('[data-sheep-artifact-claims]');
     const sourceShown = await until(() => {
       const shown = pane.querySelector('[data-sheep-artifact-source-shown]');
@@ -960,6 +960,77 @@ const ARTIFACTS_EXPRESSION = `(async () => {
       claimShown: linked ? linked.textContent.includes(claim.claimId.slice(0, 8)) : false,
       sourceShown: Boolean(sourceShown),
       identical: verdict ? verdict.getAttribute('data-sheep-artifact-identical') : null,
+    };
+  } catch (error) {
+    return { error: String(error && error.message ? error.message : error) };
+  }
+})()`;
+
+/**
+ * Compiles a paper from the pane, as a person would: a session with a claim and
+ * a figure the claim cites, the default template, the Compile button, and then
+ * the pages drawn on screen.
+ */
+const PAPER_EXPRESSION = `(async () => {
+  const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const until = async (probe, tries = 600) => {
+    for (let i = 0; i < tries; i += 1) {
+      const found = probe();
+      if (found) return found;
+      await settle(50);
+    }
+    return null;
+  };
+  const click = (element) => element && element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+  try {
+    const created = await window.sheep.invoke('sheep:session-create', {
+      title: 'Paper smoke: 100% of it & then some',
+      question: 'Does a compiled paper say only what its ledger holds?',
+    });
+    const sessionId = created.sessionId;
+    const graph = await window.sheep.invoke('sheep:artifact-create', {
+      sessionId,
+      kind: 'graphviz',
+      title: 'Ledger to paper',
+      source: 'digraph { rankdir=LR; ledger -> document -> paper }',
+    });
+    await window.sheep.invoke('sheep:claim-record', {
+      sessionId,
+      claimType: 'CONJECTURE',
+      statement: 'A paper built from the ledger cannot say more than the ledger_does {ever}.',
+      support: [{ kind: 'ARTIFACT', ref: graph.created[0] }],
+    });
+    const listed = await window.sheep.invoke('sheep:paper-templates', {});
+
+    const previous = (await window.sheep.invoke('sheep:settings-read', {})).settings['ui.lastSessionId'];
+    window.__sheepLedgerPrevious = previous;
+    await window.sheep.invoke('sheep:settings-write', { key: 'ui.lastSessionId', value: sessionId });
+    window.location.hash = '#/paper';
+
+    const pane = await until(() => {
+      const found = document.querySelector('[data-pane="paper"]');
+      return found && found.querySelector('[data-sheep-paper-compile]:not([disabled])') ? found : null;
+    });
+    if (!pane) return { error: 'the pane never offered to compile' };
+    const offered = [...pane.querySelectorAll('[data-sheep-paper-template]')].map((tab) =>
+      tab.getAttribute('data-sheep-paper-template'),
+    );
+
+    click(pane.querySelector('[data-sheep-paper-compile]'));
+    await until(() => pane.getAttribute('data-sheep-paper'));
+    const drawn = await until(() => pane.querySelector('[data-sheep-pdf]'), 200);
+    const summary = pane.querySelector('[data-sheep-paper-summary]');
+    const canvas = pane.querySelector('[data-sheep-pdf] canvas');
+
+    return {
+      engine: listed.available ? listed.detail : 'unavailable: ' + listed.detail,
+      offered: offered.join(','),
+      state: pane.getAttribute('data-sheep-paper'),
+      problems: [...pane.querySelectorAll('[data-sheep-paper-problem]')].map((entry) => entry.textContent).join(' | '),
+      pages: drawn ? Number(drawn.getAttribute('data-sheep-pdf')) : 0,
+      pageWidth: canvas ? canvas.width : 0,
+      summary: summary ? summary.textContent : '',
     };
   } catch (error) {
     return { error: String(error && error.message ? error.message : error) };
@@ -1038,6 +1109,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
   await checkVerification(window);
   await checkArtifactRendering();
   await checkArtifactsPane(window);
+  await checkPaperPane(window);
   await checkConnections(window);
   await checkLocalModel(window);
   await checkTheme(window);
@@ -1401,6 +1473,45 @@ async function checkArtifactsPane(window: BrowserWindow): Promise<void> {
     )}px · tikz pdf drawn ${String(result.pdfWidth)}px · source shown=${String(
       result.sourceShown,
     )} · claims on figure=${result.claims ?? 'none'} · re-render identical=${result.identical ?? 'none'}`,
+  );
+}
+
+async function checkPaperPane(window: BrowserWindow): Promise<void> {
+  const result = (await evaluate(window, PAPER_EXPRESSION)) as
+    | {
+        engine: string;
+        offered: string;
+        state: string | null;
+        problems: string;
+        pages: number;
+        pageWidth: number;
+        summary: string;
+      }
+    | { error: string }
+    | undefined;
+  await delay(250);
+  await captureScreenshot(window, 'paper');
+  await evaluate(window, LEDGER_RESTORE_EXPRESSION);
+
+  if (!result || 'error' in result) {
+    recordSmokeCheck('renderer-paper', false, result?.error ?? 'no result');
+    return;
+  }
+
+  const ok =
+    result.offered.split(',').includes('sheep') &&
+    result.state === 'compiled' &&
+    result.pages >= 1 &&
+    result.pageWidth > 0 &&
+    result.summary.includes('1 claim') &&
+    result.summary.includes('1 figure');
+
+  recordSmokeCheck(
+    'renderer-paper',
+    ok,
+    `${result.engine} · templates ${result.offered} · ${result.state ?? 'no result'}${
+      result.problems === '' ? '' : ` (${result.problems})`
+    } · ${String(result.pages)} page(s) drawn at ${String(result.pageWidth)}px · ${result.summary}`,
   );
 }
 

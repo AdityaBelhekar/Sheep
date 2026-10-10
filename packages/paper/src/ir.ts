@@ -587,7 +587,9 @@ export function buildDocument(source: PaperSource): PaperDocument {
   const abstract: Sentence[] = [
     frame(`This is the record of one research session on the question: ${source.question}`),
     frame(
-      `${plural(source.roster.length, 'model')} from ${plural(vendors.size, 'vendor')} took part, each critiqued only by models of a different vendor.`,
+      source.roster.length === 0
+        ? 'No model was attached to the session.'
+        : `${plural(source.roster.length, 'model')} from ${plural(vendors.size, 'vendor')} took part, each critiqued only by models of a different vendor.`,
     ),
     frame(
       findings.length === 0

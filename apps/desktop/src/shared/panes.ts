@@ -76,8 +76,8 @@ export const RESEARCH_PANES = [
     label: 'Paper',
     summary: 'The compiled research record, with its provenance appendix.',
     detail:
-      'A claim-bearing sentence with no ledger id fails the build. The emitted bundle reproduces every figure from scratch, or it is not a reproduction.',
-    arriving: 'Phases 60 to 65',
+      'Compiled from the ledger each time, in the template chosen: every finding with the status the evidence gave it, every unresolved dispute as an open question, every figure by content address. A claim-bearing sentence with no ledger id fails the build.',
+    arriving: 'Provenance appendix and reproduction bundle arrive in Phase 65',
   },
 ] as const satisfies readonly PaneDefinition[];
 
