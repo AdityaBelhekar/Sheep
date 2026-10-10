@@ -16,4 +16,11 @@ export {
   type SearchOptions,
   type SearchResult,
 } from './clients';
+export {
+  admitSource,
+  boundaryFor,
+  quarantineBlock,
+  scanForInjection,
+  visibleText,
+} from './quarantine';
 export { plainText } from './text';

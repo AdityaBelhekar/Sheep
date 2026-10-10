@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@sheep/core": "*",
+    "@sheep/retrieval": "*",
     "zod": "^4.4.3"
   }
 }

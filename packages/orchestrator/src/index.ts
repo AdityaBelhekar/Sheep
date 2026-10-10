@@ -126,6 +126,8 @@ export { RUN_TIMEOUT_MS, unearnedNumbers } from './execution';
 
 export { digestOf } from './synthesis';
 
+export { sourcesFor, withLiterature } from './literature';
+
 export { TEST_TIMEOUT_MS, awaitsRouting, outcomeOf, routeTest } from './routing';
 
 export { SMOKE_TIMEOUT_MS, describeRun, finalMethod, parseMethod, type Method } from './method';

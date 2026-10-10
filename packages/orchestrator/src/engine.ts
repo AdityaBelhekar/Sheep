@@ -16,6 +16,7 @@ import { stepCritique } from './critique';
 import { stepExecution } from './execution';
 import { stepMethod } from './method';
 import type { OrchestratorPorts, SessionSnapshot, TurnRequest } from './ports';
+import { withLiterature } from './literature';
 import {
   charterPrompt,
   framingStatementPrompt,
@@ -746,7 +747,8 @@ export class Orchestrator {
       phaseId: phase.phaseId,
       roundId: round.roundId,
       system,
-      prompt,
+      // Retrieved literature reaches a model here and nowhere else, fenced.
+      prompt: withLiterature(prompt, snapshot, phase),
     };
 
     // The dedupe key is the request, not the attempt: a retry after a crash
