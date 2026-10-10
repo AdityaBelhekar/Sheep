@@ -2,6 +2,7 @@ import { safeParseDomainEvent } from '@sheep/core';
 import type { EventLog } from '../events/log';
 import type { SqliteDatabase } from '../sqlite/types';
 import { ARTIFACTS_PROJECTION } from './artifacts';
+import { CORPUS_PROJECTION } from './corpus';
 import { DERIVATIONS_PROJECTION } from './derivations';
 import { EXECUTIONS_PROJECTION } from './executions';
 import { RETRIEVALS_PROJECTION } from './retrievals';
@@ -15,6 +16,7 @@ export const PROJECTIONS: readonly Projection[] = [
   DERIVATIONS_PROJECTION,
   ARTIFACTS_PROJECTION,
   RETRIEVALS_PROJECTION,
+  CORPUS_PROJECTION,
 ];
 
 export interface ProjectionRunnerOptions {

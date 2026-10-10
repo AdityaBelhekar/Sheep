@@ -5,6 +5,7 @@ import { EVENT_FIXTURES, SESSION_ID } from '@sheep/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { EventLog } from '../events/log';
 import { ARTIFACTS_PROJECTION } from './artifacts';
+import { CORPUS_PROJECTION } from './corpus';
 import { DERIVATIONS_PROJECTION } from './derivations';
 import { EXECUTIONS_PROJECTION } from './executions';
 import { RETRIEVALS_PROJECTION } from './retrievals';
@@ -139,6 +140,13 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
           name: 'retrievals',
           lastSeq: 0,
           ddlVersion: RETRIEVALS_PROJECTION.ddlVersion,
+          behind: 0,
+          ready: true,
+        },
+        {
+          name: 'corpus',
+          lastSeq: 0,
+          ddlVersion: CORPUS_PROJECTION.ddlVersion,
           behind: 0,
           ready: true,
         },

@@ -112,6 +112,17 @@ export {
   listSources,
 } from './projections/retrievals';
 export {
+  CORPUS_DDL,
+  CORPUS_KINDS,
+  CORPUS_PROJECTION,
+  clusterCorpus,
+  embed,
+  searchCorpus,
+  similarity,
+  type CorpusHit,
+  type CorpusKind,
+} from './projections/corpus';
+export {
   DERIVATIONS_DDL,
   DERIVATIONS_PROJECTION,
   getDerivation,
