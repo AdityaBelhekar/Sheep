@@ -262,7 +262,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
 
 ## Stage 9 — Artifacts `Phases 55–59`
 
-- [ ] **55. Formula pipeline** — LaTeX canonical, KaTeX preview in UI, real LaTeX for print. → `feat(artifacts): latex formula pipeline`
+- [x] **55. Formula pipeline** — LaTeX canonical, KaTeX preview in UI, real LaTeX for print. → `feat(artifacts): latex formula pipeline`
 - [ ] **56. Mermaid + Graphviz** — bundled `dot`, deterministic SVG/PDF output, CAS storage. → `feat(artifacts): mermaid and graphviz rendering`
 - [ ] **57. TikZ + matplotlib** — TikZ via Tectonic, matplotlib figures from the sandbox. → `feat(artifacts): tikz and matplotlib figure generation`
 - [ ] **58. Figure ↔ claim linking** — every figure keeps its generating source and the claims it supports; regeneration determinism test.

@@ -334,7 +334,6 @@ function Verdict({
               <th scope="row">{given.id}</th>
               <td>
                 <Formula
-                  mathml={given.mathml}
                   latex={given.latex}
                   source={givenOf.get(given.id)?.statement ?? ''}
                   showLatex={showLatex}
@@ -355,7 +354,6 @@ function Verdict({
                 <th scope="row">{step.id}</th>
                 <td>
                   <Formula
-                    mathml={step.mathml}
                     latex={step.latex}
                     source={written?.statement ?? ''}
                     showLatex={showLatex}

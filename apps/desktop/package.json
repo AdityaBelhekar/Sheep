@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
+    "@sheep/artifacts": "*",
     "@sheep/core": "*",
     "@sheep/gateway": "*",
     "@sheep/ipc": "*",
@@ -20,6 +21,7 @@
     "@sheep/sandbox": "*",
     "@sheep/store": "*",
     "@sheep/verify": "*",
+    "katex": "^0.19.0",
     "monaco-editor": "^0.57.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
