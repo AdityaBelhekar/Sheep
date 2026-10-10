@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import {
+  retrievalProviderSchema,
+  sourceRecordSchema,
   artifactKindSchema,
   artifactRecordSchema,
   artifactSourceSchema,
@@ -104,6 +106,17 @@ const derivationDetailReply = z.object({
 const artifactsReply = z.object({
   artifacts: z.array(artifactRecordSchema),
   backing: z.array(z.object({ artifactId: idSchema, claimIds: z.array(idSchema) })),
+});
+
+/**
+ * A session's literature: every source it retrieved, which claims cite each,
+ * and which sources are the same work returned more than once. Returned by a
+ * search as well as the read.
+ */
+const literatureReply = z.object({
+  sources: z.array(sourceRecordSchema),
+  citations: z.array(z.object({ sourceId: idSchema, claimIds: z.array(idSchema) })),
+  duplicates: z.array(z.array(idSchema)),
 });
 
 /** Something the LaTeX engine said about a line of the paper. */
@@ -653,6 +666,46 @@ export const IPC_CONTRACTS = {
    * compiles them is installed. `available: false` is an answer, as it is for
    * the Lab.
    */
+  /**
+   * Literature.
+   *
+   * Titles, authors and abstracts in these replies are text from outside,
+   * written by nobody the session can vouch for. They are data: the renderer
+   * shows them as characters and never as markup.
+   */
+  'sheep:literature-list': {
+    request: z.object({ sessionId: idSchema }),
+    response: literatureReply,
+  },
+  /**
+   * Search one provider, and record what came back.
+   *
+   * The only request in this app that reaches the open internet on a person's
+   * say-so, and all it carries is the query. A provider that fails or
+   * rate-limits is an error saying so; nothing is recorded for it.
+   */
+  'sheep:literature-search': {
+    request: z.object({
+      sessionId: idSchema,
+      provider: retrievalProviderSchema,
+      query: z.string().min(1).max(500),
+    }),
+    response: literatureReply.extend({ retrievalId: idSchema, found: z.array(idSchema) }),
+  },
+  /** Search a session's own turns, claims and sources by closeness to a query. */
+  'sheep:corpus-search': {
+    request: z.object({ sessionId: idSchema, query: z.string().min(1).max(500) }),
+    response: z.object({
+      hits: z.array(
+        z.object({
+          kind: z.enum(['message', 'claim', 'source']),
+          refId: idSchema,
+          preview: z.string(),
+          score: z.number(),
+        }),
+      ),
+    }),
+  },
   'sheep:paper-templates': {
     request: z.object({}),
     response: z.object({

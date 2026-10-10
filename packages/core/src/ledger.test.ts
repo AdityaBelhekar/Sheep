@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { domainEvent, type DomainEvent, type DomainEventType, type EventPayload } from './events';
 import {
   ARTIFACT_ID,
+  SOURCE_ID,
   EVENT_FIXTURES,
   CLAIM_ID,
   DERIVATION_ID,
@@ -62,6 +63,10 @@ const derived = (
     ...CHECKED_DERIVATION,
     ...verdict,
   });
+
+/** A literature search that returned the one source in the fixtures. */
+const retrieved = (): DomainEvent => ev('retrieval.recorded', EVENT_FIXTURES['retrieval.recorded']);
+const CITATION = { kind: 'CITATION', ref: SOURCE_ID } as const;
 
 type Support = EventPayload<'claim.recorded'>['support'];
 
@@ -310,11 +315,8 @@ describe('claim type enforcement (P2)', () => {
     rejects(ledgerOf(), claimOf('EMPIRICAL'), 'EMPIRICAL_WITHOUT_EXECUTION');
     // Prose and citations are not an execution, however many there are.
     rejects(
-      ledgerOf(),
-      claimOf('EMPIRICAL', [
-        { kind: 'ARGUMENT', ref: 'obviously true' },
-        { kind: 'CITATION', ref: 'arXiv:2401.00001' },
-      ]),
+      ledgerOf(retrieved()),
+      claimOf('EMPIRICAL', [{ kind: 'ARGUMENT', ref: 'obviously true' }, CITATION]),
       'EMPIRICAL_WITHOUT_EXECUTION',
     );
   });
@@ -344,10 +346,67 @@ describe('claim type enforcement (P2)', () => {
 
   it('refuses a CITED claim with no citation', () => {
     rejects(ledgerOf(), claimOf('CITED'), 'CITED_WITHOUT_CITATION');
+    // A figure or an argument is not a citation, even beside a retrieved source.
+    rejects(
+      ledgerOf(retrieved()),
+      claimOf('CITED', [{ kind: 'ARGUMENT', ref: 'everyone knows this' }]),
+      'CITED_WITHOUT_CITATION',
+    );
+  });
+
+  it('refuses a citation of anything that was never retrieved', () => {
+    // A reference a model wrote down is not a source, however well it is formatted.
+    for (const invented of ['arXiv:2401.00001', 'doi:10.1000/x', 'Vaswani et al. (2017)']) {
+      rejects(
+        ledgerOf(retrieved()),
+        claimOf('CITED', [{ kind: 'CITATION', ref: invented }]),
+        'UNKNOWN_SOURCE',
+      );
+    }
+    // Nor is a source from a search this session never made.
+    rejects(ledgerOf(), claimOf('CITED', [CITATION]), 'UNKNOWN_SOURCE');
+    // Attached later, it is held to the same rule.
+    rejects(
+      ledgerOf(conjecture()),
+      ev('claim.evidence-attached', {
+        sessionId: SESSION_ID,
+        claimId: CLAIM_ID,
+        evidence: { kind: 'CITATION', ref: 'arXiv:2401.00001' },
+      }),
+      'UNKNOWN_SOURCE',
+    );
+
+    const cited = ledgerOf(retrieved(), claimOf('CITED', [CITATION]));
+    expect(cited.claim(CLAIM_ID).support).toEqual([CITATION]);
+    // And a source is retrieved once: the same id cannot arrive in a second search.
+    rejects(ledgerOf(retrieved()), retrieved(), 'DUPLICATE_SOURCE');
+  });
+
+  it('lets a cited claim lend support without ever lending establishment', () => {
+    const CITED_ID = DISPUTE_2;
+    const ledger = ledgerOf(
+      retrieved(),
+      executed(),
+      claimOf('CITED', [CITATION], CITED_ID),
+      // An empirical claim may rest on the literature as well as on its run.
+      claimOf('EMPIRICAL', [
+        { kind: 'EXECUTION', ref: EXECUTION_ID },
+        { kind: 'CLAIM', ref: CITED_ID },
+      ]),
+    );
+    ledger.apply(status('supported'), LATER);
+    expect(ledger.claim(CLAIM_ID).status).toBe('supported');
+    // The claim it leaned on is no more established than before.
+    expect(ledger.claim(CITED_ID).status).toBe('asserted');
+    rejects(
+      ledger,
+      ev('claim.status-changed', { sessionId: SESSION_ID, claimId: CITED_ID, status: 'supported' }),
+      'CANNOT_ESTABLISH_ALONE',
+    );
   });
 
   it('lets CITED and CONJECTURE claims support, but never be established alone', () => {
-    const cited = ledgerOf(claimOf('CITED', [{ kind: 'CITATION', ref: 'doi:10.1000/x' }]));
+    const cited = ledgerOf(retrieved(), claimOf('CITED', [CITATION]));
     rejects(cited, status('supported'), 'CANNOT_ESTABLISH_ALONE');
     rejects(ledgerOf(conjecture()), status('supported'), 'CANNOT_ESTABLISH_ALONE');
 
@@ -358,9 +417,7 @@ describe('claim type enforcement (P2)', () => {
 
   it('refuses to establish a conclusion on citations alone, however they are chained', () => {
     const CITED_ID = DISPUTE_2;
-    const ledger = ledgerOf(
-      claimOf('CITED', [{ kind: 'CITATION', ref: 'doi:10.1000/x' }], CITED_ID),
-    );
+    const ledger = ledgerOf(retrieved(), claimOf('CITED', [CITATION], CITED_ID));
     rejects(
       ledger,
       claimOf('EMPIRICAL', [{ kind: 'CLAIM', ref: CITED_ID }]),

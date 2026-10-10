@@ -44,7 +44,7 @@ export const RESEARCH_PANES = [
     label: 'Ledger',
     summary: 'Claims, evidence and disputes as a navigable graph.',
     detail:
-      'Every claim is typed — DERIVED, EMPIRICAL, CITED or CONJECTURE — and an empirical claim with no execution record behind it cannot be recorded at all. Select any node to trace everything it rests on.',
+      'Every claim is typed — DERIVED, EMPIRICAL, CITED or CONJECTURE — and an empirical claim with no execution record behind it cannot be recorded at all. Select any node to trace everything it rests on. Literature is searched and cited here too: a citation can only be of a source a search actually returned, and a cited claim supports others without ever being established on its own.',
     arriving: 'Claims from CRITIQUE and RESOLUTION arrive with Stage 8',
   },
   {

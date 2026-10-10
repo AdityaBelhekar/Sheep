@@ -14,6 +14,7 @@ import {
   rerenderArtifact,
 } from './artifacts';
 import { createConnection } from './connections';
+import { setLiteratureOrigin } from './literature';
 import { logInfo, logWarn, redactor } from './log';
 import { bundlePath, resourcePath } from './paths';
 import { isSmokeRun, recordSmokeCheck } from './smoke';
@@ -1052,6 +1053,84 @@ const PAPER_EXPRESSION = `(async () => {
   }
 })()`;
 
+/**
+ * Searches the literature, and holds what comes back to the stage's promises:
+ * retrieved text is shown as text, an instruction hidden in an abstract is
+ * flagged and labelled, the same work twice is noticed, and a citation is
+ * accepted only of a source the search returned.
+ */
+const LITERATURE_EXPRESSION = `(async () => {
+  const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const until = async (probe, seconds = 20) => {
+    const deadline = Date.now() + seconds * 1000;
+    while (Date.now() < deadline) {
+      const found = probe();
+      if (found) return found;
+      await settle(50);
+    }
+    return null;
+  };
+  const cite = async (ref) => {
+    try {
+      await window.sheep.invoke('sheep:claim-record', {
+        sessionId,
+        claimType: 'CITED',
+        statement: 'Attention alone suffices for sequence transduction.',
+        support: [{ kind: 'CITATION', ref }],
+      });
+      return 'accepted';
+    } catch (error) {
+      return String(error && error.message ? error.message : error);
+    }
+  };
+  let sessionId;
+
+  try {
+    const created = await window.sheep.invoke('sheep:session-create', {
+      title: 'Literature smoke ' + Date.now(),
+      question: 'Is retrieved text kept as data?',
+    });
+    sessionId = created.sessionId;
+    const searched = await window.sheep.invoke('sheep:literature-search', {
+      sessionId,
+      provider: 'crossref',
+      query: 'attention',
+    });
+    const hostile = searched.sources.find((source) => source.flags.length > 0);
+    const invented = await cite('arXiv:1706.03762');
+    const real = await cite(searched.found[0]);
+    const hits = await window.sheep.invoke('sheep:corpus-search', { sessionId, query: 'transformer attention mechanisms' });
+
+    const previous = (await window.sheep.invoke('sheep:settings-read', {})).settings['ui.lastSessionId'];
+    window.__sheepLedgerPrevious = previous;
+    await window.sheep.invoke('sheep:settings-write', { key: 'ui.lastSessionId', value: sessionId });
+    window.location.hash = '#/ledger';
+
+    const panel = await until(() => document.querySelector('[data-sheep-literature="3"]'));
+    if (!panel) return { error: 'the ledger pane never listed the sources' };
+    const row = hostile ? panel.querySelector('[data-sheep-source="' + hostile.sourceId + '"]') : null;
+    panel.scrollIntoView();
+
+    return {
+      found: searched.found.length,
+      flags: hostile ? hostile.flags.join('; ') : '',
+      hiddenKept: hostile ? /[\\u200b-\\u200f]/.test(hostile.abstract || '') : true,
+      warned: Boolean(row && row.querySelector('[data-sheep-source-flags]')),
+      // The markup in the title and the abstract arrived as characters, and ran as nothing.
+      titleShown: row ? row.querySelector('strong').textContent : '',
+      scriptElements: panel.querySelectorAll('script, b').length,
+      injected: window.__sheepInjected === true,
+      duplicates: panel.querySelectorAll('[data-sheep-source-duplicate]').length,
+      cited: panel.querySelectorAll('[data-sheep-source-cited="1"]').length,
+      invented,
+      real,
+      hitKinds: hits.hits.map((hit) => hit.kind).join(','),
+    };
+  } catch (error) {
+    return { error: String(error && error.message ? error.message : error) };
+  }
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -1125,6 +1204,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
   await checkArtifactRendering();
   await checkArtifactsPane(window);
   await checkPaperPane(window);
+  await checkLiterature(window);
   await checkConnections(window);
   await checkLocalModel(window);
   await checkTheme(window);
@@ -1534,6 +1614,73 @@ async function checkPaperPane(window: BrowserWindow): Promise<void> {
     } · ${String(result.pages)} page(s) drawn at ${String(result.pageWidth)}px · ${result.summary} · bundle ${
       result.exported === 'true' ? result.exportedText.replace(/ to .*$/, '') : 'not exported'
     }`,
+  );
+}
+
+async function checkLiterature(window: BrowserWindow): Promise<void> {
+  // A provider on loopback, speaking Crossref's format: no launch check reaches the internet.
+  const provider = await startSmokeProvider();
+  setLiteratureOrigin(provider.baseUrl);
+  let result:
+    | {
+        found: number;
+        flags: string;
+        hiddenKept: boolean;
+        warned: boolean;
+        titleShown: string;
+        scriptElements: number;
+        injected: boolean;
+        duplicates: number;
+        cited: number;
+        invented: string;
+        real: string;
+        hitKinds: string;
+      }
+    | { error: string }
+    | undefined;
+  try {
+    result = (await evaluate(window, LITERATURE_EXPRESSION)) as typeof result;
+    await delay(250);
+    await captureScreenshot(window, 'literature');
+    await evaluate(window, LEDGER_RESTORE_EXPRESSION);
+  } finally {
+    setLiteratureOrigin(undefined);
+    await provider.close();
+  }
+
+  if (!result || 'error' in result) {
+    recordSmokeCheck('renderer-literature', false, result?.error ?? 'no result');
+    return;
+  }
+
+  const ok =
+    result.found === 3 &&
+    provider.calls.includes('/works') &&
+    result.flags.includes('tells the reader to ignore its instructions') &&
+    result.flags.includes('contains hidden characters') &&
+    !result.hiddenKept &&
+    result.warned &&
+    result.titleShown === 'A perfectly ordinary paper' &&
+    result.scriptElements === 0 &&
+    !result.injected &&
+    result.duplicates === 2 &&
+    result.cited === 1 &&
+    result.invented.includes('LEDGER_UNKNOWN_SOURCE') &&
+    result.real === 'accepted' &&
+    result.hitKinds.split(',').includes('source');
+
+  recordSmokeCheck(
+    'renderer-literature',
+    ok,
+    `${String(result.found)} sources from a loopback provider · hostile abstract flagged (${
+      result.flags
+    }) and labelled=${String(result.warned)} · hidden characters removed=${String(
+      !result.hiddenKept,
+    )} · markup shown as text, ran=${String(result.injected)} · same work noticed on ${String(
+      result.duplicates,
+    )} rows · citation of a retrieved source=${result.real} · of an invented one → ${
+      result.invented.match(/LEDGER_[A-Z_]+/)?.[0] ?? result.invented
+    } · session search hit ${result.hitKinds}`,
   );
 }
 

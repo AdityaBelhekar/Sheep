@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { formatCitation } from '@sheep/core';
 import type {
   ArtifactRecord,
   Claim,
@@ -10,6 +11,7 @@ import type {
   Message,
   PhaseKind,
   RosterEntry,
+  SourceRecord,
 } from '@sheep/core';
 import {
   charterOf,
@@ -118,6 +120,8 @@ export interface PaperSource {
   readonly executions: readonly ExecutionRecord[];
   readonly derivations: readonly DerivationRecord[];
   readonly messages: readonly Message[];
+  /** Every source the session retrieved; what a citation resolves to. */
+  readonly sources: readonly SourceRecord[];
   /** The last entry of the event log when the record was read; null for an empty log. */
   readonly head: { readonly seq: number; readonly entryHash: string } | null;
   /** Reads a blob the session holds. */
@@ -263,10 +267,17 @@ export function buildDocument(source: PaperSource): PaperDocument {
     ]);
   }
 
+  const sourceById = (sourceId: string): SourceRecord | undefined =>
+    source.sources.find((entry) => entry.sourceId === sourceId);
   const references: string[] = [];
-  const cite = (ref: string): number => {
-    if (!references.includes(ref)) references.push(ref);
-    return references.indexOf(ref) + 1;
+  /** A citation's number in the reference list, which gains the source on first use. */
+  const cite = (sourceId: string): number => {
+    const source = sourceById(sourceId);
+    // The ledger admits only retrieved sources, so this is a source; the id
+    // alone is printed for a log this build cannot fully read.
+    const reference = source ? formatCitation(source) : sourceId;
+    if (!references.includes(reference)) references.push(reference);
+    return references.indexOf(reference) + 1;
   };
 
   /** A claim as the paper states it: the statement, its status, what it rests on, its figures. */

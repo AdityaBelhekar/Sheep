@@ -11,6 +11,7 @@ import {
   type ClaimGraph,
   type GraphNode,
 } from './claimGraph';
+import { LiteraturePanel } from './LiteraturePanel';
 
 type Ledger = IpcResponse<'sheep:ledger-get'>;
 
@@ -148,6 +149,15 @@ export function LedgerPane({
             onRecorded={(reply) => {
               setState({ kind: 'ready', ledger: reply });
               setSelected(reply.claimId);
+              onStoreChanged();
+            }}
+          />
+
+          <LiteraturePanel
+            client={client}
+            sessionId={sessionId}
+            onLedgerChanged={() => {
+              void load();
               onStoreChanged();
             }}
           />

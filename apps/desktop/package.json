@@ -19,6 +19,7 @@
     "@sheep/ipc": "*",
     "@sheep/orchestrator": "*",
     "@sheep/paper": "*",
+    "@sheep/retrieval": "*",
     "@sheep/sandbox": "*",
     "@sheep/store": "*",
     "@sheep/verify": "*",

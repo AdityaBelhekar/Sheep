@@ -43,6 +43,7 @@ import { cancelChat, sendChat } from './chat';
 import { cancelLabRun, labStatus, readExecutionBlob, readExecutions, startLabRun } from './lab';
 import { approveGate, cancelSession, protocolView, runSession } from './orchestrator';
 import { getVault } from './credentials';
+import { readLiterature, searchForLiterature, searchSession } from './literature';
 import { compilePaper, exportPaper, paperTemplates } from './paper';
 import { checkDerivation, getDerivationDetail, readDerivations } from './verification';
 import { logError } from './log';
@@ -316,6 +317,9 @@ export function createIpcRegistry(): IpcRegistry {
       linkArtifact(request.sessionId, request.artifactId, request.claimId);
       return readArtifacts(request.sessionId);
     })
+    .register('sheep:literature-list', (request) => readLiterature(request.sessionId))
+    .register('sheep:literature-search', (request) => searchForLiterature(request))
+    .register('sheep:corpus-search', (request) => searchSession(request))
     .register('sheep:paper-templates', () => paperTemplates())
     .register('sheep:paper-compile', (request) => compilePaper(request))
     .register('sheep:paper-export', (request, context) =>

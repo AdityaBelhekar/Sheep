@@ -56,6 +56,7 @@ if (isSmokeRun) {
     'artifacts-render',
     'renderer-artifacts',
     'renderer-paper',
+    'renderer-literature',
     'orchestrator-ready',
     'orchestrator-protocol',
     'stream-cancel',

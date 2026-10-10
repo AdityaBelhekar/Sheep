@@ -35,6 +35,7 @@ import {
   type Block,
   type PaperDocument,
 } from '@sheep/paper';
+import { admitSource } from '@sheep/retrieval';
 import { devRuntimeDir, locateRuntime, Sandbox } from '@sheep/sandbox';
 import {
   getSession,
@@ -46,6 +47,7 @@ import {
   recordArtifact,
   recordExecution,
   recordFigures,
+  recordRetrieval,
   type SheepStore,
 } from '@sheep/store';
 import { readPaperSource, readSessionLog } from '../src/main/paper-source';
@@ -867,5 +869,59 @@ describe('a full seven-phase session against mock models', () => {
       for (const line of lines) expect(line).toMatch(/^IDENTICAL /);
       expect(report).toContain('every redrawn figure is byte-identical');
     }, 600_000);
+
+    it('prints a citation as the source that was retrieved, and refuses one that was not', async () => {
+      const cited = (ref: string) =>
+        domainEvent('claim.recorded', {
+          sessionId,
+          claimId: randomUUID(),
+          claimType: 'CITED',
+          statement: 'Monte Carlo error falls as the inverse square root of the sample count.',
+          support: [{ kind: 'CITATION', ref }],
+        });
+      // A reference written from memory is not a source.
+      expect(() => store.record([cited('Metropolis & Ulam (1949)')])).toThrow(
+        /LEDGER_UNKNOWN_SOURCE/,
+      );
+
+      const source = admitSource(
+        {
+          provider: 'crossref',
+          externalId: '10.2307/2280232',
+          title: 'The Monte Carlo Method',
+          authors: ['Nicholas Metropolis', 'S. Ulam'],
+          year: 1949,
+          venue: 'Journal of the American Statistical Association',
+          doi: '10.2307/2280232',
+          url: 'https://doi.org/10.2307/2280232',
+          abstract: null,
+        },
+        randomUUID(),
+      );
+      recordRetrieval(store, sessionId, {
+        retrievalId: randomUUID(),
+        provider: 'crossref',
+        query: 'monte carlo method',
+        requestUrl: 'https://api.crossref.org/works?query=monte+carlo+method',
+        body: '{"message":{"items":[]}}',
+        sources: [source],
+      });
+      store.record([cited(source.sourceId)]);
+
+      const record = readPaperSource(store, sessionId);
+      const withCitation = buildDocument(record);
+      expect(withCitation.references).toEqual([
+        'Nicholas Metropolis and S. Ulam (1949). The Monte Carlo Method. Journal of the American Statistical Association. doi:10.2307/2280232',
+      ]);
+      const paper = await buildPaper(record, tools, { template: 'sheep', omitUnprovenanced: true });
+      const tex = emitLatex(paper.document, templateById('sheep'));
+      expect(tex).toContain('\\section*{References}');
+      expect(tex).toContain('reference [1]');
+      // The cited claim is in the paper as what it is: asserted, never established.
+      const stated = paper.document.sections
+        .flatMap((section) => section.blocks)
+        .find((block) => block.kind === 'finding' && block.claimType === 'CITED');
+      expect(stated?.kind === 'finding' && stated.status).toBe('asserted');
+    }, 300_000);
   });
 });

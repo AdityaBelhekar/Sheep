@@ -8,6 +8,7 @@ import {
   listExecutions,
   listMessages,
   listParticipants,
+  listSources,
   readLedger,
   type SheepStore,
 } from '@sheep/store';
@@ -51,6 +52,7 @@ export function readPaperSource(store: SheepStore, sessionId: string): PaperSour
     executions: listExecutions(store.db, sessionId),
     derivations: listDerivations(store.db, sessionId),
     messages: listMessages(store.db, sessionId, { limit: EVERY_MESSAGE }),
+    sources: listSources(store.db, sessionId),
     head: store.events.head() ?? null,
     read: (hash) => store.blobs.read(hash),
   };

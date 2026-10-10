@@ -47,6 +47,7 @@ export const LEDGER_EVENT_TYPES = [
   'execution.recorded',
   'derivation.recorded',
   'artifact.recorded',
+  'retrieval.recorded',
   'claim.recorded',
   'claim.evidence-attached',
   'claim.status-changed',
@@ -86,6 +87,8 @@ export const LEDGER_ERROR_CODES = [
   'FAILED_DERIVATION',
   'DUPLICATE_ARTIFACT',
   'UNKNOWN_ARTIFACT',
+  'DUPLICATE_SOURCE',
+  'UNKNOWN_SOURCE',
   'EMPIRICAL_WITHOUT_EXECUTION',
   'DERIVED_WITHOUT_DERIVATION',
   'CITED_WITHOUT_CITATION',
@@ -195,6 +198,7 @@ export class Ledger {
   /** Derivation id → the verdict its checker gave it. */
   readonly #derivations = new Map<string, VerificationStatus>();
   readonly #artifacts = new Set<string>();
+  readonly #sources = new Set<string>();
   /** `round|claim|participant` → commitment hash. */
   readonly #commitments = new Map<string, string>();
   readonly #reveals: RevealedPosition[] = [];
@@ -379,6 +383,20 @@ export class Ledger {
           throw new LedgerError('DUPLICATE_ARTIFACT', `artifact ${artifactId} is already recorded`);
         }
         this.#artifacts.add(artifactId);
+        return;
+      }
+
+      case 'retrieval.recorded': {
+        const { sources } = event.payload;
+        // Checked whole before any is added: a search is admitted or it is not.
+        const ids = sources.map((source) => source.sourceId);
+        const repeated = ids.find(
+          (id, index) => this.#sources.has(id) || ids.indexOf(id) !== index,
+        );
+        if (repeated !== undefined) {
+          throw new LedgerError('DUPLICATE_SOURCE', `source ${repeated} is already recorded`);
+        }
+        for (const id of ids) this.#sources.add(id);
         return;
       }
 
@@ -617,9 +635,12 @@ export class Ledger {
 
   /**
    * Evidence must point at something that exists, in this session, and still
-   * stands. `CITATION` and `ARGUMENT` refs have no record here to check
-   * against yet — retrieval records arrive in a later stage — so only their
-   * shape is checked, by the schema.
+   * stands. An `ARGUMENT` is prose and has nothing to be checked against.
+   *
+   * A `CITATION` must name a source this session actually retrieved. A model
+   * can write a plausible reference to a paper that does not exist; it cannot
+   * make a search have returned one. So a citation is the id of a row a
+   * provider sent back, or it is refused.
    *
    * An `ARTIFACT` ref is one of two things. A content address names bytes in
    * the store — a checker's stored verdict, say — and is taken as given: the
@@ -652,6 +673,15 @@ export class Ledger {
           throw new LedgerError(
             'FAILED_DERIVATION',
             `derivation ${evidence.ref} has a step that does not follow; a failed derivation backs nothing`,
+          );
+        }
+        return;
+      }
+      case 'CITATION': {
+        if (!this.#sources.has(evidence.ref)) {
+          throw new LedgerError(
+            'UNKNOWN_SOURCE',
+            `no source ${evidence.ref} was retrieved in this session; a citation must be of something a search returned`,
           );
         }
         return;
