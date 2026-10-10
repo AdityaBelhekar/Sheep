@@ -20,6 +20,8 @@ export interface RenderTools {
   readonly tectonic: string;
   /** TeX packages Tectonic may use. Filled by the fetch script, read-only after. */
   readonly texCache: string;
+  /** Conference style files, one directory per conference. Not in any TeX distribution. */
+  readonly styles: string;
   readonly versions: { readonly graphviz: string; readonly tectonic: string };
   /** Identifies both tools exactly. */
   readonly lockHash: string;
@@ -82,6 +84,7 @@ export function locateTools(dir: string): RenderTools {
     dot,
     tectonic,
     texCache: join(dir, 'tex-cache'),
+    styles: join(dir, 'styles'),
     versions: { graphviz: entry.graphviz.version, tectonic: entry.tectonic.version },
     lockHash,
   };
@@ -119,6 +122,8 @@ export interface ToolRun {
   readonly input?: string;
   readonly timeoutMs: number;
   readonly signal?: AbortSignal;
+  /** Handed everything the tool wrote to stderr, when it succeeded anyway. */
+  readonly onStderr?: (text: string) => void;
 }
 
 /**
@@ -157,8 +162,10 @@ export function runTool(executable: string, run: ToolRun): Promise<Buffer> {
       reject(new RenderError(error.name === 'AbortError' ? 'cancelled' : error.message));
     });
     child.on('close', (code, signal) => {
-      if (code === 0) resolve(Buffer.concat(stdout));
-      else if (signal !== null) {
+      if (code === 0) {
+        run.onStderr?.(stderr);
+        resolve(Buffer.concat(stdout));
+      } else if (signal !== null) {
         reject(new RenderError(`stopped after ${String(run.timeoutMs)}ms without finishing`));
       } else {
         const said = stderr.trim() || Buffer.concat(stdout).toString('utf8').trim();

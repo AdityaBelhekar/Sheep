@@ -1,0 +1,11 @@
+% The default text and mathematics fonts at every size and shape, so a figure
+% or a paper that asks for an ordinary one offline finds it in the cache.
+\documentclass[10pt]{article}
+\usepackage{amsmath,amssymb}
+\newcommand{\shapes}{Roman \textbf{bold} \textit{italic} \textbf{\textit{bold italic}} \textsl{slanted} \textsc{Small Caps} \texttt{mono \textbf{bold} \textit{italic}} \textsf{sans \textbf{bold} \textit{italic}} $a^{b_c} + \sum_{i=1}^{n} \alpha_i \int \sqrt{x}\, \mathrm{d}x \in \mathbb{R}, \mathcal{L}, \mathbf{v}, \boldsymbol{\theta}$\par}
+\begin{document}
+\section{Section} \subsection{Subsection} \subsubsection{Subsubsection} \paragraph{Paragraph} text\footnote{note}
+{\tiny\shapes}{\scriptsize\shapes}{\footnotesize\shapes}{\small\shapes}{\normalsize\shapes}
+{\large\shapes}{\Large\shapes}{\LARGE\shapes}{\huge\shapes}{\Huge\shapes}
+\[ \left( \frac{\partial f}{\partial x} \right)^{2} \leq \prod_{k} \bigl\| A_k \bigr\| \]
+\end{document}

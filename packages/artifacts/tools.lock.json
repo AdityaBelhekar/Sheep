@@ -9,6 +9,29 @@
       "version": "0.17.0",
       "url": "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-x86_64-pc-windows-msvc.zip",
       "sha256": "f61ce51f0b0ade1015b7de7ef368541c5424e9756ecbd0d7af97d6d48030845f"
-    }
+    },
+    "styles": [
+      {
+        "name": "neurips",
+        "version": "2025",
+        "url": "https://media.neurips.cc/Conferences/NeurIPS2025/Styles.zip",
+        "sha256": "72032130232955b785cd622b7c52d893e3166f30a90e1e6279d0a28e8373beef",
+        "strip": 1
+      },
+      {
+        "name": "icml",
+        "version": "2026",
+        "url": "https://media.icml.cc/Conferences/ICML2026/Styles/icml2026.zip",
+        "sha256": "8b29290f5828e176debb57ea9cc00252502973d55ea561a2f18a7f0a326bfc6c",
+        "strip": 0
+      },
+      {
+        "name": "iclr",
+        "version": "2026",
+        "url": "https://github.com/ICLR/Master-Template/raw/46ed6f4c6cef5b175dde23639e77d44c3463b230/iclr2026.zip",
+        "sha256": "b6d63b29992e153f804bb6d170c57db156c011b5bedf96a9f31d58813b909acf",
+        "strip": 1
+      }
+    ]
   }
 }

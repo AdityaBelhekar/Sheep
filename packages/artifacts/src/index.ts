@@ -12,8 +12,11 @@ export {
   expectedToolsHash,
   locateTools,
   RenderError,
+  runTool,
+  toolEnv,
   ToolsUnavailableError,
   type RenderTools,
+  type ToolRun,
 } from './tools';
 export {
   formulaDocument,
