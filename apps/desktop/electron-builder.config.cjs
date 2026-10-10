@@ -62,6 +62,19 @@ module.exports = {
   ],
   extraMetadata: { sheep: { signed } },
 
+  // Switches burned into the installed binary. Without them Sheep.exe is also a
+  // general-purpose Node: ELECTRON_RUN_AS_NODE, NODE_OPTIONS or --inspect turn
+  // it into something that runs whatever it is handed, with the app's name on
+  // it and the app's access to the stored keys. And the app is only ever loaded
+  // from the archive packaging wrote, checked against the hash packaging took.
+  electronFuses: {
+    runAsNode: false,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    onlyLoadAppFromAsar: true,
+    enableEmbeddedAsarIntegrityValidation: true,
+  },
+
   fileAssociations: [
     {
       ext: 'sheep',
