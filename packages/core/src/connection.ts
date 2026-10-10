@@ -222,7 +222,22 @@ export function connectionConfigIssues(config: ConnectionConfig): string[] {
       issues.push('a custom endpoint needs a vendor id, so critiques stay cross-vendor');
     }
   }
+  // A key sent over plain http is readable by everything between here and there.
+  // This machine is the exception: a local proxy has no wire to listen on.
+  const endpoint = 'endpoint' in config ? config.endpoint : 'baseUrl' in config && config.baseUrl;
+  if (requiresSecret(config) && endpoint && !/^https:/i.test(endpoint) && !isLoopback(endpoint)) {
+    issues.push('an endpoint that is sent a key must be https, unless it is on this machine');
+  }
   return issues;
+}
+
+function isLoopback(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return hostname === 'localhost' || hostname === '[::1]' || /^127(\.\d{1,3}){3}$/.test(hostname);
+  } catch {
+    return false;
+  }
 }
 
 /** A short, stable, recognisable prefix for a connection's adapter id. */

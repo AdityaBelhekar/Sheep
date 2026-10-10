@@ -73,6 +73,9 @@ export class HttpClient {
       response = await this.#fetch(url, {
         method: request.method,
         headers,
+        // `fetch` drops `authorization` when a redirect changes origin, but not
+        // `x-api-key`, `api-key` or `x-goog-api-key`. No provider's API redirects.
+        redirect: 'error',
         ...(request.body === undefined ? {} : { body: JSON.stringify(request.body) }),
         ...(signal ? { signal } : {}),
       });

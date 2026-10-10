@@ -103,6 +103,31 @@ describe('connectionConfigIssues', () => {
       }),
     ).toEqual([]);
   });
+
+  it('refuses to send a key over plain http, except to this machine', () => {
+    const custom = (baseUrl: string): ConnectionConfig => ({
+      kind: 'openai-compatible',
+      preset: 'custom',
+      vendorId: 'mistral',
+      baseUrl,
+    });
+    expect(connectionConfigIssues(custom('http://example.test/v1')).join(' ')).toContain('https');
+    expect(connectionConfigIssues({ kind: 'anthropic', baseUrl: 'http://10.0.0.5' })).toHaveLength(
+      1,
+    );
+    // A host that only starts like loopback is not loopback.
+    expect(connectionConfigIssues(custom('http://127.0.0.1.example.test/v1'))).toHaveLength(1);
+    expect(connectionConfigIssues(custom('http://127.0.0.1:4000/v1'))).toEqual([]);
+    expect(connectionConfigIssues(custom('http://localhost:4000/v1'))).toEqual([]);
+    // No key goes to a local runtime, so one on the network may be plain http.
+    expect(
+      connectionConfigIssues({
+        kind: 'local',
+        provider: 'ollama',
+        baseUrl: 'http://10.0.0.5:11434',
+      }),
+    ).toEqual([]);
+  });
 });
 
 describe('credential requirements', () => {
