@@ -5,6 +5,7 @@ import logoUrl from '@resources/sheep.png';
 import { APP_NAME } from '@shared/product';
 import { PaneIcon } from './components/PaneIcon';
 import { ThemeToggle } from './components/ThemeToggle';
+import { UpdateControl } from './components/UpdateControl';
 import { useIpcClient, useRoute, useSystemPrefersDark } from './hooks';
 import {
   PANE_IDS,
@@ -172,6 +173,7 @@ export function App(): ReactElement {
           {ping.kind === 'error' && 'main process unreachable'}
         </span>
         <span className="statusbar__item statusbar__item--muted">local-first · no telemetry</span>
+        <UpdateControl client={client} />
       </footer>
     </div>
   );

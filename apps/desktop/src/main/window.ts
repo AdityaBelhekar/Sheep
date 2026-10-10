@@ -25,6 +25,7 @@ import {
   startSmokeProvider,
 } from './smoke-provider';
 import { getStore } from './store';
+import { checkForUpdate } from './update';
 
 /** What the navigability check expects to find, taken from the shared list. */
 const PANE_COUNT = PANE_IDS.length;
@@ -1252,6 +1253,15 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
   await checkPaperPane(window);
   await checkLiterature(window);
   await checkSessionBundle(window);
+
+  // A launch check is never a signed, installed copy, so it must be told that
+  // updates are off — and must be told without anything being contacted.
+  const update = await checkForUpdate();
+  recordSmokeCheck(
+    'update-policy',
+    update.status === 'disabled' && update.version === null,
+    `${update.status} · ${update.detail}`,
+  );
   await checkConnections(window);
   await checkLocalModel(window);
   await checkTheme(window);

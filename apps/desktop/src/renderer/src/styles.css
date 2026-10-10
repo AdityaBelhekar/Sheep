@@ -1626,3 +1626,18 @@ select.field__input {
   width: auto;
   min-width: 0;
 }
+
+.statusbar__action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.statusbar__action:disabled {
+  cursor: default;
+  text-decoration: none;
+}

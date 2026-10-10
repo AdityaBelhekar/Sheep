@@ -795,6 +795,32 @@ export const IPC_CONTRACTS = {
       paperRefusal,
     ]),
   },
+  /**
+   * Look for a newer release, because a person asked.
+   *
+   * The only channel that contacts the release feed, and it is never called
+   * on its own: Sheep makes no network call nobody asked for. `disabled` is
+   * an answer — a checkout, or an unsigned build with no publisher to verify
+   * an update against — and says which.
+   */
+  'sheep:update-check': {
+    request: z.object({}),
+    response: z.object({
+      status: z.enum(['disabled', 'current', 'available', 'error']),
+      current: z.string(),
+      /** The newer version, when there is one. */
+      version: z.string().nullable(),
+      detail: z.string(),
+    }),
+  },
+  /**
+   * Download the newer release, verify it against this build's publisher, and
+   * restart into it. `started: false` says why nothing was installed.
+   */
+  'sheep:update-install': {
+    request: z.object({}),
+    response: z.object({ started: z.boolean(), detail: z.string() }),
+  },
   'sheep:chat-send': {
     request: z.object({
       sessionId: idSchema,

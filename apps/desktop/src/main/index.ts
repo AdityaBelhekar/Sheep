@@ -59,6 +59,7 @@ if (isSmokeRun) {
     'renderer-paper',
     'renderer-literature',
     'renderer-session-bundle',
+    'update-policy',
     'orchestrator-ready',
     'orchestrator-protocol',
     'stream-cancel',
@@ -126,7 +127,8 @@ if (!hasInstanceLock) {
       });
     }
 
-    bindIpcRegistry(createIpcRegistry());
+    const registry = createIpcRegistry();
+    bindIpcRegistry(registry);
     const mainWindow = createMainWindow();
     // Started by double-clicking a session bundle: open it once there is a window to say so in.
     const bundle = storeOpened && !isSmokeRun ? bundleArgument(process.argv) : undefined;
