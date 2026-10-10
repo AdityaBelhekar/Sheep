@@ -5,18 +5,19 @@
 
   **A multi-model sandbox for research you can check.**
 
-  `v0.1.0-beta.1` · Windows x64 · MIT · local-first, no telemetry
+  `v0.1.0-beta.2` · Windows x64 · MIT · local-first, no telemetry
 </div>
 
 > **This is a beta.** Sheep is feature-complete against its roadmap and passes
 > its own automated checks, but it has only just started being used by people
 > other than its author. Expect rough edges. If you are testing it, the
-> [beta testing](#beta-testing) section is for you.
+> [install](#install) and [beta testing](#beta-testing) sections are for you.
 
 ![The Conversation pane: one blind round, a lane per model](./docs/screenshots/conversation.png)
 
 ## Contents
 
+- [Install](#install)
 - [Why Sheep exists](#why-sheep-exists)
 - [What it does](#what-it-does)
 - [What Sheep claims](#what-sheep-claims)
@@ -28,6 +29,51 @@
 - [What leaves your machine](#what-leaves-your-machine)
 - [Documentation](#documentation)
 - [Licence](#licence)
+
+## Install
+
+Sheep is a desktop app for **Windows 10 or 11, 64-bit (x64)**. That is the only
+platform it runs on today: macOS and Linux packages are built by CI but have
+never been run, and the code sandbox does not exist on them yet.
+
+There is no installer to download yet, and Sheep is not on npm — there is no
+`npx` or `npm install -g` for it. You run it from source. You need
+[Git](https://git-scm.com/download/win) and
+[Node.js 22.12 or newer](https://nodejs.org), and a couple of GB of free disk.
+
+```bash
+git clone https://github.com/AdityaBelhekar/Sheep.git
+```
+
+```bash
+cd Sheep
+```
+
+```bash
+npm install
+```
+
+```bash
+npm run fetch-runtime
+```
+
+```bash
+npm run fetch-tools
+```
+
+```bash
+npm run dev
+```
+
+`fetch-runtime` installs the pinned Python the sandbox runs code in (about
+550 MB) and `fetch-tools` installs the pinned Graphviz and Tectonic (about
+130 MB). Both download only what their lock files name and check every file
+against its sha256 before using it. You run them once; after that,
+`npm run dev` is all it takes to start Sheep.
+
+To build a Windows installer of your own instead, run `npm run dist`: it
+writes `Sheep-Setup-<version>.exe` to `apps/desktop/dist`. The build is
+unsigned, so Windows SmartScreen will ask before running it.
 
 ## Why Sheep exists
 
@@ -254,37 +300,7 @@ says why it is the way it is.
 
 ## Beta testing
 
-There is no installer to download yet. Run it from source, on **Windows x64**
-with **Node 22.12 or newer**.
-
-```bash
-git clone https://github.com/AdityaBelhekar/Sheep.git
-```
-
-```bash
-cd Sheep
-```
-
-```bash
-npm install
-```
-
-```bash
-npm run fetch-runtime
-```
-
-```bash
-npm run fetch-tools
-```
-
-```bash
-npm run dev
-```
-
-`fetch-runtime` installs the pinned Python the sandbox runs code in (about
-550 MB) and `fetch-tools` installs the pinned Graphviz and Tectonic (about
-130 MB). Both download only what their lock files name and check every file
-against its sha256 before using it.
+Get it running with the steps under [Install](#install), then:
 
 ### A first session
 
