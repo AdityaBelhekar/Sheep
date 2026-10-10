@@ -43,6 +43,7 @@
     "vitest": "^4.1.10"
   },
   "allowScripts": {
+    "electron": true,
     "esbuild": true
   }
 }
