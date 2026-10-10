@@ -11,6 +11,7 @@ import { cancelAllLabRuns } from './lab';
 import { logError, logInfo } from './log';
 import { startOrchestrator, stopOrchestrator } from './orchestrator';
 import { applyRendererSecurityPolicy } from './security';
+import { bundleArgument, openBundleFromSystem } from './session-files';
 import { beginSmokeRun, expectSmokeCheck, isSmokeRun, recordSmokeCheck } from './smoke';
 import { closeStore, openStore, recordLaunch } from './store';
 import { createMainWindow, rendererDevServerUrl } from './window';
@@ -57,6 +58,7 @@ if (isSmokeRun) {
     'renderer-artifacts',
     'renderer-paper',
     'renderer-literature',
+    'renderer-session-bundle',
     'orchestrator-ready',
     'orchestrator-protocol',
     'stream-cancel',
@@ -77,11 +79,14 @@ const hasInstanceLock = app.requestSingleInstanceLock();
 if (!hasInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
     const [existing] = BrowserWindow.getAllWindows();
     if (!existing) return;
     if (existing.isMinimized()) existing.restore();
     existing.focus();
+    // A second launch that was a double-clicked session: this instance opens it.
+    const bundle = bundleArgument(argv);
+    if (bundle !== undefined) void openBundleFromSystem(existing, bundle);
   });
 
   void app.whenReady().then(() => {
@@ -122,7 +127,14 @@ if (!hasInstanceLock) {
     }
 
     bindIpcRegistry(createIpcRegistry());
-    createMainWindow();
+    const mainWindow = createMainWindow();
+    // Started by double-clicking a session bundle: open it once there is a window to say so in.
+    const bundle = storeOpened && !isSmokeRun ? bundleArgument(process.argv) : undefined;
+    if (bundle !== undefined) {
+      mainWindow.webContents.once('did-finish-load', () => {
+        void openBundleFromSystem(mainWindow, bundle);
+      });
+    }
 
     // Spawned eagerly rather than on first use: a session that resumes on
     // launch should not wait for a process to boot, and a spawn failure is

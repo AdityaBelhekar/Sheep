@@ -353,6 +353,40 @@ export const IPC_CONTRACTS = {
     request: z.object({ sessionId: idSchema }),
     response: sessionDetailReply,
   },
+  /**
+   * Save a session to a bundle: every event of it and every blob they name,
+   * in one file another copy of Sheep can import. Main asks where; `saved:
+   * false` means the person closed the dialog.
+   */
+  'sheep:session-export': {
+    request: z.object({ sessionId: idSchema }),
+    response: z.object({
+      saved: z.boolean(),
+      path: z.string().nullable(),
+      bytes: z.number().int().nonnegative(),
+    }),
+  },
+  /**
+   * Import a session from a bundle the person picks.
+   *
+   * A bundle is believed about nothing: its events are checked against their
+   * hashes and then against the ledger's rules, exactly as when they were
+   * first written. `imported: null` means the dialog was closed; a bundle
+   * that is refused is an error saying why, and leaves nothing behind.
+   */
+  'sheep:session-import': {
+    request: z.object({}),
+    response: z.object({
+      imported: z
+        .object({
+          sessionId: idSchema,
+          title: z.string(),
+          events: z.number().int().nonnegative(),
+          blobs: z.number().int().nonnegative(),
+        })
+        .nullable(),
+    }),
+  },
   'sheep:session-budget-set': {
     request: z.object({ sessionId: idSchema, capUsd: usdSchema }),
     response: sessionDetailReply,

@@ -1,9 +1,9 @@
 // The ambient declaration has to travel with this file into other packages' programs.
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./raw.d.ts" />
-import { crc32, deflateRawSync } from 'node:zlib';
 import { formulaDocument, tikzDocument } from '@sheep/artifacts';
 import type { ArtifactKind } from '@sheep/core';
+import { zip } from '@sheep/store';
 import reproduceScript from '../python/reproduce.py?raw';
 import type { PaperFile } from './compile';
 import { figuresIn, type PaperDocument, type PaperSource } from './ir';
@@ -19,68 +19,9 @@ import type { BuildFacts, Unprovenanced } from './provenance';
  * them: what it reports as identical was made from scratch.
  */
 
-const text = (value: Uint8Array | string): Uint8Array =>
-  typeof value === 'string' ? Buffer.from(value, 'utf8') : value;
-
-/** 2000-01-01, the date every renderer here is given, as a ZIP stores one. */
-const ZIP_DATE = ((2000 - 1980) << 9) | (1 << 5) | 1;
-
-/**
- * Writes a ZIP archive.
- *
- * Small on purpose: deflate from zlib, one fixed timestamp, entries in the
- * order given. The same files are therefore the same archive, byte for byte,
- * which no general-purpose zipper promises.
- *
- * ponytail: no ZIP64, so under 4 GB and 65,535 entries. A paper is not near.
- */
-export function zip(files: readonly PaperFile[]): Uint8Array {
-  const local: Buffer[] = [];
-  const central: Buffer[] = [];
-  let offset = 0;
-
-  for (const file of files) {
-    const name = Buffer.from(file.path, 'utf8');
-    const data = text(file.data);
-    const packed = deflateRawSync(data, { level: 9 });
-
-    // Shared by both headers: version, flags (UTF-8 names), deflate, time, date, crc, sizes.
-    const fields = Buffer.alloc(26);
-    fields.writeUInt16LE(20, 0);
-    fields.writeUInt16LE(0x0800, 2);
-    fields.writeUInt16LE(8, 4);
-    fields.writeUInt16LE(0, 6);
-    fields.writeUInt16LE(ZIP_DATE, 8);
-    fields.writeUInt32LE(crc32(data), 10);
-    fields.writeUInt32LE(packed.byteLength, 14);
-    fields.writeUInt32LE(data.byteLength, 18);
-    fields.writeUInt16LE(name.byteLength, 22);
-    fields.writeUInt16LE(0, 24);
-
-    const header = Buffer.alloc(4);
-    header.writeUInt32LE(0x04034b50, 0);
-    local.push(header, fields, name, packed);
-
-    const entry = Buffer.alloc(6);
-    entry.writeUInt32LE(0x02014b50, 0);
-    entry.writeUInt16LE(20, 4);
-    // Comment length, disk, internal and external attributes, then where the entry starts.
-    const tail = Buffer.alloc(14);
-    tail.writeUInt32LE(offset, 10);
-    central.push(entry, fields, tail, name);
-
-    offset += 4 + fields.byteLength + name.byteLength + packed.byteLength;
-  }
-
-  const directory = Buffer.concat(central);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(files.length, 8);
-  end.writeUInt16LE(files.length, 10);
-  end.writeUInt32LE(directory.byteLength, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...local, directory, end]);
-}
+// Written by the store's archive writer: one fixed timestamp, entries in order, so the
+// same files are the same bundle byte for byte.
+export { zip };
 
 /** One entry of the session's event log, as the store holds it. */
 export interface LoggedEvent {

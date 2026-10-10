@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@sheep/core": "*",
-    "node-sqlite3-wasm": "^0.8.60"
+    "node-sqlite3-wasm": "^0.8.60",
+    "zod": "^4.4.3"
   },
   "optionalDependencies": {
     "better-sqlite3": "^13.0.3"

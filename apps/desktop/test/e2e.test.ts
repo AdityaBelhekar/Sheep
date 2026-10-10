@@ -38,7 +38,9 @@ import {
 import { admitSource } from '@sheep/retrieval';
 import { devRuntimeDir, locateRuntime, Sandbox } from '@sheep/sandbox';
 import {
+  exportSession,
   getSession,
+  importSession,
   listDerivations,
   listExecutions,
   listParticipants,
@@ -922,6 +924,36 @@ describe('a full seven-phase session against mock models', () => {
         .flatMap((section) => section.blocks)
         .find((block) => block.kind === 'finding' && block.claimType === 'CITED');
       expect(stated?.kind === 'finding' && stated.status).toBe('asserted');
+    }, 300_000);
+
+    it('travels as one file to another machine, and is the same paper there', async () => {
+      const elsewhere = openSheepStore({ dataDir: join(root, 'elsewhere') });
+      try {
+        const imported = importSession(elsewhere, exportSession(store, sessionId));
+        expect(imported.events).toBe([...store.events.stream({ sessionId })].length);
+
+        // The same ledger, with nothing refused on the way in.
+        expect(readLedger(elsewhere.events, sessionId).rejected).toEqual([]);
+        expect(readLedger(elsewhere.events, sessionId).claims()).toEqual(ledger().claims());
+        expect(elsewhere.events.verify().ok).toBe(true);
+
+        // And the paper compiled there says, word for word, what it says here. Only the
+        // provenance appendix differs: it states a different log's root hash, as it should.
+        const here = await buildPaper(readPaperSource(store, sessionId), tools, {
+          template: 'sheep',
+          omitUnprovenanced: true,
+        });
+        const there = await buildPaper(readPaperSource(elsewhere, sessionId), tools, {
+          template: 'sheep',
+          omitUnprovenanced: true,
+        });
+        expect(emitBody({ ...there.document, appendix: [] })).toBe(
+          emitBody({ ...here.document, appendix: [] }),
+        );
+        expect(there.files.map((file) => file.path)).toEqual(here.files.map((file) => file.path));
+      } finally {
+        elsewhere.close();
+      }
     }, 300_000);
   });
 });

@@ -17,6 +17,8 @@ export const IPC_CHANNELS = [
   'sheep:sessions-list',
   'sheep:session-create',
   'sheep:session-get',
+  'sheep:session-export',
+  'sheep:session-import',
   'sheep:session-budget-set',
   'sheep:roster-attach',
   'sheep:roster-reconfigure',

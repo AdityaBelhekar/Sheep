@@ -85,6 +85,17 @@ export {
 } from './connections';
 export { SettingsStore } from './settings';
 export { enforceLedger, readLedger } from './ledger';
+export { ArchiveError, unzip, zip, type ArchiveFile, type UnzipLimits } from './archive';
+export {
+  SESSION_BUNDLE_EXTENSION,
+  SESSION_BUNDLE_FORMAT,
+  SessionBundleError,
+  exportSession,
+  importSession,
+  sessionBlobRef,
+  type ImportedSession,
+  type SessionBundleManifest,
+} from './session-bundle';
 export { executionBlobRef, recordExecution, type FinishedRun } from './executions';
 export { derivationBlobRef, readDerivation, recordDerivation } from './derivations';
 export {

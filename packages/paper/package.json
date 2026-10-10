@@ -12,7 +12,8 @@
   "dependencies": {
     "@sheep/artifacts": "*",
     "@sheep/core": "*",
-    "@sheep/orchestrator": "*"
+    "@sheep/orchestrator": "*",
+    "@sheep/store": "*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

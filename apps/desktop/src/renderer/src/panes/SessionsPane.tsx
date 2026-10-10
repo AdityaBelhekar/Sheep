@@ -32,6 +32,8 @@ export function SessionsPane({
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 
+  const [transferred, setTransferred] = useState<{ ok: boolean; message: string } | null>(null);
+
   const load = useCallback(
     (signal?: { cancelled: boolean }) => {
       if (!client) {
@@ -55,6 +57,22 @@ export function SessionsPane({
     },
     [client],
   );
+
+  /** Runs an export or an import, and says what happened. A closed dialog says nothing. */
+  const transfer = (action: (ipc: IpcClient) => Promise<string | null>): void => {
+    if (!client) return;
+    setTransferred(null);
+    action(client)
+      .then((message) => {
+        if (message === null) return;
+        setTransferred({ ok: true, message });
+        load();
+        onStoreChanged();
+      })
+      .catch((error: unknown) => {
+        setTransferred({ ok: false, message: describe(error) });
+      });
+  };
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -176,10 +194,39 @@ export function SessionsPane({
           />
         </div>
 
-        <button className="button" type="submit" disabled={!canCreate || creating}>
-          {creating ? 'Creating…' : 'New session'}
-        </button>
+        <div className="button-row">
+          <button className="button" type="submit" disabled={!canCreate || creating}>
+            {creating ? 'Creating…' : 'New session'}
+          </button>
+          <button
+            className="button button--quiet"
+            type="button"
+            data-sheep-import-session
+            onClick={() => {
+              transfer(async (ipc) => {
+                const { imported } = await ipc.invoke('sheep:session-import', {});
+                return imported === null
+                  ? null
+                  : `Imported “${imported.title}”: ${String(imported.events)} events and ${String(
+                      imported.blobs,
+                    )} files, checked against their hashes and the ledger’s rules.`;
+              });
+            }}
+          >
+            Import session…
+          </button>
+        </div>
       </form>
+
+      {transferred !== null && (
+        <p
+          className={transferred.ok ? 'notice' : 'notice notice--error'}
+          role={transferred.ok ? 'status' : 'alert'}
+          data-sheep-session-transfer={transferred.ok ? 'ok' : 'refused'}
+        >
+          {transferred.message}
+        </p>
+      )}
 
       {state.kind === 'loading' && <p className="notice">Reading the sessions projection…</p>}
 
@@ -248,6 +295,23 @@ export function SessionsPane({
                   }}
                 >
                   {session.sessionId === selected ? 'Hide roster' : 'Roster'}
+                </button>
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  data-sheep-export-session={session.sessionId}
+                  onClick={() => {
+                    transfer(async (ipc) => {
+                      const reply = await ipc.invoke('sheep:session-export', {
+                        sessionId: session.sessionId,
+                      });
+                      return reply.saved
+                        ? `Saved “${session.title}” to ${reply.path ?? ''}.`
+                        : null;
+                    });
+                  }}
+                >
+                  Export
                 </button>
               </div>
 

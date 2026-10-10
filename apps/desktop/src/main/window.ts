@@ -1131,6 +1131,52 @@ const LITERATURE_EXPRESSION = `(async () => {
   }
 })()`;
 
+/**
+ * Exports a session with the Sessions pane's own button, then imports the file
+ * it wrote. The session is already in this store, so the import must be
+ * refused and must say why — carrying a session to an empty store is what the
+ * unit tests do, with two stores.
+ */
+const SESSION_BUNDLE_EXPRESSION = `(async () => {
+  const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const until = async (probe, seconds = 20) => {
+    const deadline = Date.now() + seconds * 1000;
+    while (Date.now() < deadline) {
+      const found = probe();
+      if (found) return found;
+      await settle(50);
+    }
+    return null;
+  };
+  const click = (element) => element && element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+  try {
+    window.location.hash = '#/sessions';
+    const pane = await until(() => {
+      const found = document.querySelector('[data-pane="sessions"]');
+      return found && found.querySelector('[data-sheep-export-session]') ? found : null;
+    });
+    if (!pane) return { error: 'the sessions pane offered nothing to export' };
+    const before = pane.querySelectorAll('[data-sheep-export-session]').length;
+
+    click(pane.querySelector('[data-sheep-export-session]'));
+    const saved = await until(() => pane.querySelector('[data-sheep-session-transfer="ok"]'));
+    const savedText = saved ? saved.textContent : '';
+
+    click(pane.querySelector('[data-sheep-import-session]'));
+    const refused = await until(() => pane.querySelector('[data-sheep-session-transfer="refused"]'));
+
+    return {
+      savedText,
+      refusedText: refused ? refused.textContent : '',
+      sessionsBefore: before,
+      sessionsAfter: pane.querySelectorAll('[data-sheep-export-session]').length,
+    };
+  } catch (error) {
+    return { error: String(error && error.message ? error.message : error) };
+  }
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -1205,6 +1251,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
   await checkArtifactsPane(window);
   await checkPaperPane(window);
   await checkLiterature(window);
+  await checkSessionBundle(window);
   await checkConnections(window);
   await checkLocalModel(window);
   await checkTheme(window);
@@ -1681,6 +1728,39 @@ async function checkLiterature(window: BrowserWindow): Promise<void> {
     )} rows · citation of a retrieved source=${result.real} · of an invented one → ${
       result.invented.match(/LEDGER_[A-Z_]+/)?.[0] ?? result.invented
     } · session search hit ${result.hitKinds}`,
+  );
+}
+
+async function checkSessionBundle(window: BrowserWindow): Promise<void> {
+  const result = (await evaluate(window, SESSION_BUNDLE_EXPRESSION)) as
+    | { savedText: string; refusedText: string; sessionsBefore: number; sessionsAfter: number }
+    | { error: string }
+    | undefined;
+  if (!result || 'error' in result) {
+    recordSmokeCheck('renderer-session-bundle', false, result?.error ?? 'no result');
+    return;
+  }
+
+  const path = /to (.+\.sheep)\./.exec(result.savedText)?.[1];
+  let bytes = 0;
+  try {
+    bytes = path === undefined ? 0 : readFileSync(path).byteLength;
+  } catch {
+    // Reported below as a bundle of no bytes.
+  }
+  const ok =
+    bytes > 0 &&
+    result.refusedText.includes('already here') &&
+    result.sessionsAfter === result.sessionsBefore;
+
+  recordSmokeCheck(
+    'renderer-session-bundle',
+    ok,
+    `exported from the pane: ${String(bytes)} bytes on disk · importing it back → ${
+      result.refusedText.includes('already here')
+        ? 'refused, already here'
+        : result.refusedText || 'no answer'
+    } · sessions ${String(result.sessionsBefore)} → ${String(result.sessionsAfter)}`,
   );
 }
 
