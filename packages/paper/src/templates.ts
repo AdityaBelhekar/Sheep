@@ -13,7 +13,7 @@ import { abstractText, BODY_PREAMBLE, emitBody, escapeLatex, mono } from './late
  * model, with the version each reported.
  */
 
-export const TEMPLATE_IDS = ['sheep', 'neurips', 'icml', 'iclr'] as const;
+export const TEMPLATE_IDS = ['sheep', 'neurips', 'icml', 'iclr', 'ieee', 'acm', 'arxiv'] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 
 export interface PaperTemplate {
@@ -144,7 +144,55 @@ const ICLR: PaperTemplate = {
   front: standardFront(' \\And ', stacked),
 };
 
-export const TEMPLATES: readonly PaperTemplate[] = [SHEEP, NEURIPS, ICML, ICLR];
+const IEEE: PaperTemplate = {
+  id: 'ieee',
+  label: 'IEEE',
+  description: 'IEEEtran, conference mode, two columns.',
+  styleFiles: [],
+  head: '\\documentclass[conference]{IEEEtran}',
+  preamble: '',
+  front: standardFront(
+    ' \\and ',
+    (author) => `\\IEEEauthorblockN{${name(author)}}\\\\\\IEEEauthorblockA{${detail(author)}}`,
+  ),
+};
+
+const ACM: PaperTemplate = {
+  id: 'acm',
+  label: 'ACM',
+  description: 'acmart, sigconf layout, without the ACM rights block.',
+  styleFiles: [],
+  // acmart loads hyperxmp, which writes the wall-clock time into the PDF's
+  // metadata and so makes every compile a different file. Declaring the
+  // package already loaded leaves the metadata out and the paper reproducible.
+  head: String.raw`\expandafter\def\csname ver@hyperxmp.sty\endcsname{9999/01/01}
+\documentclass[sigconf,nonacm]{acmart}`,
+  preamble: '',
+  front(document) {
+    // acmart wants the abstract before \maketitle, and one \author per person.
+    return [
+      `\\title{${title(document)}}`,
+      ...document.authors.map(
+        (author) =>
+          `\\author{${name(author)}}\n\\affiliation{\\institution{${detail(author)}}\\country{}}`,
+      ),
+      abstract(document),
+      '\\maketitle',
+    ].join('\n');
+  },
+};
+
+const ARXIV: PaperTemplate = {
+  id: 'arxiv',
+  label: 'arXiv',
+  description: 'A plain one-column preprint. arXiv has no style of its own; this is the usual one.',
+  styleFiles: [],
+  head: '\\documentclass[11pt,letterpaper]{article}',
+  preamble: '\\usepackage[margin=1in]{geometry}\n\\usepackage{mathptmx}\n\\date{}',
+  front: standardFront(' \\and ', stacked),
+};
+
+export const TEMPLATES: readonly PaperTemplate[] = [SHEEP, NEURIPS, ICML, ICLR, IEEE, ACM, ARXIV];
 
 /** The template with this id. Takes any string: the id arrives from outside. */
 export function templateById(id: string): PaperTemplate {

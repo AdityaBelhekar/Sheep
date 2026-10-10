@@ -1,0 +1,96 @@
+% arXiv — compiled by Sheep from session 11111111-1111-4111-8111-111111111111
+
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,columns=fullflexible,keepspaces=true,frame=single,framesep=3pt,xleftmargin=4pt,xrightmargin=4pt}
+% A sentence the paper asserts, and the ledger claim(s) it rests on: label, then id.
+\newcommand{\sheepclaim}[2]{\textsuperscript{\,[#1]}}
+% A figure at its own size, or the width of the column if it is wider.
+\newsavebox{\sheepbox}
+\newcommand{\sheepfigure}[1]{\sbox{\sheepbox}{\includegraphics{#1}}\ifdim\wd\sheepbox>\linewidth\includegraphics[width=\linewidth]{#1}\else\usebox{\sheepbox}\fi}
+% The record, quoted, and who wrote it.
+\newcommand{\sheepquote}[2]{\begin{quote}\small #1\par\nopagebreak\raggedleft--- #2\end{quote}}
+\setlength{\emergencystretch}{3em}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{mathptmx}
+\date{}
+
+\begin{document}
+
+\title{Estimating pi by sampling: 100\% of runs \& what they show}
+\author{anthropic/claude-opus-5 \\ claude-opus-5-20260401 \and openai/gpt-5 \\ version not reported \and ollama/qwen\_3 \\ sha256:9f2c}
+\maketitle
+\begin{abstract}
+This is the record of one research session on the question: can sampling estimate pi?
+Of 2 findings, 1 is supported and 1 refuted.
+\end{abstract}
+
+\section{Question}
+
+This record answers one question:
+
+\sheepquote{Can sampling estimate pi?
+
+1. Scope: n $\leq$ 10\textasciicircum{}6 samples\newline
+2. Out of scope: \{quasi-random\} sequences \& \$costly\$ methods}{the Charter}
+
+\section{Method}
+
+\noindent\textit{The script, exactly as run (seed 7)}
+\begin{lstlisting}
+import numpy as np
+rng = np.random.default_rng()
+xy = rng.random((100_000, 2))
+print(f"pi ~ {4 * (np.sum(xy**2, axis=1) <= 1).mean():.4f}")  # 100% reproducible
+\end{lstlisting}
+
+\noindent\textbf{The run}
+\begin{description}
+\item[Execution] \texttt{eeeeeeee\allowbreak{}-\allowbreak{}eeee\allowbreak{}-\allowbreak{}4eee\allowbreak{}-\allowbreak{}8eee\allowbreak{}-\allowbreak{}eeeeeeee\allowbreak{}eeee}
+\item[Outcome] ok, exit code 0
+\item[Environment lock] \texttt{10c410c4\allowbreak{}10c410c4\allowbreak{}10c410c4\allowbreak{}10c410c4\allowbreak{}10c410c4\allowbreak{}10c410c4\allowbreak{}10c410c4\allowbreak{}10c410c4}
+\end{description}
+
+\section{Findings}
+
+% claim 55555555-5555-4555-8555-555555555555
+\paragraph{C1 \textnormal{(empirical, supported)}}
+With 10\textasciicircum{}5 samples the estimate is within 0.01 of pi $\rightarrow$ two places hold.\sheepclaim{C1}{55555555-5555-4555-8555-555555555555}
+
+% artifact dddddddd-dddd-4ddd-8ddd-dddddddddddd sha256 f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1
+\begin{figure}[htbp]
+\centering
+\sheepfigure{figures/figure-1.pdf}
+\caption{Error against sample\_count. Supports C1. Artifact \texttt{dddddddd}, regenerable from its recorded source.}
+\end{figure}
+
+% claim 55555555-5555-4555-8555-555555555556
+\paragraph{C2 \textnormal{(empirical, refuted)}}
+The error falls as 1/n.\sheepclaim{C2}{55555555-5555-4555-8555-555555555556}
+
+\section{Synthesis}
+
+\textbf{What stands.} C1 holds at the sample sizes tried.\sheepclaim{C1}{55555555-5555-4555-8555-555555555555}
+C2 does not: the error falls as 1/sqrt(n) [1].\sheepclaim{C2}{55555555-5555-4555-8555-555555555556}
+
+\section*{References}
+\begin{description}
+\item[{[1]}] Metropolis \& Ulam, The Monte Carlo Method, 1949. doi:10.2307/2280232
+\end{description}
+
+\appendix
+
+\section{Provenance}
+
+\begin{description}
+\item[Event-log head] \texttt{abababab\allowbreak{}abababab\allowbreak{}abababab\allowbreak{}abababab\allowbreak{}abababab\allowbreak{}abababab\allowbreak{}abababab\allowbreak{}abababab}
+\item[Events] 412
+\end{description}
+
+\end{document}
+
