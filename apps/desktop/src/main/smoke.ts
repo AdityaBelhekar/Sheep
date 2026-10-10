@@ -6,8 +6,8 @@
  * arrived. It is how the roadmap's "the app must launch" rule is verified in a
  * non-interactive session; later phases register further checks.
  */
-// Room for the Lab and Verification checks, which start real interpreters in a fresh sandbox.
-const TIMEOUT_MS = 90_000;
+// Room for the Lab, Verification and Artifacts checks, which start real interpreters and renderers.
+const TIMEOUT_MS = 150_000;
 
 export const isSmokeRun = process.env['SHEEP_SMOKE'] === '1';
 

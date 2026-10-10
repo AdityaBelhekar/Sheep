@@ -162,7 +162,7 @@ export interface RegeneratedFile {
 export interface Regeneration {
   /** Every recorded file came out again, byte for byte. */
   readonly identical: boolean;
-  readonly files: readonly RegeneratedFile[];
+  readonly files: RegeneratedFile[];
 }
 
 /**

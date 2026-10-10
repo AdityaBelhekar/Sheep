@@ -45,6 +45,18 @@ export function getTools(): RenderTools {
   return tools;
 }
 
+export function artifactsStatus(): { available: boolean; detail: string } {
+  try {
+    const { versions } = getTools();
+    return {
+      available: true,
+      detail: `Graphviz ${versions.graphviz} · Tectonic ${versions.tectonic}`,
+    };
+  } catch (error) {
+    return { available: false, detail: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 /** How long a diagram gets to load Mermaid, lay out and print. */
 const MERMAID_TIMEOUT_MS = 60_000;
 
@@ -302,5 +314,29 @@ export async function rerenderArtifact(artifactId: string): Promise<Rerendering>
   return {
     ...regenerateArtifact(store, artifact, rendering.outputs),
     toolchain: { recorded: artifact.toolchain, current: rendering.toolchain },
+  };
+}
+
+/** The most of one blob the renderer is sent. Figures are far smaller. */
+const MAX_BLOB_BYTES = 8 * 1024 * 1024;
+
+export function readArtifactBlob(request: { artifactId: string; hash: string }): {
+  base64: string;
+  bytes: number;
+  truncated: boolean;
+} {
+  const store = getStore();
+  const artifact = getArtifact(store.db, request.artifactId);
+  if (!artifact) throw new Error(`unknown artifact: ${request.artifactId}`);
+
+  const owned = new Set([artifact.sourceHash, ...artifact.outputs.map((output) => output.hash)]);
+  if (!owned.has(request.hash)) {
+    throw new Error(`artifact ${request.artifactId} holds no blob ${request.hash}`);
+  }
+  const bytes = store.blobs.read(request.hash);
+  return {
+    base64: Buffer.from(bytes.subarray(0, MAX_BLOB_BYTES)).toString('base64'),
+    bytes: bytes.byteLength,
+    truncated: bytes.byteLength > MAX_BLOB_BYTES,
   };
 }

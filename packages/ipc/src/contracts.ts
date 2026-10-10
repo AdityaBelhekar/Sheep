@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import {
+  artifactKindSchema,
+  artifactRecordSchema,
+  artifactSourceSchema,
   claimSchema,
   claimTypeSchema,
   disputeSchema,
@@ -91,6 +94,16 @@ const derivationDetailReply = z.object({
   record: derivationRecordSchema,
   derivation: derivationSchema,
   verdict: derivationVerdictSchema,
+});
+
+/**
+ * A session's artifacts, newest first, and which claims rest on each. Returned
+ * by every artifact write as well as the read, so the pane never has to merge
+ * a partial reply into its own copy.
+ */
+const artifactsReply = z.object({
+  artifacts: z.array(artifactRecordSchema),
+  backing: z.array(z.object({ artifactId: idSchema, claimIds: z.array(idSchema) })),
 });
 
 /** One phase of the protocol, as the renderer draws it. */
@@ -531,6 +544,74 @@ export const IPC_CONTRACTS = {
   'sheep:derivation-get': {
     request: z.object({ derivationId: idSchema }),
     response: derivationDetailReply,
+  },
+  /**
+   * Artifacts.
+   *
+   * Whether the bundled renderers are installed. `available: false` is an
+   * answer, not an error, as it is for the Lab: a checkout that has not
+   * fetched the tools opens a pane that says so and how to fix it.
+   */
+  'sheep:artifacts-status': {
+    request: z.object({}),
+    response: z.object({ available: z.boolean(), detail: z.string() }),
+  },
+  'sheep:artifacts-list': {
+    request: z.object({ sessionId: idSchema }),
+    response: artifactsReply,
+  },
+  /**
+   * Render a source and record what came out.
+   *
+   * Answers when the rendering exists and is in the store. A source the tool
+   * cannot read is refused in the tool's own words, and nothing is recorded.
+   * `created` has more than one id only for a script that drew several figures.
+   */
+  'sheep:artifact-create': {
+    request: z.object({
+      sessionId: idSchema,
+      kind: artifactKindSchema,
+      title: titleSchema,
+      source: artifactSourceSchema,
+    }),
+    response: artifactsReply.extend({ created: z.array(idSchema).min(1) }),
+  },
+  /**
+   * One blob an artifact holds: its source or a rendering. Addressed through
+   * the artifact, as an execution's blobs are through the execution.
+   */
+  'sheep:artifact-blob': {
+    request: z.object({ artifactId: idSchema, hash: sha256Schema }),
+    response: z.object({
+      base64: z.string(),
+      bytes: z.number().int().nonnegative(),
+      truncated: z.boolean(),
+    }),
+  },
+  /**
+   * Render an artifact again from its stored source and compare, file by file,
+   * with what was recorded. A file the store had lost is put back when it
+   * comes out the same; one that differs is reported and stored nowhere.
+   */
+  'sheep:artifact-rerender': {
+    request: z.object({ artifactId: idSchema }),
+    response: z.object({
+      identical: z.boolean(),
+      files: z.array(
+        z.object({
+          path: z.string(),
+          recorded: sha256Schema,
+          regenerated: sha256Schema.nullable(),
+          restored: z.boolean(),
+        }),
+      ),
+      toolchain: z.object({ recorded: z.string(), current: z.string() }),
+    }),
+  },
+  /** Attach a figure to a claim as ARTIFACT evidence, through the ledger's rules. */
+  'sheep:artifact-link': {
+    request: z.object({ sessionId: idSchema, artifactId: idSchema, claimId: idSchema }),
+    response: artifactsReply,
   },
   'sheep:chat-send': {
     request: z.object({

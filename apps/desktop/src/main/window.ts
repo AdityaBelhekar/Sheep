@@ -876,6 +876,96 @@ const VERIFICATION_EXPRESSION = `(async () => {
   }
 })()`;
 
+/**
+ * Drives the Artifacts pane as a person would: renders the starter diagram with
+ * the pane's own button, opens a TikZ figure that exists only as a PDF, renders
+ * it again from source, and reads back the claim that cites it.
+ */
+const ARTIFACTS_EXPRESSION = `(async () => {
+  const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const until = async (probe) => {
+    for (let i = 0; i < 300; i += 1) {
+      const found = probe();
+      if (found) return found;
+      await settle(50);
+    }
+    return null;
+  };
+  const click = (element) => element && element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+  try {
+    const created = await window.sheep.invoke('sheep:session-create', {
+      title: 'Artifacts smoke ' + Date.now(),
+      question: 'Can every figure be traced to what made it?',
+    });
+    const sessionId = created.sessionId;
+    const status = await window.sheep.invoke('sheep:artifacts-status', {});
+    const tikz = await window.sheep.invoke('sheep:artifact-create', {
+      sessionId,
+      kind: 'tikz',
+      title: 'Smoke picture',
+      source: String.raw\`\\draw[->] (0,0) -- node[above] {backs} (3,0);\`,
+    });
+    const tikzId = tikz.created[0];
+    const claim = await window.sheep.invoke('sheep:claim-record', {
+      sessionId,
+      claimType: 'CONJECTURE',
+      statement: 'The arrow points from evidence to claim.',
+      support: [{ kind: 'ARTIFACT', ref: tikzId }],
+    });
+    let refused = 'accepted';
+    try {
+      await window.sheep.invoke('sheep:artifact-create', {
+        sessionId, kind: 'graphviz', title: 'Broken', source: 'digraph { a -> }',
+      });
+    } catch (error) {
+      refused = String(error && error.message ? error.message : error);
+    }
+
+    const previous = (await window.sheep.invoke('sheep:settings-read', {})).settings['ui.lastSessionId'];
+    window.__sheepLedgerPrevious = previous;
+    await window.sheep.invoke('sheep:settings-write', { key: 'ui.lastSessionId', value: sessionId });
+    window.location.hash = '#/artifacts';
+
+    const pane = await until(() => document.querySelector('[data-pane="artifacts"][data-sheep-artifacts="1"]'));
+    if (!pane) return { error: 'the pane never listed the artifact' };
+
+    // The pane's own button, on the starter source it opens with.
+    click(pane.querySelector('[data-sheep-artifact-render]'));
+    await until(() => pane.getAttribute('data-sheep-artifacts') === '2');
+    const image = await until(() => {
+      const img = pane.querySelector('[data-sheep-artifact-image]');
+      return img && img.complete && img.naturalWidth > 0 ? img : null;
+    });
+
+    click(pane.querySelector('[data-sheep-artifact="' + tikzId + '"]'));
+    const canvas = await until(() => pane.querySelector('canvas[data-sheep-pdf="drawn"]'));
+    const linked = pane.querySelector('[data-sheep-artifact-claims]');
+    const sourceShown = await until(() => {
+      const shown = pane.querySelector('[data-sheep-artifact-source-shown]');
+      return shown && shown.textContent.includes('draw') ? shown.textContent : null;
+    });
+
+    click(pane.querySelector('[data-sheep-artifact-rerender]'));
+    const verdict = await until(() => pane.querySelector('[data-sheep-artifact-identical]'));
+
+    return {
+      tools: status.available ? status.detail : 'unavailable: ' + status.detail,
+      refused,
+      listed: pane.getAttribute('data-sheep-artifacts'),
+      kinds: [...pane.querySelectorAll('[data-sheep-artifact]')].map((row) => row.getAttribute('data-kind')).join(','),
+      imageWidth: image ? image.naturalWidth : 0,
+      pdfWidth: canvas ? canvas.width : 0,
+      claims: linked ? linked.getAttribute('data-sheep-artifact-claims') : null,
+      claimShown: linked ? linked.textContent.includes(claim.claimId.slice(0, 8)) : false,
+      sourceShown: Boolean(sourceShown),
+      identical: verdict ? verdict.getAttribute('data-sheep-artifact-identical') : null,
+    };
+  } catch (error) {
+    return { error: String(error && error.message ? error.message : error) };
+  }
+})()`;
+
 /** Proves the renderer refuses a channel that is not on the allowlist. */
 const CHANNEL_GUARD_EXPRESSION = `(async () => {
   try {
@@ -947,6 +1037,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
   await checkLab(window);
   await checkVerification(window);
   await checkArtifactRendering();
+  await checkArtifactsPane(window);
   await checkConnections(window);
   await checkLocalModel(window);
   await checkTheme(window);
@@ -1262,6 +1353,55 @@ async function checkArtifactRendering(): Promise<void> {
       error instanceof Error ? error.message : String(error),
     );
   }
+}
+
+async function checkArtifactsPane(window: BrowserWindow): Promise<void> {
+  const result = (await evaluate(window, ARTIFACTS_EXPRESSION)) as
+    | {
+        tools: string;
+        refused: string;
+        listed: string | null;
+        kinds: string;
+        imageWidth: number;
+        pdfWidth: number;
+        claims: string | null;
+        claimShown: boolean;
+        sourceShown: boolean;
+        identical: string | null;
+      }
+    | { error: string }
+    | undefined;
+  await delay(250);
+  await captureScreenshot(window, 'artifacts');
+  await evaluate(window, LEDGER_RESTORE_EXPRESSION);
+
+  if (!result || 'error' in result) {
+    recordSmokeCheck('renderer-artifacts', false, result?.error ?? 'no result');
+    return;
+  }
+
+  const ok =
+    result.refused.includes('syntax error') &&
+    result.listed === '2' &&
+    result.kinds === 'graphviz,tikz' &&
+    result.imageWidth > 0 &&
+    result.pdfWidth > 0 &&
+    result.claims === '1' &&
+    result.claimShown &&
+    result.sourceShown &&
+    result.identical === 'true';
+
+  recordSmokeCheck(
+    'renderer-artifacts',
+    ok,
+    `${result.tools} · unreadable graph refused=${String(
+      result.refused.includes('syntax error'),
+    )} · pane lists ${result.listed ?? 'none'} (${result.kinds}) · rendered from the pane: svg ${String(
+      result.imageWidth,
+    )}px · tikz pdf drawn ${String(result.pdfWidth)}px · source shown=${String(
+      result.sourceShown,
+    )} · claims on figure=${result.claims ?? 'none'} · re-render identical=${result.identical ?? 'none'}`,
+  );
 }
 
 async function checkVerification(window: BrowserWindow): Promise<void> {

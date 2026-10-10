@@ -1510,3 +1510,40 @@ select.field__input {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.artifacts__source {
+  height: 16rem;
+}
+
+.artifacts__preview {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+
+.artifacts__problem {
+  margin: 0;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.artifacts__files {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.artifacts__claim {
+  flex: 1;
+  min-width: 0;
+}
+
+.button[role='tab'][aria-selected='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}

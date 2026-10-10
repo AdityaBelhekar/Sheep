@@ -13,6 +13,7 @@ import {
   type PaneDefinition,
   type PaneId,
 } from '@shared/panes';
+import { ArtifactsPane } from './panes/ArtifactsPane';
 import { ConnectionsPane } from './panes/ConnectionsPane';
 import { ConversationPane } from './panes/ConversationPane';
 import { LabPane } from './panes/LabPane';
@@ -128,12 +129,14 @@ export function App(): ReactElement {
           {paneId === 'verification' && (
             <VerificationPane client={client} onStoreChanged={refreshLog} />
           )}
+          {paneId === 'artifacts' && <ArtifactsPane client={client} onStoreChanged={refreshLog} />}
           {paneId === 'connections' && <ConnectionsPane client={client} />}
           {paneId !== 'sessions' &&
             paneId !== 'conversation' &&
             paneId !== 'ledger' &&
             paneId !== 'lab' &&
             paneId !== 'verification' &&
+            paneId !== 'artifacts' &&
             paneId !== 'connections' && <StubPane paneId={paneId} />}
         </main>
       </div>

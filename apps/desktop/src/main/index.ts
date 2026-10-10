@@ -48,6 +48,7 @@ if (isSmokeRun) {
     'renderer-lab',
     'renderer-verification',
     'artifacts-render',
+    'renderer-artifacts',
     'orchestrator-ready',
     'orchestrator-protocol',
     'stream-cancel',

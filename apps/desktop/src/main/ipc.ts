@@ -31,6 +31,14 @@ import {
   testConnection,
   updateConnection,
 } from './connections';
+import {
+  artifactsStatus,
+  createArtifact,
+  linkArtifact,
+  readArtifactBlob,
+  readArtifacts,
+  rerenderArtifact,
+} from './artifacts';
 import { cancelChat, sendChat } from './chat';
 import { cancelLabRun, labStatus, readExecutionBlob, readExecutions, startLabRun } from './lab';
 import { approveGate, cancelSession, protocolView, runSession } from './orchestrator';
@@ -292,6 +300,21 @@ export function createIpcRegistry(): IpcRegistry {
     .register('sheep:derivation-check', (request) => checkDerivation(request))
     .register('sheep:derivations-list', (request) => readDerivations(request.sessionId))
     .register('sheep:derivation-get', (request) => getDerivationDetail(request.derivationId))
+    .register('sheep:artifacts-status', () => artifactsStatus())
+    .register('sheep:artifacts-list', (request) => readArtifacts(request.sessionId))
+    .register('sheep:artifact-create', async (request) => {
+      const created = await createArtifact(request);
+      return {
+        created: created.map((artifact) => artifact.artifactId),
+        ...readArtifacts(request.sessionId),
+      };
+    })
+    .register('sheep:artifact-blob', (request) => readArtifactBlob(request))
+    .register('sheep:artifact-rerender', (request) => rerenderArtifact(request.artifactId))
+    .register('sheep:artifact-link', (request) => {
+      linkArtifact(request.sessionId, request.artifactId, request.claimId);
+      return readArtifacts(request.sessionId);
+    })
     .register('sheep:chat-cancel', (request) => ({ cancelled: cancelChat(request.runId) }))
     .register('sheep:connections-list', () => readConnections())
     .register('sheep:connection-create', async (request) => {

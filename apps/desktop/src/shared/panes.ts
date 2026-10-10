@@ -68,8 +68,8 @@ export const RESEARCH_PANES = [
     label: 'Artifacts',
     summary: 'Figures, diagrams and files, each traceable to what produced it.',
     detail:
-      'Every artifact keeps its generating source, so deleting a figure and regenerating it yields a byte-identical file. Content-addressed storage is already in place beneath this.',
-    arriving: 'Phases 55 to 59',
+      'Every artifact keeps its generating source, so deleting a figure and regenerating it yields a byte-identical file. Diagrams, TikZ pictures, formulas and sandbox figures are all rendered by pinned tools and stored by content address.',
+    arriving: 'Figures placed in a compiled paper arrive with Stage 10',
   },
   {
     id: 'paper',
