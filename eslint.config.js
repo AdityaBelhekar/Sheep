@@ -12,6 +12,7 @@ export default tseslint.config(
       '**/.vite/**',
       '**/coverage/**',
       'packages/sandbox/runtime/**',
+      'packages/artifacts/tools/**',
     ],
   },
   js.configs.recommended,

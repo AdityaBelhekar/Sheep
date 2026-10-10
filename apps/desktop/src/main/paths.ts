@@ -26,6 +26,13 @@ export function runtimePath(): string {
     : join(import.meta.dirname, '../../../../packages/sandbox/runtime');
 }
 
+/** The bundled rendering tools: Graphviz and Tectonic. Fetched by `npm run fetch-tools`. */
+export function toolsPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'tools')
+    : join(import.meta.dirname, '../../../../packages/artifacts/tools');
+}
+
 /** Absolute path to a file emitted next to the main bundle in `out/`. */
 export function bundlePath(...segments: string[]): string {
   return join(import.meta.dirname, '..', ...segments);

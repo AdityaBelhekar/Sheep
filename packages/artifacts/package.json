@@ -11,6 +11,7 @@
     "./formula": "./src/formula.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "fetch-tools": "node scripts/fetch-tools.mjs"
   }
 }

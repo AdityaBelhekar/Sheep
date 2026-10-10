@@ -47,6 +47,7 @@ if (isSmokeRun) {
     'renderer-chat',
     'renderer-lab',
     'renderer-verification',
+    'artifacts-render',
     'orchestrator-ready',
     'orchestrator-protocol',
     'stream-cancel',

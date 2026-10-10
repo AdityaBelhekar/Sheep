@@ -4,6 +4,15 @@
  */
 export const PACKAGE_NAME = '@sheep/artifacts';
 
+export { renderGraphviz, type RenderedFile, type Rendering } from './graphviz';
+export {
+  devToolsDir,
+  expectedToolsHash,
+  locateTools,
+  RenderError,
+  ToolsUnavailableError,
+  type RenderTools,
+} from './tools';
 export {
   formulaDocument,
   formulaHtml,

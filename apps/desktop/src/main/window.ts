@@ -1,10 +1,11 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { BrowserWindow, nativeImage, nativeTheme, shell } from 'electron';
 import { listSessions } from '@sheep/store';
 import { PANE_IDS } from '../shared/panes';
 import { APP_NAME } from '../shared/product';
+import { createArtifact, renderArtifact } from './artifacts';
 import { createConnection } from './connections';
 import { logInfo, logWarn, redactor } from './log';
 import { bundlePath, resourcePath } from './paths';
@@ -938,6 +939,7 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
   await checkLedger(window);
   await checkLab(window);
   await checkVerification(window);
+  await checkArtifactRendering();
   await checkConnections(window);
   await checkLocalModel(window);
   await checkTheme(window);
@@ -1085,6 +1087,91 @@ async function checkLab(window: BrowserWindow): Promise<void> {
       result.plotWidth,
     )}px`,
   );
+}
+
+const SMOKE_MERMAID = `flowchart LR
+  H[Hypothesis] --> M{Method}
+  M -->|run| E[(Execution)]
+  E --> C[Claim]
+`;
+
+const SMOKE_GRAPH = 'digraph { rankdir=LR; execution -> claim [label="backs"]; }';
+
+/**
+ * Renders a diagram of each kind and proves the two things an artifact is for:
+ * the same source gives the same bytes when asked again, and what is recorded
+ * is in the content-addressed store with its source.
+ *
+ * Mermaid can only be checked here. It is rendered by Chromium, in a window,
+ * and there is neither in the unit tests.
+ */
+async function checkArtifactRendering(): Promise<void> {
+  const digest = (outputs: readonly { data: Uint8Array }[]): string =>
+    outputs.map(({ data }) => createHash('sha256').update(data).digest('hex')).join();
+
+  try {
+    const store = getStore();
+    const [session] = listSessions(store.db);
+    if (!session) throw new Error('no session to record an artifact in');
+
+    const first = await renderArtifact('mermaid', SMOKE_MERMAID);
+    // A PDF stamped with the clock would differ across a second boundary.
+    await delay(1_100);
+    const second = await renderArtifact('mermaid', SMOKE_MERMAID);
+    const repeatable = digest(first.outputs) === digest(second.outputs);
+
+    const mermaid = await createArtifact({
+      sessionId: session.sessionId,
+      kind: 'mermaid',
+      title: 'Smoke flowchart',
+      source: SMOKE_MERMAID,
+    });
+    const graph = await createArtifact({
+      sessionId: session.sessionId,
+      kind: 'graphviz',
+      title: 'Smoke graph',
+      source: SMOKE_GRAPH,
+    });
+    const refused = await renderArtifact('mermaid', 'flowchart LR; A --').then(
+      () => 'rendered',
+      (error: unknown) => (error instanceof Error ? error.name : String(error)),
+    );
+
+    const records = [mermaid, graph];
+    const stored = records.every(
+      (record) =>
+        store.blobs.has(record.sourceHash) &&
+        record.outputs.every((output) => store.blobs.has(output.hash)),
+    );
+    const svg = store.blobs.readText(mermaid.outputs[0]?.hash ?? '');
+    const pdf = store.blobs.read(mermaid.outputs[1]?.hash ?? '');
+    const ok =
+      repeatable &&
+      stored &&
+      refused === 'RenderError' &&
+      svg.includes('Hypothesis') &&
+      !svg.includes('foreignObject') &&
+      Buffer.from(pdf.subarray(0, 5)).toString('latin1') === '%PDF-' &&
+      records.every(
+        (record) => record.outputs.map((o) => o.path).join() === 'diagram.svg,diagram.pdf',
+      );
+
+    recordSmokeCheck(
+      'artifacts-render',
+      ok,
+      `${mermaid.toolchain} · same source same bytes=${String(repeatable)} · svg ${String(
+        mermaid.outputs[0]?.bytes,
+      )}B pdf ${String(mermaid.outputs[1]?.bytes)}B · ${graph.toolchain} · in store=${String(
+        stored,
+      )} · unreadable diagram → ${refused}`,
+    );
+  } catch (error) {
+    recordSmokeCheck(
+      'artifacts-render',
+      false,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 async function checkVerification(window: BrowserWindow): Promise<void> {

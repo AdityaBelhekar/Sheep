@@ -194,6 +194,17 @@ export {
 } from './statistics';
 
 export {
+  ARTIFACT_KINDS,
+  MAX_ARTIFACT_SOURCE_LENGTH,
+  artifactFields,
+  artifactKindSchema,
+  artifactRecordSchema,
+  artifactSourceSchema,
+  type ArtifactKind,
+  type ArtifactRecord,
+} from './artifact';
+
+export {
   EXECUTION_STATUSES,
   executionArtifactSchema,
   executionFields,

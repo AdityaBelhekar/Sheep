@@ -27,6 +27,7 @@ export const CONNECTION_ID_B = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 export const OPTION_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 export const EXECUTION_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 export const DERIVATION_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+export const ARTIFACT_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 /**
  * Everything about a run except which one it was: a clean exit that left one
@@ -215,6 +216,18 @@ export const EVENT_FIXTURES: EventFixtures = {
     derivationId: DERIVATION_ID,
     ...CHECKED_DERIVATION,
     title: 'Perplexity bound under block sparsity',
+  },
+  'artifact.recorded': {
+    sessionId: SESSION_ID,
+    artifactId: ARTIFACT_ID,
+    kind: 'graphviz',
+    title: 'Attention block structure',
+    sourceHash: '50c4'.repeat(16),
+    outputs: [
+      { path: 'diagram.svg', hash: 'd1'.repeat(32), bytes: 2_104 },
+      { path: 'diagram.pdf', hash: 'd2'.repeat(32), bytes: 16_326 },
+    ],
+    toolchain: 'graphviz 16.1.0',
   },
 
   'claim.recorded': {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { artifactFields } from './artifact';
 import { claimStatusSchema, claimTypeSchema, evidenceRefSchema } from './claim';
 import { derivationFields } from './derivation';
 import { executionFields } from './execution';
@@ -220,6 +221,17 @@ export const EVENT_PAYLOADS = {
     ...sessionScope,
     ...derivationFields,
     title: titleSchema.optional(),
+  }),
+  /**
+   * A figure, diagram or formula rendered from its source. The source and
+   * every rendering travel as content addresses, held by this artifact; what
+   * is permanent is the source, since the renderings can be made again from it.
+   */
+  'artifact.recorded': z.strictObject({
+    ...sessionScope,
+    ...artifactFields,
+    /** The run that drew a `matplotlib` figure. */
+    executionId: idSchema.optional(),
   }),
 
   'claim.recorded': z.strictObject({

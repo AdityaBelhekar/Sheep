@@ -32,3 +32,7 @@ Thumbs.db
 # bundled python runtime (fetched by packages/sandbox/scripts/fetch-runtime.mjs)
 packages/sandbox/runtime/
 packages/sandbox/.runtime-cache/
+
+# bundled rendering tools (fetched by packages/artifacts/scripts/fetch-tools.mjs)
+packages/artifacts/tools/
+packages/artifacts/.tools-cache/

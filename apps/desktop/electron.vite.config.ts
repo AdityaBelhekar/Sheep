@@ -54,7 +54,12 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: resolve(here, 'src/renderer/index.html'),
+        // `mermaid` is not a second app: it is the page main loads, unseen, to
+        // have Chromium lay out a diagram.
+        input: {
+          index: resolve(here, 'src/renderer/index.html'),
+          mermaid: resolve(here, 'src/renderer/mermaid.html'),
+        },
       },
     },
     plugins: [react()],
