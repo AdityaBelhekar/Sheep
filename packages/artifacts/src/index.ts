@@ -5,7 +5,14 @@
 export const PACKAGE_NAME = '@sheep/artifacts';
 
 export { renderGraphviz, type RenderedFile, type Rendering } from './graphviz';
-export { compileLatex, renderFormula, renderTikz, tikzDocument } from './latex';
+export {
+  compileLatex,
+  renderFormula,
+  renderTikz,
+  tikzDocument,
+  typeset,
+  type TexFile,
+} from './latex';
 export { matplotlibScript } from './matplotlib';
 export {
   devToolsDir,

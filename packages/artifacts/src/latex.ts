@@ -1,6 +1,17 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import { formulaDocument, formulaProblem } from './formula';
 import type { Rendering } from './graphviz';
 import { RenderError, runTool, toolEnv, type RenderTools } from './tools';
@@ -13,6 +24,11 @@ import { RenderError, runTool, toolEnv, type RenderTools } from './tools';
  * `--only-cached`, since rendering never reaches the network — the packages a
  * figure may use were fetched once, by `npm run fetch-tools`, and a source
  * that wants another is told so.
+ *
+ * Neither flag keeps TeX inside its directory: `\openout` and `\input` take any
+ * path. So the engine also runs at low integrity, where the kernel refuses its
+ * writes anywhere else, and a result that read a file from anywhere else is
+ * thrown away — see `typeset`.
  *
  * The PDF is a function of the source alone: xdvipdfmx stamps it from the
  * fixed `SOURCE_DATE_EPOCH` the tool environment sets rather than the clock.
@@ -35,28 +51,167 @@ function texProblem(log: string): string {
     : said.join('\n');
 }
 
+/** One file of a document: where it goes, relative to the document, and what is in it. */
+export interface TexFile {
+  readonly path: string;
+  readonly data: Uint8Array | string;
+}
+
+const ICACLS = join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'icacls.exe');
+
+/** Labels a path low integrity: a low process may write there, and nowhere unlabelled. */
+function labelLow(path: string, inherit = ''): void {
+  execFileSync(ICACLS, [path, '/setintegritylevel', inherit + 'L'], {
+    windowsHide: true,
+    stdio: 'ignore',
+  });
+}
+
+/**
+ * A copy of Tectonic that Windows starts at low integrity.
+ *
+ * A process started from an executable labelled low runs low, and the kernel
+ * refuses a low process's writes to anything not labelled low itself — which
+ * only the build directory is. A copy, because the installed one has to stay
+ * able to fill its cache when `fetch-tools` runs it.
+ */
+function confinedTectonic(tools: RenderTools): string {
+  const copy = join(tmpdir(), 'sheep-tectonic-' + tools.lockHash.slice(0, 12) + '.exe');
+  if (!existsSync(copy) || statSync(copy).size !== statSync(tools.tectonic).size) {
+    copyFileSync(tools.tectonic, copy);
+  }
+  labelLow(copy);
+  return copy;
+}
+
+/** A path that stays inside the build directory, or an error. */
+function inside(root: string, path: string): string {
+  const target = normalize(join(root, path));
+  if (isAbsolute(path) || !target.startsWith(root + sep)) {
+    throw new Error('not a path inside the document: ' + path);
+  }
+  return target;
+}
+
+const ABSOLUTE_READ = /accessing absolute path `([^`]*)`/;
+
+const refusal = (path: string): RenderError =>
+  new RenderError(
+    'error: the source reads a file outside the document (' + path + '), which is not allowed',
+  );
+
+/** The first file the engine read that is not one of the document's own, if any. */
+function outsideRead(root: string, rules: string): string | undefined {
+  // Makefile rules: the target, a colon, then every input, continued across lines.
+  const inputs = rules
+    .slice(rules.indexOf(':') + 1)
+    .split(/\s+/)
+    .map((input) => input.replace(/\\$/, ''));
+  return inputs.find((input) => {
+    if (input === '') return false;
+    // No file of a document has a colon in its name; `D:notes` is another drive.
+    if (input.includes(':')) return true;
+    try {
+      inside(root, input);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+}
+
+/**
+ * Typesets a document from its files, confined, and returns the PDF and what
+ * the engine remarked on the way.
+ *
+ * Nothing is left behind: the files are written to a directory of their own,
+ * compiled there, and the directory is removed whatever happened. A failure is
+ * a `RenderError` in the engine's own words.
+ *
+ * The engine lists every file it read, under a name the source cannot guess
+ * and so cannot overwrite. If one of them is not the document's own, the PDF
+ * is not returned: whatever was read never reaches an artifact or a paper.
+ *
+ * ponytail: Windows only, like the tools themselves. When they are pinned for
+ * another platform this needs that platform's confinement, not a skip.
+ */
+export async function typeset(
+  tools: RenderTools,
+  files: readonly TexFile[],
+  options: { readonly main: string; readonly timeoutMs: number; readonly signal?: AbortSignal },
+): Promise<{ pdf: Uint8Array; remarks: string }> {
+  const dir = mkdtempSync(join(tmpdir(), 'sheep-tex-'));
+  try {
+    for (const file of files) {
+      const target = inside(dir, file.path);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, file.data);
+    }
+
+    let tectonic: string;
+    try {
+      tectonic = confinedTectonic(tools);
+      labelLow(dir, '(OI)(CI)');
+    } catch (error) {
+      // Running it unconfined is the alternative, and it is not on the table.
+      const why = error instanceof Error ? error.message.split('\n')[0] : String(error);
+      throw new RenderError(
+        'error: the typesetter could not be confined, so it was not run (' + String(why) + ')',
+      );
+    }
+
+    const rules = randomUUID() + '.d';
+    let remarks = '';
+    try {
+      await runTool(tectonic, {
+        args: [
+          '-X',
+          'compile',
+          '--untrusted',
+          '--only-cached',
+          '--makefile-rules',
+          rules,
+          options.main,
+        ],
+        cwd: dir,
+        env: toolEnv({ TECTONIC_CACHE_DIR: tools.texCache }),
+        timeoutMs: options.timeoutMs,
+        onStderr: (text) => {
+          remarks = text;
+        },
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
+    } catch (error) {
+      // What TeX says about a file it could not make sense of quotes the file.
+      const read = error instanceof RenderError ? ABSOLUTE_READ.exec(error.message) : null;
+      if (read) throw refusal(read[1] ?? 'an absolute path');
+      throw error;
+    }
+
+    const read = outsideRead(dir, readFileSync(join(dir, rules), 'utf8'));
+    if (read !== undefined) throw refusal(read);
+    return { pdf: readFileSync(join(dir, options.main.replace(/\.tex$/, '.pdf'))), remarks };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /** Typesets one complete LaTeX document to PDF. */
 export async function compileLatex(
   tools: RenderTools,
   document: string,
   signal?: AbortSignal,
 ): Promise<Uint8Array> {
-  const dir = mkdtempSync(join(tmpdir(), 'sheep-tex-'));
   try {
-    writeFileSync(join(dir, 'figure.tex'), document);
-    await runTool(tools.tectonic, {
-      args: ['-X', 'compile', '--untrusted', '--only-cached', 'figure.tex'],
-      cwd: dir,
-      env: toolEnv({ TECTONIC_CACHE_DIR: tools.texCache }),
+    const { pdf } = await typeset(tools, [{ path: 'figure.tex', data: document }], {
+      main: 'figure.tex',
       timeoutMs: TECTONIC_TIMEOUT_MS,
       ...(signal ? { signal } : {}),
     });
-    return readFileSync(join(dir, 'figure.pdf'));
+    return pdf;
   } catch (error) {
     if (error instanceof RenderError) throw new RenderError(texProblem(error.message));
     throw error;
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
   }
 }
 

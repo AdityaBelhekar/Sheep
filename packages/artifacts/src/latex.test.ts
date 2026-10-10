@@ -1,4 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { renderFormula, renderTikz, tikzDocument } from './latex';
 import { devToolsDir, locateTools, RenderError } from './tools';
@@ -71,6 +74,45 @@ describe('tikz', () => {
         '\\documentclass{article}\\begin{document}\\immediate\\write18{echo x > escaped.txt}\\input{|"echo hi"}\\end{document}',
       ),
     ).rejects.toThrow(RenderError);
+  });
+
+  // The build directory is a child of the temp directory, so `../` is the temp directory.
+  const doc = (body: string): string =>
+    `\\documentclass{article}\\begin{document}${body}\\end{document}`;
+
+  it('cannot write a file outside its own directory', async () => {
+    const name = `sheep-escape-${randomUUID()}.txt`;
+    const target = join(tmpdir(), name);
+    try {
+      await expect(
+        renderTikz(
+          tools,
+          doc(
+            `\\newwrite\\w\\immediate\\openout\\w=../${name} \\immediate\\write\\w{x}\\immediate\\closeout\\w`,
+          ),
+        ),
+      ).rejects.toThrow(RenderError);
+      expect(existsSync(target)).toBe(false);
+    } finally {
+      rmSync(target, { force: true });
+    }
+  });
+
+  it('gives back nothing that read a file outside its own directory', async () => {
+    const name = `sheep-secret-${randomUUID()}.tex`;
+    const target = join(tmpdir(), name);
+    writeFileSync(target, 'a secret');
+    try {
+      // Spelled so that no pattern over the source would see the path.
+      await expect(renderTikz(tools, doc(`\\def\\d{.}\\input{\\d\\d/${name}}`))).rejects.toThrow(
+        /reads a file outside the document/,
+      );
+      await expect(
+        renderTikz(tools, doc(`\\input{${target.replaceAll('\\', '/')}}`)),
+      ).rejects.toThrow(/reads a file outside the document/);
+    } finally {
+      rmSync(target, { force: true });
+    }
   });
 });
 

@@ -1,15 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
-import { RenderError, runTool, toolEnv, type RenderTools } from '@sheep/artifacts';
+import { RenderError, typeset, type RenderTools } from '@sheep/artifacts';
 
 /**
  * The LaTeX engine, driven for whole documents.
  *
  * A paper is several files — the text, its figures, a conference's style file
  * — typeset together by the bundled Tectonic. It runs exactly as it does for a
- * single figure: untrusted, since most of what it reads was written by models,
- * and against its cache alone, since compiling a paper is not a reason to
+ * single figure: untrusted and confined to the document's own directory, since
+ * most of what it reads was written by models, and against its cache alone, since compiling a paper is not a reason to
  * reach the network. It reruns itself until references settle, so one call is
  * one finished PDF.
  *
@@ -118,15 +115,6 @@ export function parseProblems(output: string): LatexProblem[] {
   return problems;
 }
 
-/** A path that stays inside the build directory, or an error. */
-function inside(root: string, path: string): string {
-  const target = normalize(join(root, path));
-  if (isAbsolute(path) || !target.startsWith(root + sep)) {
-    throw new Error(`not a path inside the document: ${path}`);
-  }
-  return target;
-}
-
 /**
  * Typesets a document from its files and returns the PDF.
  *
@@ -143,47 +131,29 @@ export async function compileLatex(
     throw new Error(`the document has no ${main}`);
   }
 
-  const dir = mkdtempSync(join(tmpdir(), 'sheep-paper-'));
   try {
-    for (const file of files) {
-      const target = inside(dir, file.path);
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, file.data);
-    }
-
-    let remarks = '';
-    try {
-      await runTool(tools.tectonic, {
-        args: ['-X', 'compile', '--untrusted', '--only-cached', main],
-        cwd: dir,
-        env: toolEnv({ TECTONIC_CACHE_DIR: tools.texCache }),
-        timeoutMs: TIMEOUT_MS,
-        onStderr: (text) => {
-          remarks = text;
-        },
-        ...(options.signal ? { signal: options.signal } : {}),
-      });
-    } catch (error) {
-      if (!(error instanceof RenderError)) throw error;
-      const problems = parseProblems(error.message);
-      throw new LatexError(
-        problems.some((problem) => problem.severity === 'error')
-          ? problems
-          : [
-              ...problems,
-              { severity: 'error', file: null, line: null, message: error.message.slice(-2_000) },
-            ],
-        error.message,
-      );
-    }
-
+    const { pdf, remarks } = await typeset(tools, files, {
+      main,
+      timeoutMs: TIMEOUT_MS,
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
     return {
-      pdf: readFileSync(join(dir, main.replace(/\.tex$/, '.pdf'))),
+      pdf,
       warnings: parseProblems(remarks)
         .filter((problem) => problem.severity === 'warning')
         .slice(0, MAX_WARNINGS),
     };
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
+  } catch (error) {
+    if (!(error instanceof RenderError)) throw error;
+    const problems = parseProblems(error.message);
+    throw new LatexError(
+      problems.some((problem) => problem.severity === 'error')
+        ? problems
+        : [
+            ...problems,
+            { severity: 'error', file: null, line: null, message: error.message.slice(-2_000) },
+          ],
+      error.message,
+    );
   }
 }
