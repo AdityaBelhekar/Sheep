@@ -1097,10 +1097,23 @@ const SMOKE_MERMAID = `flowchart LR
 
 const SMOKE_GRAPH = 'digraph { rankdir=LR; execution -> claim [label="backs"]; }';
 
+const SMOKE_TIKZ = String.raw`\node[draw] (a) {Claim};
+\node[draw, right=of a] (b) {Evidence};
+\draw[-{Stealth}] (b) -- (a);`;
+
+const SMOKE_FORMULA = String.raw`W = \frac{m v^{2}}{2}`;
+
+const SMOKE_PLOT = [
+  'import numpy as np',
+  'import matplotlib.pyplot as plt',
+  'plt.plot(np.cumsum(np.random.default_rng().normal(size=50)))',
+  'plt.title("Smoke walk")',
+].join('\n');
+
 /**
- * Renders a diagram of each kind and proves the two things an artifact is for:
- * the same source gives the same bytes when asked again, and what is recorded
- * is in the content-addressed store with its source.
+ * Renders one artifact of every kind and proves the two things an artifact is
+ * for: the same source gives the same bytes when asked again, and what is
+ * recorded is in the content-addressed store with its source.
  *
  * Mermaid can only be checked here. It is rendered by Chromium, in a window,
  * and there is neither in the unit tests.
@@ -1113,6 +1126,7 @@ async function checkArtifactRendering(): Promise<void> {
     const store = getStore();
     const [session] = listSessions(store.db);
     if (!session) throw new Error('no session to record an artifact in');
+    const { sessionId } = session;
 
     const first = await renderArtifact('mermaid', SMOKE_MERMAID);
     // A PDF stamped with the clock would differ across a second boundary.
@@ -1120,50 +1134,68 @@ async function checkArtifactRendering(): Promise<void> {
     const second = await renderArtifact('mermaid', SMOKE_MERMAID);
     const repeatable = digest(first.outputs) === digest(second.outputs);
 
-    const mermaid = await createArtifact({
-      sessionId: session.sessionId,
-      kind: 'mermaid',
-      title: 'Smoke flowchart',
-      source: SMOKE_MERMAID,
-    });
-    const graph = await createArtifact({
-      sessionId: session.sessionId,
-      kind: 'graphviz',
-      title: 'Smoke graph',
-      source: SMOKE_GRAPH,
-    });
+    const records = [
+      ...(await createArtifact({
+        sessionId,
+        kind: 'mermaid',
+        title: 'Smoke flowchart',
+        source: SMOKE_MERMAID,
+      })),
+      ...(await createArtifact({
+        sessionId,
+        kind: 'graphviz',
+        title: 'Smoke graph',
+        source: SMOKE_GRAPH,
+      })),
+      ...(await createArtifact({
+        sessionId,
+        kind: 'tikz',
+        title: 'Smoke picture',
+        source: SMOKE_TIKZ,
+      })),
+      ...(await createArtifact({
+        sessionId,
+        kind: 'formula',
+        title: 'Kinetic energy',
+        source: SMOKE_FORMULA,
+      })),
+      ...(await createArtifact({
+        sessionId,
+        kind: 'matplotlib',
+        title: 'Smoke walk',
+        source: SMOKE_PLOT,
+      })),
+    ];
     const refused = await renderArtifact('mermaid', 'flowchart LR; A --').then(
       () => 'rendered',
       (error: unknown) => (error instanceof Error ? error.name : String(error)),
     );
 
-    const records = [mermaid, graph];
     const stored = records.every(
       (record) =>
         store.blobs.has(record.sourceHash) &&
         record.outputs.every((output) => store.blobs.has(output.hash)),
     );
-    const svg = store.blobs.readText(mermaid.outputs[0]?.hash ?? '');
-    const pdf = store.blobs.read(mermaid.outputs[1]?.hash ?? '');
+    const shape = records
+      .map((record) => `${record.kind}:${record.outputs.map((o) => o.path).join('+')}`)
+      .join(' ');
+    const mermaid = records[0];
+    const figure = records.at(-1);
+    const svg = mermaid ? store.blobs.readText(mermaid.outputs[0]?.hash ?? '') : '';
     const ok =
       repeatable &&
       stored &&
       refused === 'RenderError' &&
       svg.includes('Hypothesis') &&
       !svg.includes('foreignObject') &&
-      Buffer.from(pdf.subarray(0, 5)).toString('latin1') === '%PDF-' &&
-      records.every(
-        (record) => record.outputs.map((o) => o.path).join() === 'diagram.svg,diagram.pdf',
-      );
+      figure?.executionId != null &&
+      shape ===
+        'mermaid:diagram.svg+diagram.pdf graphviz:diagram.svg+diagram.pdf tikz:figure.pdf formula:formula.pdf matplotlib:figure-1.svg+figure-1.pdf';
 
     recordSmokeCheck(
       'artifacts-render',
       ok,
-      `${mermaid.toolchain} · same source same bytes=${String(repeatable)} · svg ${String(
-        mermaid.outputs[0]?.bytes,
-      )}B pdf ${String(mermaid.outputs[1]?.bytes)}B · ${graph.toolchain} · in store=${String(
-        stored,
-      )} · unreadable diagram → ${refused}`,
+      `${mermaid?.toolchain ?? '?'} · same source same bytes=${String(repeatable)} · ${shape} · figure backed by a run=${String(figure?.executionId != null)} · in store=${String(stored)} · unreadable diagram → ${refused}`,
     );
   } catch (error) {
     recordSmokeCheck(

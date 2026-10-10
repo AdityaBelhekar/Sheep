@@ -15,6 +15,7 @@ import {
   listExecutions,
   readLedger,
   recordExecution,
+  recordFigures,
 } from '@sheep/store';
 import { logError } from './log';
 import { runtimePath } from './paths';
@@ -144,6 +145,8 @@ async function drive(
     flush();
     try {
       const execution = await recordExecution(getStore(), request.sessionId, request.code, result);
+      // Any figure the script saved is an artifact from here on, traceable to this run.
+      recordFigures(getStore(), execution);
       send({ runId, kind: 'end', execution, detail: result.detail ?? null });
     } finally {
       result.dispose();

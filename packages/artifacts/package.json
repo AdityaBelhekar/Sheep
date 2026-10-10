@@ -10,6 +10,12 @@
     ".": "./src/index.ts",
     "./formula": "./src/formula.ts"
   },
+  "dependencies": {
+    "katex": "^0.19.0"
+  },
+  "devDependencies": {
+    "@sheep/sandbox": "*"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "fetch-tools": "node scripts/fetch-tools.mjs"

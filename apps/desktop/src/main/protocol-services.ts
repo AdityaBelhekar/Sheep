@@ -17,6 +17,7 @@ import {
   readDerivation,
   recordDerivation,
   recordExecution,
+  recordFigures,
   type SheepStore,
 } from '@sheep/store';
 import { Verifier } from '@sheep/verify';
@@ -126,6 +127,8 @@ export function createProtocolServices(deps: ProtocolServiceDeps): ProtocolServi
       });
       try {
         const execution = await recordExecution(store, sessionId, request.code, result);
+        // A figure the protocol's own run saved is an artifact like any other.
+        recordFigures(store, execution);
         return { execution, stdout: result.stdout, stderr: result.stderr };
       } finally {
         result.dispose();

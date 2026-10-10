@@ -2,14 +2,18 @@ import { randomUUID } from 'node:crypto';
 import { BrowserWindow } from 'electron';
 import {
   locateTools,
+  matplotlibScript,
   RenderError,
+  renderFormula,
   renderGraphviz,
+  renderTikz,
   type RenderTools,
   type Rendering,
 } from '@sheep/artifacts';
 import type { ArtifactKind, ArtifactRecord } from '@sheep/core';
-import { getSession, recordArtifact } from '@sheep/store';
+import { getSession, recordArtifact, recordExecution, recordFigures } from '@sheep/store';
 import type { MermaidPageReply } from '../shared/mermaid';
+import { getSandbox } from './lab';
 import { bundlePath, toolsPath } from './paths';
 import { getStore } from './store';
 
@@ -106,36 +110,86 @@ export async function renderMermaid(source: string): Promise<Rendering> {
   }
 }
 
-/** A source of the given kind, rendered. Throws `RenderError` in the tool's own words. */
-export async function renderArtifact(kind: ArtifactKind, source: string): Promise<Rendering> {
+/**
+ * A source rendered by a tool. Throws `RenderError` in the tool's own words.
+ *
+ * Every kind but `matplotlib`: a figure from the sandbox is not rendered from
+ * its source by anything here, it is drawn by a run, and a run is recorded.
+ */
+export async function renderArtifact(
+  kind: Exclude<ArtifactKind, 'matplotlib'>,
+  source: string,
+): Promise<Rendering> {
   switch (kind) {
+    case 'formula':
+      return renderFormula(getTools(), source);
     case 'graphviz':
       return renderGraphviz(getTools(), source);
     case 'mermaid':
       return renderMermaid(source);
-    default:
-      throw new RenderError(`no renderer for ${kind}`);
+    case 'tikz':
+      return renderTikz(getTools(), source);
   }
 }
 
-/** Renders a source and records the result as an artifact of the session. */
-export async function createArtifact(request: {
+export interface ArtifactRequest {
   readonly sessionId: string;
   readonly kind: ArtifactKind;
   readonly title: string;
   readonly source: string;
-}): Promise<ArtifactRecord> {
+}
+
+/** How much of a traceback is worth showing: the end, where the error is. */
+const TRACEBACK_LINES = 12;
+
+/**
+ * Runs a plotting script in the sandbox and records what it drew.
+ *
+ * The run is recorded first and whatever happened to it, as every run is; the
+ * figures are then recorded against it. So a figure made here can back an
+ * `EMPIRICAL` claim like any other result — there is an execution behind it.
+ */
+async function drawFigures(request: ArtifactRequest): Promise<ArtifactRecord[]> {
+  const store = getStore();
+  const code = matplotlibScript(request.source);
+  const run = await getSandbox().run({ code });
+  try {
+    const execution = await recordExecution(store, request.sessionId, code, run);
+    if (execution.status !== 'ok') {
+      const traceback = run.stderr.trim().split('\n').slice(-TRACEBACK_LINES).join('\n');
+      throw new RenderError(traceback || run.detail || `the script ended as ${run.status}`);
+    }
+    const figures = recordFigures(store, execution, (stem) =>
+      stem === 'figure-1' ? request.title : `${request.title} · ${stem}`,
+    );
+    if (figures.length === 0) throw new RenderError('the script ran, but drew no figure');
+    return figures;
+  } finally {
+    run.dispose();
+  }
+}
+
+/**
+ * Renders a source and records the result as an artifact of the session.
+ *
+ * More than one comes back only for a script that drew more than one figure.
+ */
+export async function createArtifact(request: ArtifactRequest): Promise<ArtifactRecord[]> {
   const store = getStore();
   if (!getSession(store.db, request.sessionId)) {
     throw new Error(`unknown session: ${request.sessionId}`);
   }
+  if (request.kind === 'matplotlib') return drawFigures(request);
+
   const rendering = await renderArtifact(request.kind, request.source);
-  return recordArtifact(store, request.sessionId, {
-    artifactId: randomUUID(),
-    kind: request.kind,
-    title: request.title,
-    source: request.source,
-    outputs: rendering.outputs,
-    toolchain: rendering.toolchain,
-  });
+  return [
+    recordArtifact(store, request.sessionId, {
+      artifactId: randomUUID(),
+      kind: request.kind,
+      title: request.title,
+      source: request.source,
+      outputs: rendering.outputs,
+      toolchain: rendering.toolchain,
+    }),
+  ];
 }

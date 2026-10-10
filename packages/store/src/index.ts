@@ -87,7 +87,7 @@ export { SettingsStore } from './settings';
 export { enforceLedger, readLedger } from './ledger';
 export { executionBlobRef, recordExecution, type FinishedRun } from './executions';
 export { derivationBlobRef, readDerivation, recordDerivation } from './derivations';
-export { artifactBlobRef, recordArtifact, type RenderedArtifact } from './artifacts';
+export { artifactBlobRef, recordArtifact, recordFigures, type RenderedArtifact } from './artifacts';
 export {
   ARTIFACTS_DDL,
   ARTIFACTS_PROJECTION,
