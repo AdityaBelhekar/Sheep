@@ -287,7 +287,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
 
 ## Stage 11 — Retrieval, quarantined `Phases 66–69`
 
-- [ ] **66. Literature clients** — arXiv, Semantic Scholar, Crossref with retrieval records and snapshots. → `feat(retrieval): arxiv, semantic scholar and crossref clients`
+- [x] **66. Literature clients** — arXiv, Semantic Scholar, Crossref with retrieval records and snapshots. → `feat(retrieval): arxiv, semantic scholar and crossref clients`
 - [ ] **67. Quarantine + injection guard** — retrieved text is delimited, marked untrusted, and never interpreted as instructions. → `feat(retrieval): source quarantine and prompt injection guard`
 - [ ] **68. Vector index** — `sqlite-vec` for dedupe, clustering, and semantic search over the session corpus. → `feat(retrieval): vector index over session corpus`
 - [ ] **69. CITED rules + citation UI** — enforce that cited claims support but never alone establish a conclusion. **(P2)** → `feat(core): cited claim enforcement and citation ui`

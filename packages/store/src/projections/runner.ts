@@ -4,6 +4,7 @@ import type { SqliteDatabase } from '../sqlite/types';
 import { ARTIFACTS_PROJECTION } from './artifacts';
 import { DERIVATIONS_PROJECTION } from './derivations';
 import { EXECUTIONS_PROJECTION } from './executions';
+import { RETRIEVALS_PROJECTION } from './retrievals';
 import { SESSIONS_PROJECTION } from './sessions';
 import type { Projection, ProjectionFailure, ProjectionReport, ProjectionStatus } from './types';
 
@@ -13,6 +14,7 @@ export const PROJECTIONS: readonly Projection[] = [
   EXECUTIONS_PROJECTION,
   DERIVATIONS_PROJECTION,
   ARTIFACTS_PROJECTION,
+  RETRIEVALS_PROJECTION,
 ];
 
 export interface ProjectionRunnerOptions {

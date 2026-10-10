@@ -205,6 +205,21 @@ export {
 } from './artifact';
 
 export {
+  MAX_ABSTRACT_LENGTH,
+  RETRIEVAL_PROVIDERS,
+  formatCitation,
+  retrievalFields,
+  retrievalProviderSchema,
+  retrievalRecordSchema,
+  sourceRecordSchema,
+  sourceSchema,
+  type RetrievalProvider,
+  type RetrievalRecord,
+  type Source,
+  type SourceRecord,
+} from './retrieval';
+
+export {
   EXECUTION_STATUSES,
   executionArtifactSchema,
   executionFields,

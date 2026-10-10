@@ -28,6 +28,8 @@ export const OPTION_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 export const EXECUTION_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 export const DERIVATION_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 export const ARTIFACT_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+export const RETRIEVAL_ID = 'abababab-abab-4bab-8bab-abababababab';
+export const SOURCE_ID = 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd';
 
 /**
  * Everything about a run except which one it was: a clean exit that left one
@@ -216,6 +218,30 @@ export const EVENT_FIXTURES: EventFixtures = {
     derivationId: DERIVATION_ID,
     ...CHECKED_DERIVATION,
     title: 'Perplexity bound under block sparsity',
+  },
+  'retrieval.recorded': {
+    sessionId: SESSION_ID,
+    retrievalId: RETRIEVAL_ID,
+    provider: 'arxiv',
+    query: 'block sparse attention',
+    requestUrl:
+      'https://export.arxiv.org/api/query?search_query=all%3Ablock+sparse+attention&start=0&max_results=8',
+    snapshotHash: '5a9c'.repeat(16),
+    sources: [
+      {
+        sourceId: SOURCE_ID,
+        provider: 'arxiv',
+        externalId: '1706.03762v7',
+        title: 'Attention Is All You Need',
+        authors: ['Ashish Vaswani', 'Noam Shazeer', 'Niki Parmar'],
+        year: 2017,
+        venue: 'arXiv',
+        doi: null,
+        url: 'https://arxiv.org/abs/1706.03762v7',
+        abstract: 'The dominant sequence transduction models are based on recurrent networks.',
+        flags: [],
+      },
+    ],
   },
   'artifact.recorded': {
     sessionId: SESSION_ID,

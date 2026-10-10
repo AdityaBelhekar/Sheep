@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/uZ6T8Qwnos1r63Y8aSLE+b3F8wc</id>
+  <title>arXiv Query: search_query=all:"monte carlo" AND all:"estimation of pi"&amp;id_list=&amp;start=0&amp;max_results=3</title>
+  <updated>2026-10-10T10:44:14Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=all:%22monte+carlo%22+AND+all:%22estimation+of+pi%22&amp;start=0&amp;max_results=3&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>3</opensearch:itemsPerPage>
+  <opensearch:totalResults>1</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2008.02623v2</id>
+    <title>Quantum circuit to estimate pi using quantum amplitude estimation</title>
+    <updated>2020-10-21T00:51:53Z</updated>
+    <link href="https://arxiv.org/abs/2008.02623v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2008.02623v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>This study presents a quantum circuit for estimating the pi value using arithmetic circuits and by quantum amplitude estimation. We review two types of quantum multipliers and propose quantum squaring circuits based on the multiplier as basic arithmetic circuits required for performing quantum computations. The squarer realized by a quantum adder with the gate size of $ O(n) $ requires $ O(n^2) $ gates and at least one ancillary qubits, while that realized by using quantum Fourier transform (QFT) requires $ O(n^3) $ gates without ancillary qubit. The proposed quantum circuit to estimate pi is based on the Monte Carlo method, quantum amplitude estimation, and quantum squarer. By applying the quantum squarer using QFT, the circuit was implemented in $ 4n + 1 $ qubits at $ 2^{2n} $ sampling. The proposed method was demonstrated using a quantum computer simulator with $ n $ being varied from 2 to 6, and the obtained result was compared with the one obtained by performing a classical calculation.</summary>
+    <category term="quant-ph" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2020-08-04T05:04:57Z</published>
+    <arxiv:comment>15 pages, 10 figures. Section 1, 2 and figures have been revised. Reference has been added</arxiv:comment>
+    <arxiv:primary_category term="quant-ph"/>
+    <author>
+      <name>Takuma Noto</name>
+    </author>
+  </entry>
+</feed>

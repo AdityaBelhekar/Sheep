@@ -14,3 +14,4 @@ packages/sandbox/.runtime-cache/
 packages/sandbox/runtime.lock.json
 packages/artifacts/tools/
 packages/artifacts/.tools-cache/
+packages/retrieval/fixtures/

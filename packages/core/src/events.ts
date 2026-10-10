@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { artifactFields } from './artifact';
+import { retrievalFields } from './retrieval';
 import { claimStatusSchema, claimTypeSchema, evidenceRefSchema } from './claim';
 import { derivationFields } from './derivation';
 import { executionFields } from './execution';
@@ -233,6 +234,14 @@ export const EVENT_PAYLOADS = {
     /** The run that drew a `matplotlib` figure. */
     executionId: idSchema.optional(),
   }),
+
+  /**
+   * A literature search Sheep made, and every source that came back — what a
+   * `CITED` claim must point into (P2). The provider's raw response is in the
+   * blob store, held by this retrieval; the sources are what was read out of
+   * it, as untrusted text.
+   */
+  'retrieval.recorded': z.strictObject({ ...sessionScope, ...retrievalFields }),
 
   'claim.recorded': z.strictObject({
     ...sessionScope,

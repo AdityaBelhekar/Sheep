@@ -103,6 +103,14 @@ export {
   getArtifact,
   listArtifacts,
 } from './projections/artifacts';
+export { recordRetrieval, retrievalBlobRef, type FinishedRetrieval } from './retrievals';
+export {
+  RETRIEVALS_DDL,
+  RETRIEVALS_PROJECTION,
+  getSource,
+  listRetrievals,
+  listSources,
+} from './projections/retrievals';
 export {
   DERIVATIONS_DDL,
   DERIVATIONS_PROJECTION,

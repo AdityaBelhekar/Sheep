@@ -7,6 +7,7 @@ import { EventLog } from '../events/log';
 import { ARTIFACTS_PROJECTION } from './artifacts';
 import { DERIVATIONS_PROJECTION } from './derivations';
 import { EXECUTIONS_PROJECTION } from './executions';
+import { RETRIEVALS_PROJECTION } from './retrievals';
 import type { JsonValue } from '../events/json';
 import { MIGRATIONS } from '../migrations/definitions';
 import { runMigrations } from '../migrations/runner';
@@ -131,6 +132,13 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
           name: 'artifacts',
           lastSeq: 0,
           ddlVersion: ARTIFACTS_PROJECTION.ddlVersion,
+          behind: 0,
+          ready: true,
+        },
+        {
+          name: 'retrievals',
+          lastSeq: 0,
+          ddlVersion: RETRIEVALS_PROJECTION.ddlVersion,
           behind: 0,
           ready: true,
         },

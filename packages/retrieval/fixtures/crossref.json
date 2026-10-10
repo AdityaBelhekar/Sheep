@@ -1,0 +1,101 @@
+{
+  "status": "ok",
+  "message-type": "work-list",
+  "message-version": "1.0.0",
+  "message": {
+    "facets": {},
+    "total-results": 308791,
+    "items": [
+      {
+        "DOI": "10.2337\/db26-1882-p",
+        "title": [
+          "1882-P: Attention Is All You Need: Temporal Transformer-Based Personalization of Insulin Delivery Parameters from CGM and Pump Data"
+        ],
+        "author": [
+          {
+            "given": "SAM",
+            "family": "GLASSENBERG",
+            "sequence": "first",
+            "affiliation": [{ "name": "Chicago, IL" }],
+            "role": [{ "vocabulary": "crossref", "role": "author" }]
+          }
+        ],
+        "issued": { "date-parts": [[2026, 6, 5]] },
+        "container-title": ["Diabetes"],
+        "abstract": "<jats:p>Introduction and Objective: While Transformer architectures have revolutionized language processing, their application to physiological time-series remains underexplored. This pilot study investigates whether a Temporal Fusion Transformer (TFT) can autonomously extract personalized, invariant insulin sensitivity factors (ISF) and insulin-to-carbohydrate ratios (ICR) from Type 1 Diabetes (T1D) data without explicit physiological constraints or hand-tuned heuristics.<\/jats:p>\n                  <jats:p>Methods: We trained a TFT model on 2-4 years of retrospective Nightscout data (continuous glucose monitor, insulin, and carbohydrate records) from a pilot T1D subject. To interrogate the physiological relationships learned by the model, we implemented a synthetic validation pipeline, injecting synthetic insulin and carbohydrate impulses onto stable baselines at varying noise levels to measure predicted glucose excursions and reverse-engineer physiological parameters. We then evaluated this approach in a cohort of 5 additional T1D subjects (3 pediatric, 2 adult) to assess generalization.<\/jats:p>\n                  <jats:p>Results: For the pilot subject, the model converged on robust invariant values (ISF 92.8 \u00b1 2.1 mg\/dL\/U; ICR 6.41 \u00b1 0.15 g\/U) once training noise exceeded a critical threshold (\u22656.0). Low-noise baselines systematically underestimated sensitivity. In the 5-subject validation cohort, convergence was achieved for all individuals, with high parameter stability (mean variance 5.8% \u00b1 3.9%). Extracted parameters differed substantially between subjects (e.g., ISF range 38.6-122.2 mg\/dL\/U), indicating subject-specific physiological learning rather than population averaging.<\/jats:p>\n                  <jats:p>Conclusion: Transformer-based attention mechanisms can learn individualized glucose-insulin dynamics directly from routine CGM and pump data. Synthetic probing of trained models enables stable extraction of personalized insulin delivery parameters, suggesting a pathway toward fully automated, data-driven pump setting personalization beyond static heuristic approaches.<\/jats:p>\n                  <jats:sec>\n                    <jats:title>Disclosure<\/jats:title>\n                    <jats:p>S. Glassenberg: Employee; Current; Relevate Health.<\/jats:p>\n                  <\/jats:sec>",
+        "URL": "https:\/\/doi.org\/10.2337\/db26-1882-p",
+        "type": "journal-article"
+      },
+      {
+        "DOI": "10.3390\/rel15091059",
+        "title": [
+          "Attention (to Virtuosity) Is All You Need: Religious Studies Pedagogy and Generative AI"
+        ],
+        "author": [
+          {
+            "given": "Jonathan",
+            "family": "Barlow",
+            "sequence": "first",
+            "affiliation": [
+              {
+                "name": "Data Science Academic Institute, Mississippi State University, Mississippi State, MS 39759, USA"
+              }
+            ],
+            "role": [{ "vocabulary": "crossref", "role": "author" }]
+          },
+          {
+            "given": "Lynn",
+            "family": "Holt",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "Department of Philosophy and Religion, Mississippi State University, Mississippi State, MS 39759, USA"
+              }
+            ],
+            "role": [{ "vocabulary": "crossref", "role": "author" }]
+          }
+        ],
+        "issued": { "date-parts": [[2024, 8, 30]] },
+        "container-title": ["Religions"],
+        "abstract": "<jats:p>The launch of ChatGPT in November of 2022 provides the rare opportunity to consider both what artificial intelligence (AI) is and what human experts are. In the spirit of making the most of this opportunity, we invite the reader to follow a suggestive series of \u201cwhat if\u201d questions that lead to a plausible settlement in which the human expert and the generative AI system collaborate pedagogically to shape the (human) religious studies student. (1) What if, contrary to the Baconian frame, humans reason primarily by exercising intellectual virtuosity, and only secondarily by means of rules-based inference? (2) What if, even though we train AI models on human-generated data by means of rules-based algorithms, the resulting systems demonstrate the potential for exercising intellectual virtuosity? (3) What if, by deprioritizing mechanistic and algorithmic models of human cognition while being open to the possibility that AI represents a different species of cognition, we open a future in which human and AI virtuosos mutually inspire, enrich, and even catechize one another?<\/jats:p>",
+        "URL": "https:\/\/doi.org\/10.3390\/rel15091059",
+        "type": "journal-article"
+      },
+      {
+        "DOI": "10.1111\/exsy.13317",
+        "title": ["Is attention all you need for intraday Forex trading?"],
+        "author": [
+          {
+            "ORCID": "https:\/\/orcid.org\/0000-0001-8803-7614",
+            "authenticated-orcid": false,
+            "given": "Przemys\u0142aw",
+            "family": "Gr\u0105dzki",
+            "sequence": "first",
+            "affiliation": [
+              { "name": "Faculty of Economic Sciences University of Warsaw  Warsaw Poland" }
+            ],
+            "role": [{ "vocabulary": "crossref", "role": "author" }]
+          },
+          {
+            "ORCID": "https:\/\/orcid.org\/0000-0003-1853-8784",
+            "authenticated-orcid": false,
+            "given": "Piotr",
+            "family": "W\u00f3jcik",
+            "sequence": "additional",
+            "affiliation": [
+              { "name": "Faculty of Economic Sciences University of Warsaw  Warsaw Poland" }
+            ],
+            "role": [{ "vocabulary": "crossref", "role": "author" }]
+          }
+        ],
+        "issued": { "date-parts": [[2023, 4, 25]] },
+        "container-title": ["Expert Systems"],
+        "abstract": "<jats:title>Abstract<\/jats:title><jats:p>The main objective of this paper is to analyse whether the Transformer neural network, which has become one of the most influential algorithms in Artificial Intelligence over the last few years, exhibits predictive capabilities for high\u2010frequency Forex data. The prediction task is to classify short\u2010term Forex movements for six currency pairs and five different time intervals from 60 to 720\u2009min. We find that the Transformer exhibits high predictive power in the context of intraday Forex trading. This performance is slightly better than for the carefully selected benchmark \u2013 ResNet\u2010LSTM, which currently is a state\u2010of\u2010the\u2010art algorithm. Since intraday Forex trading based on deep learning models is largely unexplored, we offer insight on which currency pair and time interval are amenable to devising a profitable trading strategy. We also show that high predictive accuracy can be misleading in real world trading for short time intervals, as models trained on OHLC data tend to report the highest accuracy when the spread cost is the highest. This renders assessment based on typical machine learning metrics overly optimistic. Therefore, it is critical to backtest frequent intraday Forex trading strategies with realistic cost assumptions, which is rarely the case in empirical literature. Lastly, sensitivity analysis shows that the length of the time interval used for training does not play a critical role in the Transformer's predictive capabilities, whereas features derived from technical analysis are essential.<\/jats:p>",
+        "URL": "https:\/\/doi.org\/10.1111\/exsy.13317",
+        "type": "journal-article"
+      }
+    ],
+    "items-per-page": 3,
+    "query": { "start-index": 0, "search-terms": "attention is all you need transformer" }
+  }
+}
