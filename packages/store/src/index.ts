@@ -89,6 +89,7 @@ export { executionBlobRef, recordExecution, type FinishedRun } from './execution
 export { derivationBlobRef, readDerivation, recordDerivation } from './derivations';
 export {
   artifactBlobRef,
+  claimsOnArtifacts,
   recordArtifact,
   recordFigures,
   regenerateArtifact,

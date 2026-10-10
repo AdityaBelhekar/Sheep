@@ -13,3 +13,15 @@ export {
   type LatexProblem,
   type PaperFile,
 } from './compile';
+export {
+  buildDocument,
+  figuresIn,
+  labelsIn,
+  sentencesOf,
+  type Block,
+  type Fact,
+  type PaperDocument,
+  type PaperSource,
+  type Section,
+  type Sentence,
+} from './ir';

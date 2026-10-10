@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { devToolsDir, locateTools, matplotlibScript, renderGraphviz } from '@sheep/artifacts';
 import { domainEvent, PHASE_KINDS, type Claim } from '@sheep/core';
 import {
   Orchestrator,
@@ -12,6 +13,7 @@ import {
   type TurnRequest,
 } from '@sheep/orchestrator';
 import { framingReply, hypothesisReply, scoringReply } from '@sheep/orchestrator/test-support';
+import { buildDocument, type Block, type PaperDocument } from '@sheep/paper';
 import { devRuntimeDir, locateRuntime, Sandbox } from '@sheep/sandbox';
 import {
   getSession,
@@ -20,8 +22,12 @@ import {
   listParticipants,
   openSheepStore,
   readLedger,
+  recordArtifact,
+  recordExecution,
+  recordFigures,
   type SheepStore,
 } from '@sheep/store';
+import { readPaperSource } from '../src/main/paper-source';
 import { createProtocolServices } from '../src/main/protocol-services';
 
 /**
@@ -487,5 +493,192 @@ describe('a full seven-phase session against mock models', () => {
         expect(resolution.evidence).toEqual([dispute.test!.evidence]);
       }
     }
+  });
+
+  /**
+   * The paper, compiled from that session and from nothing else.
+   *
+   * Two figures are added first, the two ways a figure comes to rest on a
+   * claim: a diagram cited as evidence by a finding, and a plot drawn by a
+   * sandbox run that a new claim is backed by.
+   */
+  describe('the paper compiled from that session', () => {
+    const tools = locateTools(devToolsDir());
+    let document: PaperDocument;
+    let plotClaimId: string;
+
+    const blocksOf = (sectionId: string): readonly Block[] =>
+      document.sections.find((section) => section.id === sectionId)?.blocks ?? [];
+    const claimLabelled = (label: string): Claim =>
+      ledger().claim(document.labels.find((entry) => entry.label === label)!.claimId);
+
+    beforeAll(async () => {
+      const supported = ledger()
+        .claims()
+        .find((claim) => claim.status === 'supported')!;
+      const dot = 'digraph { rankdir=LR; samples -> inside -> estimate }';
+      const graph = recordArtifact(store, sessionId, {
+        artifactId: randomUUID(),
+        kind: 'graphviz',
+        title: 'How the estimate is formed',
+        source: dot,
+        ...(await renderGraphviz(tools, dot)),
+      });
+      store.record([
+        domainEvent('claim.evidence-attached', {
+          sessionId,
+          claimId: supported.claimId,
+          evidence: { kind: 'ARTIFACT', ref: graph.artifactId },
+        }),
+      ]);
+
+      const sandbox = new Sandbox({
+        runtime: locateRuntime(devRuntimeDir()),
+        root: join(root, 'figure-sandbox'),
+      });
+      const code = matplotlibScript(
+        [
+          'import numpy as np',
+          'import matplotlib.pyplot as plt',
+          'n = np.logspace(2, 6, 20)',
+          'plt.loglog(n, 1 / np.sqrt(n))',
+          'plt.xlabel("samples")',
+        ].join('\n'),
+      );
+      const run = await sandbox.run({ code, seed: 5 });
+      const execution = await recordExecution(store, sessionId, code, run);
+      run.dispose();
+      recordFigures(store, execution, () => 'Expected error against samples');
+      plotClaimId = randomUUID();
+      store.record([
+        domainEvent('claim.recorded', {
+          sessionId,
+          claimId: plotClaimId,
+          claimType: 'EMPIRICAL',
+          statement: 'The expected error of the estimator falls as the inverse square root of n.',
+          support: [{ kind: 'EXECUTION', ref: execution.executionId }],
+        }),
+      ]);
+
+      document = buildDocument(readPaperSource(store, sessionId));
+    }, 300_000);
+
+    it('lays the record out in the order it happened, with nothing the ledger does not hold', () => {
+      expect(document.sections.map((section) => section.id)).toEqual([
+        'question',
+        'hypotheses',
+        'method',
+        'findings',
+        'open-questions',
+        'other-claims',
+        'synthesis',
+      ]);
+      expect(document.title).toBe('Estimating pi by sampling');
+      expect(document.authors.map((author) => author.name).sort()).toEqual(
+        Object.values(VENDOR)
+          .map((vendor) => `${vendor}/mock`)
+          .sort(),
+      );
+
+      // Every claim the paper names is a claim in the ledger, under one label.
+      const known = new Set(
+        ledger()
+          .claims()
+          .map((claim) => claim.claimId),
+      );
+      expect(document.labels.every((entry) => known.has(entry.claimId))).toBe(true);
+      expect(new Set(document.labels.map((entry) => entry.label)).size).toBe(known.size);
+    });
+
+    it('states each finding with the status the evidence gave it, not one it chose', () => {
+      const stated = blocksOf('findings').filter((block) => block.kind === 'finding');
+      expect(stated.map((block) => block.label)).toEqual(['C1', 'C2', 'C3', 'C4']);
+      for (const block of stated) {
+        const claim = ledger().claim(block.claimId);
+        expect(block.statement).toBe(claim.statement);
+        expect(block.status).toBe(claim.status);
+      }
+      // Three findings the run earned, and one conjecture, labelled as one.
+      expect(stated.map((block) => block.status).sort()).toEqual([
+        'asserted',
+        'refuted',
+        'supported',
+        'unresolved',
+      ]);
+      expect(document.abstract.map((sentence) => sentence.text).join(' ')).toContain(
+        'Of 4 findings, 1 is supported, 1 refuted and 1 left with an open question.',
+      );
+    });
+
+    it('quotes the question, the charter and the method from the log, verbatim', () => {
+      const quotes = (sectionId: string): string[] =>
+        blocksOf(sectionId).flatMap((block) => (block.kind === 'quote' ? [block.text] : []));
+      expect(quotes('question')[0]).toBe(
+        'Can Monte Carlo sampling estimate pi to two decimal places?',
+      );
+      expect(quotes('question')).toHaveLength(2);
+
+      const code = blocksOf('method').find((block) => block.kind === 'code');
+      // The revision that ran, not the first draft with the typo in it.
+      expect(code?.kind === 'code' && code.text).toContain('import numpy as np');
+      expect(code?.kind === 'code' && code.text).not.toContain('numpyy');
+      const run = blocksOf('method').find((block) => block.kind === 'facts');
+      expect(run?.kind === 'facts' && run.facts.find((fact) => fact.term === 'Seed')?.value).toBe(
+        '11',
+      );
+    });
+
+    it('ships the unresolved dispute as an open question, with both positions (P6)', () => {
+      const quotes = blocksOf('open-questions').flatMap((block) =>
+        block.kind === 'quote' ? [`${block.attribution}: ${block.text}`] : [],
+      );
+      expect(
+        quotes.some((quote) => /support, confidence 0\.85: Author position on D\d\./.test(quote)),
+      ).toBe(true);
+      expect(
+        quotes.some((quote) => /oppose, confidence 0\.65: Critic position on D\d\./.test(quote)),
+      ).toBe(true);
+      // And it is not also told as if it had been settled.
+      const settled = blocksOf('findings')
+        .flatMap((block) => (block.kind === 'quote' ? [block.text] : []))
+        .join('\n');
+      expect(settled).not.toMatch(/Author position on/);
+    });
+
+    it('ties each sentence of the synthesis to the findings it names', () => {
+      const sentences = blocksOf('synthesis').flatMap((block) =>
+        block.kind === 'paragraph' ? block.sentences.filter((sentence) => sentence.asserts) : [],
+      );
+      const idsOf = (text: string): readonly string[] =>
+        sentences.find((sentence) => sentence.text === text)!.claimIds;
+
+      expect(idsOf('C3.')).toEqual([claimLabelled('C3').claimId]);
+      expect(idsOf('C2.')).toEqual([claimLabelled('C2').claimId]);
+      expect(idsOf('the rate of convergence, raised against C1.')).toEqual([
+        claimLabelled('C1').claimId,
+      ]);
+      // The scribe's one sentence that names no finding has nothing behind it.
+      expect(idsOf('sampling estimates pi to two places in this run.')).toEqual([]);
+    });
+
+    it('places each figure with the claim it rests on, by content address', () => {
+      const figures = document.sections.flatMap((section) =>
+        section.blocks.flatMap((block) =>
+          block.kind === 'figure' ? [{ section: section.id, ...block }] : [],
+        ),
+      );
+      expect(figures.map((figure) => [figure.section, figure.title, figure.file])).toEqual([
+        ['findings', 'How the estimate is formed', 'figures/figure-1.pdf'],
+        ['other-claims', 'Expected error against samples', 'figures/figure-2.pdf'],
+      ]);
+      expect(figures[0]!.labels).toEqual([
+        document.labels.find((entry) => ledger().claim(entry.claimId).status === 'supported')!
+          .label,
+      ]);
+      expect(figures[1]!.labels).toEqual([
+        document.labels.find((entry) => entry.claimId === plotClaimId)!.label,
+      ]);
+      for (const figure of figures) expect(store.blobs.has(figure.hash)).toBe(true);
+    });
   });
 });

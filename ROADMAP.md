@@ -274,7 +274,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
 ## Stage 10 — Paper compiler `Phases 60–65`
 
 - [x] **60. Tectonic driver** — bundle the engine, compile pipeline, error surfacing. → `chore(paper): bundle tectonic latex engine`
-- [ ] **61. Ledger → IR** — sections, claims, figures, references as an intermediate representation. → `feat(paper): ledger to document ir`
+- [x] **61. Ledger → IR** — sections, claims, figures, references as an intermediate representation. → `feat(paper): ledger to document ir`
 - [ ] **62. IR → LaTeX + house template** — the native "Sheep Research Record" format. → `feat(paper): latex emitter and sheep research record template`
 - [ ] **63. ML conference templates** — NeurIPS, ICML, ICLR. → `feat(paper): neurips, icml and iclr templates`
 - [ ] **64. IEEE / ACM / arXiv templates** → `feat(paper): ieee, acm and arxiv templates`

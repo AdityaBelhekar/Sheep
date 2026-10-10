@@ -5,6 +5,7 @@ import {
   type ArtifactRecord,
   type ExecutionArtifact,
   type ExecutionRecord,
+  type Ledger,
 } from '@sheep/core';
 import type { BlobRef } from './cas/blob-store';
 import { getArtifact } from './projections/artifacts';
@@ -189,4 +190,32 @@ export function regenerateArtifact(
     return { path: output.path, recorded: output.hash, regenerated, restored };
   });
   return { identical: files.every((file) => file.regenerated === file.recorded), files };
+}
+
+/**
+ * Which claims rest on each artifact.
+ *
+ * A claim rests on a figure it cites, and on a figure whose run backs it: the
+ * plot of a result belongs to every claim made from that result. Artifacts no
+ * claim rests on are absent from the map.
+ */
+export function claimsOnArtifacts(
+  ledger: Ledger,
+  artifacts: readonly ArtifactRecord[],
+): Map<string, string[]> {
+  const claims = ledger.claims();
+  const backing = new Map<string, string[]>();
+  for (const { artifactId, executionId } of artifacts) {
+    const claimIds = claims
+      .filter((claim) =>
+        claim.support.some(
+          (evidence) =>
+            (evidence.kind === 'ARTIFACT' && evidence.ref === artifactId) ||
+            (evidence.kind === 'EXECUTION' && evidence.ref === executionId),
+        ),
+      )
+      .map((claim) => claim.claimId);
+    if (claimIds.length > 0) backing.set(artifactId, claimIds);
+  }
+  return backing;
 }

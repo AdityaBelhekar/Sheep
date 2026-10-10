@@ -14,6 +14,7 @@ import {
 } from '@sheep/artifacts';
 import { domainEvent, type ArtifactKind, type ArtifactRecord } from '@sheep/core';
 import {
+  claimsOnArtifacts,
   getArtifact,
   getExecution,
   getSession,
@@ -226,23 +227,10 @@ export function readArtifacts(sessionId: string): {
 } {
   const store = getStore();
   const artifacts = listArtifacts(store.db, sessionId);
-  const claims = readLedger(store.events, sessionId).claims();
+  const backing = claimsOnArtifacts(readLedger(store.events, sessionId), artifacts);
   return {
     artifacts,
-    backing: artifacts.flatMap(({ artifactId, executionId }) => {
-      // A claim rests on a figure it cites, and on a figure whose run backs it:
-      // the plot of a result belongs to every claim made from that result.
-      const claimIds = claims
-        .filter((claim) =>
-          claim.support.some(
-            (evidence) =>
-              (evidence.kind === 'ARTIFACT' && evidence.ref === artifactId) ||
-              (evidence.kind === 'EXECUTION' && evidence.ref === executionId),
-          ),
-        )
-        .map((claim) => claim.claimId);
-      return claimIds.length > 0 ? [{ artifactId, claimIds }] : [];
-    }),
+    backing: [...backing].map(([artifactId, claimIds]) => ({ artifactId, claimIds })),
   };
 }
 
