@@ -298,7 +298,7 @@ Needs the sandbox and verifier, so it lands here rather than with Stage 4.
 ## Stage 12 — Ship `Phases 70–75`
 
 - [x] **70. Session export/import** — portable session bundles with full event log and blobs. → `feat(store): session export and import bundles`
-- [ ] **71. Windows installer** — electron-builder, NSIS, icons, file associations. → `chore(build): windows installer`
+- [x] **71. Windows installer** — electron-builder, NSIS, icons, file associations. → `chore(build): windows installer`
 - [ ] **72. macOS + Linux builds** → `chore(build): macos and linux packaging`
 - [ ] **73. Auto-update + signing** → `chore(build): signed auto-update`
 - [ ] **74. Documentation** — README, user guide, architecture doc, contributing guide. → `docs: user guide and architecture documentation`

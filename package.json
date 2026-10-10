@@ -26,7 +26,9 @@
     "start": "npm run start --workspace @sheep/desktop",
     "smoke": "npm run smoke --workspace @sheep/desktop",
     "fetch-runtime": "npm run fetch-runtime --workspace @sheep/sandbox",
-    "fetch-tools": "npm run fetch-tools --workspace @sheep/artifacts"
+    "fetch-tools": "npm run fetch-tools --workspace @sheep/artifacts",
+    "dist": "npm run dist --workspace @sheep/desktop --",
+    "smoke:packaged": "npm run smoke:packaged --workspace @sheep/desktop"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

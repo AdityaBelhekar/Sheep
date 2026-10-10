@@ -1,6 +1,6 @@
 {
   "name": "@sheep/desktop",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Sheep desktop application: Electron main, preload and React renderer.",
@@ -10,7 +10,9 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "smoke": "electron-vite build && node scripts/smoke.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "dist": "electron-vite build && electron-builder --config electron-builder.config.cjs --publish never",
+    "smoke:packaged": "node scripts/smoke.mjs --packaged"
   },
   "dependencies": {
     "@sheep/artifacts": "*",
@@ -23,22 +25,26 @@
     "@sheep/sandbox": "*",
     "@sheep/store": "*",
     "@sheep/verify": "*",
-    "katex": "^0.19.0",
-    "mermaid": "^12.1.0",
-    "monaco-editor": "^0.57.0",
-    "pdfjs-dist": "^6.4.299",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "katex": "^0.19.0",
+    "mermaid": "^12.1.0",
+    "monaco-editor": "^0.57.0",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "vite": "^7.3.6"
   },
   "optionalDependencies": {
     "keytar": "^7.9.0"
-  }
+  },
+  "author": "Aditya Belhekar",
+  "license": "MIT"
 }
