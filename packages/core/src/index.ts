@@ -270,6 +270,7 @@ export {
   adapterPrefixFor,
   connectionCheckSchema,
   connectionConfigIssues,
+  namesItsVendor,
   connectionConfigSchema,
   connectionHealthSchema,
   connectionKindSchema,

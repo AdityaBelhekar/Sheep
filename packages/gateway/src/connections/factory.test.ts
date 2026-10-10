@@ -40,6 +40,20 @@ describe('buildAdapter', () => {
     },
   );
 
+  it('builds Ollama Cloud under the vendor the connection names, and free to call', async () => {
+    const adapter = buildAdapter({
+      adapterId: 'ollama-cloud-1',
+      config: { kind: 'openai-compatible', preset: 'ollama-cloud', vendorId: 'google' },
+      secret,
+      fetch: fakeFetch(() => jsonResponse({ data: [{ id: 'gemma4:31b' }] })).fetch,
+    });
+    expect(adapter.vendorId).toBe('google');
+    const [model] = await adapter.listModels();
+    // A subscription, not a meter: priced at nothing, so it may run under a cap.
+    expect(model?.pricing).toEqual({ inputPerMTokUsd: 0, outputPerMTokUsd: 0 });
+    expect(model?.local).toBe(false);
+  });
+
   it('builds a local runtime with no credential at all', () => {
     const adapter = buildAdapter({
       adapterId: 'ollama-1',

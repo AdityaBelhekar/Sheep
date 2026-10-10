@@ -4,6 +4,7 @@ import {
   LOCAL_PROVIDER_IDS,
   OPENAI_PRESET_IDS,
   connectionConfigIssues,
+  namesItsVendor,
   requiresSecret,
   usesInteractiveSignIn,
   vendorIdForConfig,
@@ -338,12 +339,16 @@ export function ConnectionsPane({ client }: { client: IpcClient | undefined }): 
           />
         )}
 
-        {draft.kind === 'openai-compatible' && draft.preset === 'custom' && (
+        {draft.kind === 'openai-compatible' && namesItsVendor(draft.preset) && (
           <TextField
             id="connection-vendor"
-            label="Vendor id"
+            label={
+              draft.preset === 'custom'
+                ? 'Vendor id'
+                : 'Vendor id (who made the model you will use)'
+            }
             value={draft.vendorId}
-            placeholder="mistral"
+            placeholder={draft.preset === 'custom' ? 'mistral' : 'openai, google, nvidia, …'}
             onChange={(vendorId) => {
               setDraft({ ...draft, vendorId });
             }}

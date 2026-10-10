@@ -35,7 +35,7 @@ A connection is how Sheep reaches a provider.
 | Kind | What you supply |
 |---|---|
 | Anthropic, OpenAI | An API key |
-| OpenAI-compatible (Groq, Together, DeepSeek, OpenRouter, xAI, Azure, …) | A base URL and a key |
+| OpenAI-compatible (Groq, Together, DeepSeek, OpenRouter, xAI, Ollama Cloud, Azure, …) | A base URL and a key |
 | Google | An API key, or **Sign in** with your Google account |
 | Local (Ollama, LM Studio, llama.cpp) | Nothing; start the runtime and press **Detect local runtimes** |
 

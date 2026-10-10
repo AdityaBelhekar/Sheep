@@ -59,6 +59,7 @@ export const OPENAI_PRESET_IDS = [
   'deepseek',
   'openrouter',
   'xai',
+  'ollama-cloud',
   'custom',
 ] as const;
 export const openAiPresetIdSchema = z.enum(OPENAI_PRESET_IDS);
@@ -82,7 +83,11 @@ export const connectionConfigSchema = z.discriminatedUnion('kind', [
     preset: openAiPresetIdSchema,
     /** Required for `custom`; otherwise the preset supplies it. */
     baseUrl: httpUrlSchema.optional(),
-    /** Required for `custom`: P1 compares vendors, so a proxy must name one. */
+    /**
+     * Required for `custom`: P1 compares vendors, so a proxy must name one.
+     * Read for `ollama-cloud` too, which serves many makers' models under one
+     * key: the vendor is whose model this connection is used for.
+     */
     vendorId: vendorIdSchema.optional(),
   }),
   z.strictObject({
@@ -168,7 +173,7 @@ export function vendorIdForConfig(config: ConnectionConfig): VendorId {
     case 'anthropic':
       return 'anthropic';
     case 'openai-compatible':
-      return config.preset === 'custom' ? (config.vendorId ?? 'custom') : config.preset;
+      return namesItsVendor(config.preset) ? (config.vendorId ?? config.preset) : config.preset;
     // Azure serves OpenAI's weights; the hosting arrangement is not a vendor.
     case 'azure-openai':
       return 'openai';
@@ -178,6 +183,14 @@ export function vendorIdForConfig(config: ConnectionConfig): VendorId {
     case 'local':
       return config.provider;
   }
+}
+
+/**
+ * Endpoints that serve other makers' models, so that the endpoint's own name
+ * says nothing about whose weights answer. The connection says instead.
+ */
+export function namesItsVendor(preset: OpenAiPresetId): boolean {
+  return preset === 'custom' || preset === 'ollama-cloud';
 }
 
 /** What kind of secret this connection stores, or null if it stores none. */

@@ -6,6 +6,7 @@ import {
   type CapabilityFlags,
   type ModelDescriptor,
   type ModelPricing,
+  FREE_PRICING,
 } from '../descriptor';
 import { ProviderError } from '../errors';
 import { HttpClient, type FetchLike } from '../http/client';
@@ -71,6 +72,8 @@ export interface OpenAiCompatibleOptions {
   readonly models?: readonly ModelDescriptor[];
   /** Prices for discovered models, per model id. The user's own table. */
   readonly modelPricing?: Readonly<Record<string, ModelPricing>>;
+  /** The price of a model nothing else prices. For a provider that bills no call. */
+  readonly defaultPricing?: ModelPricing;
   readonly defaultCapabilities?: CapabilityFlags;
   readonly defaultContextWindowTokens?: number;
   readonly defaultMaxOutputTokens?: number;
@@ -114,6 +117,16 @@ export const OPENAI_COMPATIBLE_PRESETS = {
   xai: {
     vendorId: 'xai',
     baseUrl: 'https://api.x.ai/v1',
+  },
+  // Ollama's hosted models, by API key. Not the local runtime: that is a
+  // `local` connection, and takes no key.
+  'ollama-cloud': {
+    vendorId: 'ollama-cloud',
+    baseUrl: 'https://ollama.com/v1',
+    // Billed by subscription with a usage allowance, not by the token: a call
+    // costs nothing, which is a price, and lets these models run under a cap.
+    // The cap then counts nothing for them; Ollama's own limit is what stops.
+    defaultPricing: FREE_PRICING,
   },
 } as const satisfies Record<string, OpenAiCompatiblePreset>;
 
@@ -346,7 +359,7 @@ export class OpenAiCompatibleAdapter implements ModelAdapter {
       ...(row.top_provider?.max_completion_tokens
         ? { maxOutputTokens: row.top_provider.max_completion_tokens }
         : {}),
-      pricing: this.#options.modelPricing?.[row.id] ?? perMillion(row.pricing),
+      pricing: this.#options.modelPricing?.[row.id] ?? perMillion(row.pricing) ?? base.pricing,
     };
   }
 
@@ -358,7 +371,7 @@ export class OpenAiCompatibleAdapter implements ModelAdapter {
       contextWindowTokens: this.#options.defaultContextWindowTokens ?? 128_000,
       maxOutputTokens: this.#options.defaultMaxOutputTokens ?? 16_384,
       capabilities: this.#options.defaultCapabilities ?? OPENAI_DEFAULT_CAPABILITIES,
-      pricing: this.#options.modelPricing?.[modelId] ?? null,
+      pricing: this.#options.modelPricing?.[modelId] ?? this.#options.defaultPricing ?? null,
       local: this.#options.local ?? false,
     };
   }

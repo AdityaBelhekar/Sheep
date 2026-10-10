@@ -69,6 +69,19 @@ describe('vendorIdForConfig', () => {
     ).toBe('mistral');
   });
 
+  it('takes an Ollama Cloud connection at its word too, and by its own name otherwise', () => {
+    expect(
+      vendorIdForConfig({ kind: 'openai-compatible', preset: 'ollama-cloud', vendorId: 'google' }),
+    ).toBe('google');
+    expect(vendorIdForConfig({ kind: 'openai-compatible', preset: 'ollama-cloud' })).toBe(
+      'ollama-cloud',
+    );
+    // A vendor left over in the form does not rename a provider that has one.
+    expect(
+      vendorIdForConfig({ kind: 'openai-compatible', preset: 'groq', vendorId: 'google' }),
+    ).toBe('groq');
+  });
+
   it('treats both Google kinds as the same vendor, because they are', () => {
     expect(vendorIdForConfig(SAMPLES['google'] as ConnectionConfig)).toBe('google');
     expect(vendorIdForConfig(SAMPLES['google-oauth'] as ConnectionConfig)).toBe('google');

@@ -86,6 +86,7 @@ export function buildAdapter(options: BuildAdapterOptions): ModelAdapter {
       }
       return createOpenAiAdapter(config.preset, {
         ...shared,
+        vendorId: vendorIdForConfig(config),
         apiKey: requireSecret(options, 'an API key'),
         ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
       });
