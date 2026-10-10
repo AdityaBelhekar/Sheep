@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { domainEvent, type DomainEvent, type DomainEventType, type EventPayload } from './events';
 import {
+  ARTIFACT_ID,
+  EVENT_FIXTURES,
   CLAIM_ID,
   DERIVATION_ID,
   DISPUTE_ID,
@@ -455,6 +457,31 @@ describe('claim type enforcement (P2)', () => {
   it('refuses to record the same execution or derivation twice', () => {
     rejects(ledgerOf(executed()), executed(), 'DUPLICATE_EXECUTION');
     rejects(ledgerOf(derived()), derived(), 'DUPLICATE_DERIVATION');
+  });
+
+  it('lets a claim rest on a figure only once the figure is recorded', () => {
+    const figure = ev('artifact.recorded', EVENT_FIXTURES['artifact.recorded']);
+    const shown = ev('claim.evidence-attached', {
+      sessionId: SESSION_ID,
+      claimId: CLAIM_ID,
+      evidence: { kind: 'ARTIFACT', ref: ARTIFACT_ID },
+    });
+
+    rejects(ledgerOf(conjecture()), shown, 'UNKNOWN_ARTIFACT');
+    expect(ledgerOf(conjecture(), figure, shown).claim(CLAIM_ID).support).toEqual([
+      { kind: 'ARTIFACT', ref: ARTIFACT_ID },
+    ]);
+    rejects(ledgerOf(figure), figure, 'DUPLICATE_ARTIFACT');
+
+    // A content address is not a figure id: it names stored bytes and is its own proof.
+    const stored = claimOf('CONJECTURE', [{ kind: 'ARTIFACT', ref: HASH }]);
+    expect(ledgerOf(stored).claim(CLAIM_ID).support).toHaveLength(1);
+    // And a figure illustrates a finding; it is not the run an EMPIRICAL claim needs.
+    rejects(
+      ledgerOf(figure),
+      claimOf('EMPIRICAL', [{ kind: 'ARTIFACT', ref: ARTIFACT_ID }]),
+      'EMPIRICAL_WITHOUT_EXECUTION',
+    );
   });
 });
 

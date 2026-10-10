@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { domainEvent } from '@sheep/core';
-import { ARTIFACT_ID, EXECUTION_ID, SESSION_ID } from '@sheep/core/fixtures';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { ARTIFACT_ID, CLAIM_ID, EXECUTION_ID, SESSION_ID } from '@sheep/core/fixtures';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { artifactBlobRef, recordArtifact, recordFigures, type RenderedArtifact } from './artifacts';
+import {
+  artifactBlobRef,
+  recordArtifact,
+  recordFigures,
+  regenerateArtifact,
+  type RenderedArtifact,
+} from './artifacts';
 import { executionBlobRef, recordExecution, type FinishedRun } from './executions';
 import { getArtifact, listArtifacts } from './projections/artifacts';
 import { openSheepStore, type SheepStore } from './store';
@@ -164,6 +170,78 @@ describe.each(TESTABLE_DRIVERS)('artifact records on %s', (driver) => {
       );
       expect(recordFigures(store, failed)).toEqual([]);
       expect(listArtifacts(store.db, SESSION_ID)).toEqual([]);
+    } finally {
+      store.close();
+    }
+  });
+
+  it('puts a deleted figure back, byte for byte, from a fresh rendering', () => {
+    const store = withSession(tempDir(), driver);
+    try {
+      const artifact = rendered();
+      const record = recordArtifact(store, SESSION_ID, artifact);
+      const [svg, pdf] = record.outputs;
+      rmSync(store.blobs.pathFor(svg!.hash));
+      expect(store.blobs.hasFile(svg!.hash)).toBe(false);
+
+      const result = regenerateArtifact(store, record, artifact.outputs);
+
+      expect(result.identical).toBe(true);
+      expect(result.files).toEqual([
+        { path: 'diagram.svg', recorded: svg!.hash, regenerated: svg!.hash, restored: true },
+        { path: 'diagram.pdf', recorded: pdf!.hash, regenerated: pdf!.hash, restored: false },
+      ]);
+      expect(store.blobs.verify(svg!.hash)).toBe(true);
+      expect(store.blobs.readText(svg!.hash)).toBe('<svg/>');
+    } finally {
+      store.close();
+    }
+  });
+
+  it('reports a rendering that differs, and stores none of it', () => {
+    const store = withSession(tempDir(), driver);
+    try {
+      const record = recordArtifact(store, SESSION_ID, rendered());
+      const [svg, pdf] = record.outputs;
+      rmSync(store.blobs.pathFor(svg!.hash));
+      const before = store.blobs.count();
+
+      const result = regenerateArtifact(store, record, [
+        { path: 'diagram.svg', data: Buffer.from('<svg>drawn by another version</svg>') },
+      ]);
+
+      expect(result.identical).toBe(false);
+      expect(result.files[0]).toMatchObject({ recorded: svg!.hash, restored: false });
+      expect(result.files[0]!.regenerated).not.toBe(svg!.hash);
+      // The PDF did not come out at all.
+      expect(result.files[1]).toEqual({
+        path: 'diagram.pdf',
+        recorded: pdf!.hash,
+        regenerated: null,
+        restored: false,
+      });
+      expect(store.blobs.hasFile(svg!.hash)).toBe(false);
+      expect(store.blobs.count()).toBe(before);
+    } finally {
+      store.close();
+    }
+  });
+
+  it('lets a claim rest on a figure only once it is recorded', () => {
+    const store = withSession(tempDir(), driver);
+    try {
+      const claim = domainEvent('claim.recorded', {
+        sessionId: SESSION_ID,
+        claimId: CLAIM_ID,
+        claimType: 'CONJECTURE',
+        statement: 'Evidence flows from runs to claims.',
+        support: [{ kind: 'ARTIFACT', ref: ARTIFACT_ID }],
+      });
+      expect(() => store.record([claim])).toThrow(/LEDGER_UNKNOWN_ARTIFACT/);
+
+      recordArtifact(store, SESSION_ID, rendered());
+      store.record([claim]);
+      expect(() => recordArtifact(store, SESSION_ID, rendered())).toThrow(/already recorded/);
     } finally {
       store.close();
     }

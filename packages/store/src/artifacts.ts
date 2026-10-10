@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   domainEvent,
   type ArtifactKind,
@@ -147,4 +147,46 @@ export function recordFigures(
     if (!recorded) throw new Error(`artifact ${artifactId} was recorded but not projected`);
     return recorded;
   });
+}
+
+/** One recorded file, set against what rendering the source again produced. */
+export interface RegeneratedFile {
+  readonly path: string;
+  readonly recorded: string;
+  /** Null when the source no longer produces this file at all. */
+  readonly regenerated: string | null;
+  /** True when the store had lost the file and now has it again. */
+  readonly restored: boolean;
+}
+
+export interface Regeneration {
+  /** Every recorded file came out again, byte for byte. */
+  readonly identical: boolean;
+  readonly files: readonly RegeneratedFile[];
+}
+
+/**
+ * Sets an artifact's recorded renderings against a fresh rendering of its
+ * source, and puts back any file the store had lost.
+ *
+ * Only a file that hashes to exactly what was recorded is put back: the record
+ * names its renderings by content, so there is nothing else it could accept.
+ * A rendering that differs is reported and stored nowhere — it is evidence
+ * that the toolchain or the machine changed, not a new version of the figure.
+ */
+export function regenerateArtifact(
+  store: SheepStore,
+  artifact: ArtifactRecord,
+  outputs: readonly { readonly path: string; readonly data: Uint8Array }[],
+): Regeneration {
+  const fresh = new Map(outputs.map((output) => [output.path, output.data]));
+  const files = artifact.outputs.map((output): RegeneratedFile => {
+    const data = fresh.get(output.path);
+    const regenerated = data ? createHash('sha256').update(data).digest('hex') : null;
+    const lost = !store.blobs.hasFile(output.hash);
+    const restored = lost && data !== undefined && regenerated === output.hash;
+    if (restored) store.blobs.put(data, artifactBlobRef(artifact.artifactId));
+    return { path: output.path, recorded: output.hash, regenerated, restored };
+  });
+  return { identical: files.every((file) => file.regenerated === file.recorded), files };
 }

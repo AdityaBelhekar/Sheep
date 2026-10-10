@@ -41,9 +41,12 @@ import type { DomainEvent, DomainEventType } from './events';
  * checked for order but not content.
  */
 
+const CONTENT_ADDRESS = /^[0-9a-f]{64}$/;
+
 export const LEDGER_EVENT_TYPES = [
   'execution.recorded',
   'derivation.recorded',
+  'artifact.recorded',
   'claim.recorded',
   'claim.evidence-attached',
   'claim.status-changed',
@@ -81,6 +84,8 @@ export const LEDGER_ERROR_CODES = [
   'DUPLICATE_DERIVATION',
   'INCONSISTENT_DERIVATION',
   'FAILED_DERIVATION',
+  'DUPLICATE_ARTIFACT',
+  'UNKNOWN_ARTIFACT',
   'EMPIRICAL_WITHOUT_EXECUTION',
   'DERIVED_WITHOUT_DERIVATION',
   'CITED_WITHOUT_CITATION',
@@ -189,6 +194,7 @@ export class Ledger {
   readonly #executions = new Map<string, number>();
   /** Derivation id → the verdict its checker gave it. */
   readonly #derivations = new Map<string, VerificationStatus>();
+  readonly #artifacts = new Set<string>();
   /** `round|claim|participant` → commitment hash. */
   readonly #commitments = new Map<string, string>();
   readonly #reveals: RevealedPosition[] = [];
@@ -364,6 +370,15 @@ export class Ledger {
           );
         }
         this.#derivations.set(derivationId, status);
+        return;
+      }
+
+      case 'artifact.recorded': {
+        const { artifactId } = event.payload;
+        if (this.#artifacts.has(artifactId)) {
+          throw new LedgerError('DUPLICATE_ARTIFACT', `artifact ${artifactId} is already recorded`);
+        }
+        this.#artifacts.add(artifactId);
         return;
       }
 
@@ -602,9 +617,14 @@ export class Ledger {
 
   /**
    * Evidence must point at something that exists, in this session, and still
-   * stands. `CITATION`, `ARTIFACT` and `ARGUMENT` refs have no record here to
-   * check against yet — retrieval records and artifact links arrive in later
-   * stages — so only their shape is checked, by the schema.
+   * stands. `CITATION` and `ARGUMENT` refs have no record here to check
+   * against yet — retrieval records arrive in a later stage — so only their
+   * shape is checked, by the schema.
+   *
+   * An `ARTIFACT` ref is one of two things. A content address names bytes in
+   * the store — a checker's stored verdict, say — and is taken as given: the
+   * address is its own proof of what it points at. Anything else is the id of
+   * a figure, and a claim cannot rest on a figure that was never recorded.
    */
   #checkEvidence(evidence: EvidenceRef, claimId: string): void {
     switch (evidence.kind) {
@@ -633,6 +653,12 @@ export class Ledger {
             'FAILED_DERIVATION',
             `derivation ${evidence.ref} has a step that does not follow; a failed derivation backs nothing`,
           );
+        }
+        return;
+      }
+      case 'ARTIFACT': {
+        if (!CONTENT_ADDRESS.test(evidence.ref) && !this.#artifacts.has(evidence.ref)) {
+          throw new LedgerError('UNKNOWN_ARTIFACT', `no artifact ${evidence.ref} was recorded`);
         }
         return;
       }
