@@ -94,9 +94,7 @@ export function LedgerPane({
       {client && sessionId === null && (
         <div className="empty">
           <p className="empty__title">No session is open</p>
-          <p className="empty__body">
-            Open a session from Sessions. Its claims appear here as the protocol records them.
-          </p>
+          <p className="empty__body">Open a session first.</p>
         </div>
       )}
 

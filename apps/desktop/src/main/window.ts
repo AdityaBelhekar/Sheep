@@ -4,7 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { BrowserWindow, nativeImage, nativeTheme, shell } from 'electron';
 import { domainEvent } from '@sheep/core';
 import { listSessions } from '@sheep/store';
-import { PANE_IDS } from '../shared/panes';
+import { DEFAULT_PANE, PANE_IDS } from '../shared/panes';
 import { APP_NAME } from '../shared/product';
 import {
   createArtifact,
@@ -105,8 +105,7 @@ const RENDERER_STATE_EXPRESSION = `(() => {
     ping: root?.getAttribute('data-sheep-ping') ?? null,
     chain: root?.getAttribute('data-sheep-chain') ?? null,
     panes: root?.getAttribute('data-sheep-panes') ?? null,
-    sessions:
-      document.querySelector('[data-pane="sessions"]')?.getAttribute('data-sheep-sessions') ?? null,
+    sessions: document.querySelector('[data-sheep-sessions]')?.getAttribute('data-sheep-sessions') ?? null,
   };
 })()`;
 
@@ -1271,6 +1270,9 @@ async function runRendererSmokeChecks(window: BrowserWindow): Promise<void> {
     .executeJavaScript(CHANNEL_GUARD_EXPRESSION)
     .catch((error: unknown) => String(error));
   // Capture before the last check is recorded: the final report quits the app.
+  await evaluate(window, "window.location.hash = '#/home'");
+  await delay(400);
+  await captureScreenshot(window, 'home');
   await captureScreenshot(window);
 
   const refused = typeof guard === 'string' && guard.includes('Unknown IPC channel');
@@ -1292,7 +1294,7 @@ async function checkNavigation(window: BrowserWindow): Promise<void> {
     result.declared === PANE_COUNT &&
     result.visited.length === PANE_COUNT &&
     result.failed.length === 0 &&
-    result.fallback === 'sessions';
+    result.fallback === DEFAULT_PANE;
 
   recordSmokeCheck(
     'renderer-navigation',

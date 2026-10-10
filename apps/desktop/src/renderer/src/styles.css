@@ -644,40 +644,6 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 
-/* Where this surface sits among the seven. */
-.pane__header::before {
-  color: var(--fg-faint);
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.pane[data-pane='sessions'] .pane__header::before {
-  content: '01 · the question and the flock';
-}
-.pane[data-pane='conversation'] .pane__header::before {
-  content: '02 · the protocol';
-}
-.pane[data-pane='ledger'] .pane__header::before {
-  content: '03 · claims and evidence';
-}
-.pane[data-pane='lab'] .pane__header::before {
-  content: '04 · sandboxed runs';
-}
-.pane[data-pane='verification'] .pane__header::before {
-  content: '05 · checked derivations';
-}
-.pane[data-pane='artifacts'] .pane__header::before {
-  content: '06 · figures and files';
-}
-.pane[data-pane='paper'] .pane__header::before {
-  content: '07 · the record';
-}
-.pane[data-pane='connections'] .pane__header::before {
-  content: 'configuration';
-}
-
 .pane__title {
   margin: 0;
   font-family: var(--serif);
@@ -700,28 +666,145 @@ textarea {
   font-size: 0.8rem;
 }
 
-.stub {
+/* ── Home ──────────────────────────────────────────────────────────────
+ * The first thing on screen: the mark, one question, and what was asked before.
+ */
+
+.home {
+  max-width: 44rem;
+  padding-top: 4vh;
+  gap: 1.5rem;
+}
+
+.home__hero {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  padding: 1.15rem 1.25rem;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
+  align-items: center;
+  gap: 0.4rem;
+  text-align: center;
+}
+
+.home__logo {
+  width: 132px;
+  height: 132px;
+  object-fit: contain;
+}
+
+.home__title {
+  margin: 0.3rem 0 0;
+  font-family: var(--serif);
+  font-size: 3.4rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.home__tagline {
+  margin: 0;
+  color: var(--fg-muted);
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-style: italic;
+}
+
+.home__ask {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
   background: var(--surface);
+  box-shadow: var(--shadow);
+  transition: border-color 0.12s;
 }
 
-.stub__detail {
-  margin: 0;
-  max-width: 44rem;
-  line-height: 1.6;
+.home__ask:focus-within {
+  border-color: var(--fg);
 }
 
-.stub__arriving {
-  margin: 0;
+.home__question {
+  width: 100%;
+  padding: 1.1rem 1.2rem 0.4rem;
+  border: 0;
+  outline: none;
+  background: none;
+  resize: none;
+  font-family: var(--serif);
+  font-size: 1.3rem;
+  line-height: 1.45;
+  user-select: text;
+}
+
+.home__question::placeholder {
+  color: var(--fg-faint);
+}
+
+.home__ask-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 0.7rem 0.7rem 1.2rem;
+}
+
+.home__hint {
+  flex: 1;
   color: var(--fg-faint);
   font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+}
+
+.home__recent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.home__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.home__list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.home__session {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.8rem 1rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home__session:hover,
+.home__session:focus-visible {
+  outline: none;
+  background: var(--accent-soft);
+}
+
+.home__session-question {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.home__session-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Forms ────────────────────────────────────────────────────────────── */

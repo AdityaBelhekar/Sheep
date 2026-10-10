@@ -152,10 +152,7 @@ export function VerificationPane({
       {client && sessionId === null && (
         <div className="empty">
           <p className="empty__title">No session is open</p>
-          <p className="empty__body">
-            Open a session from Sessions. A checked derivation belongs to a session, so a DERIVED
-            claim made in it has something to point at.
-          </p>
+          <p className="empty__body">Open a session first.</p>
         </div>
       )}
 

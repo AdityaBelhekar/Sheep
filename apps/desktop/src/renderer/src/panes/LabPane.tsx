@@ -195,10 +195,7 @@ export function LabPane({
       {client && sessionId === null && (
         <div className="empty">
           <p className="empty__title">No session is open</p>
-          <p className="empty__body">
-            Open a session from Sessions. A run belongs to a session, so the claims made in it can
-            point at what was actually executed.
-          </p>
+          <p className="empty__body">Open a session first.</p>
         </div>
       )}
 

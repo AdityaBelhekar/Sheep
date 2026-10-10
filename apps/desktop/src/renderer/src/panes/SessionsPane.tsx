@@ -165,11 +165,11 @@ export function SessionsPane({
         </p>
       )}
 
-      {state.kind === 'loading' && <p className="notice">Reading the sessions projection…</p>}
+      {state.kind === 'loading' && <p className="notice">Loading sessions…</p>}
 
       {state.kind === 'error' && (
         <p className="notice notice--error" role="alert">
-          Could not read the projection: {state.message}
+          Could not load sessions: {state.message}
         </p>
       )}
 
@@ -212,10 +212,7 @@ export function SessionsPane({
           {state.kind === 'ready' && state.sessions.length === 0 && (
             <div className="empty">
               <p className="empty__title">No sessions yet</p>
-              <p className="empty__body">
-                A session is one research question with a roster of models attached. Nothing is
-                stored until you create one.
-              </p>
+              <p className="empty__body">Ask a question to start one.</p>
             </div>
           )}
 
@@ -369,8 +366,6 @@ export function SessionsPane({
           )}
         </div>
       </div>
-
-      <p className="pane__note">{pane.arriving}.</p>
     </section>
   );
 }

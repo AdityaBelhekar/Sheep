@@ -1,83 +1,62 @@
 /**
  * The work surfaces.
  *
- * Two groups. `RESEARCH_PANES` is the seven a session moves through, in order.
+ * Three groups. `HOME_PANE` is where the app opens: start a session, or pick up
+ * an old one. `RESEARCH_PANES` is the seven a session moves through, in order.
  * `UTILITY_PANES` is app configuration — real surfaces, but not steps in a
  * research session, and separated in the navigation so the seven stay seven.
  *
  * These lists are the only place panes are declared: the navigation, the
  * router's notion of a valid route, and the smoke run's navigability check all
  * read them, so a pane cannot exist in one and be missing from another.
- *
- * Each stub says which phase fills it in. A pane that claims to be empty on
- * purpose is more useful than one that looks broken.
  */
 export interface PaneDefinition {
   readonly id: string;
   readonly label: string;
   readonly summary: string;
-  /** What will live here, and what it is for. */
-  readonly detail: string;
-  /** The roadmap phase that builds it out. */
-  readonly arriving: string;
 }
+
+export const HOME_PANE = {
+  id: 'home',
+  label: 'Home',
+  summary: 'Start a session, or pick up an old one.',
+} as const satisfies PaneDefinition;
 
 export const RESEARCH_PANES = [
   {
     id: 'sessions',
     label: 'Sessions',
-    summary: 'Every research session, and the roster of models attached to it.',
-    detail:
-      'A session is one question, one roster and one event stream. This list is read from the sessions projection — rows rebuilt by replaying the event log, never written to directly.',
-    arriving: 'Roster editing arrives in Phase 19',
+    summary: 'Every research question, and the models attached to it.',
   },
   {
     id: 'conversation',
     label: 'Conversation',
-    summary: 'The turns themselves: proposals, critiques, referee rulings.',
-    detail:
-      'Phases open blind-parallel, so a model cannot see another model’s answer before committing its own. The protocol strip at the top shows where the session is and stops at the two points where a human decides: the Charter, and which hypotheses to pursue.',
-    arriving: 'All seven phases run; the compiled paper arrives with Stage 10',
+    summary: 'The protocol, round by round, with one lane per model.',
   },
   {
     id: 'ledger',
     label: 'Ledger',
-    summary: 'Claims, evidence and disputes as a navigable graph.',
-    detail:
-      'Every claim is typed — DERIVED, EMPIRICAL, CITED or CONJECTURE — and an empirical claim with no execution record behind it cannot be recorded at all. Select any node to trace everything it rests on. Literature is searched and cited here too: a citation can only be of a source a search actually returned, and a cited claim supports others without ever being established on its own.',
-    arriving: 'Claims from CRITIQUE and RESOLUTION arrive with Stage 8',
+    summary: 'Every claim, and what it rests on.',
   },
   {
     id: 'lab',
     label: 'Lab',
-    summary: 'Code, runs and artifacts from the sandboxed Python runtime.',
-    detail:
-      'Bundled CPython under a Windows Job Object: capped memory, capped CPU, wall-clock timeout, no network. Results are hashed artifacts rather than model assertions.',
-    arriving: 'Runs driven by the protocol arrive with EXECUTION, Stage 8',
+    summary: 'Python in the sandbox. Every run is recorded.',
   },
   {
     id: 'verification',
     label: 'Verification',
-    summary: 'Derivations checked step by step, and honestly labelled when they cannot be.',
-    detail:
-      'SymPy, pint and Z3 do the checking; a language model only routes a question to a checker. A step that cannot be verified is marked UNCHECKABLE rather than quietly assumed.',
-    arriving: 'Checks routed from critiques arrive with Stage 8',
+    summary: 'Derivations checked step by step.',
   },
   {
     id: 'artifacts',
     label: 'Artifacts',
-    summary: 'Figures, diagrams and files, each traceable to what produced it.',
-    detail:
-      'Every artifact keeps its generating source, so deleting a figure and regenerating it yields a byte-identical file. Diagrams, TikZ pictures, formulas and sandbox figures are all rendered by pinned tools and stored by content address.',
-    arriving: 'Figures placed in a compiled paper arrive with Stage 10',
+    summary: 'Figures, diagrams and formulas, with what made them.',
   },
   {
     id: 'paper',
     label: 'Paper',
-    summary: 'The compiled research record, with its provenance appendix.',
-    detail:
-      'Compiled from the ledger each time, in the template chosen: every finding with the status the evidence gave it, every unresolved dispute as an open question, every figure by content address. A claim-bearing sentence with no ledger id fails the build.',
-    arriving: 'Citations checked against retrieved sources arrive with Stage 11',
+    summary: 'The compiled record, and its reproduction bundle.',
   },
 ] as const satisfies readonly PaneDefinition[];
 
@@ -85,20 +64,17 @@ export const UTILITY_PANES = [
   {
     id: 'connections',
     label: 'Connections',
-    summary: 'Providers Sheep can reach, and whether each one is answering.',
-    detail:
-      'A connection is configuration, not history: keys live in the OS credential store and only a reference is written down, so a connection can be renamed or deleted without disturbing the provenance of anything it produced.',
-    arriving: 'Roster attachment arrives in Phase 19',
+    summary: 'The model providers Sheep can reach.',
   },
 ] as const satisfies readonly PaneDefinition[];
 
-export const PANES = [...RESEARCH_PANES, ...UTILITY_PANES] as const;
+export const PANES = [HOME_PANE, ...RESEARCH_PANES, ...UTILITY_PANES] as const;
 
 export type PaneId = (typeof PANES)[number]['id'];
 
 export const PANE_IDS: readonly PaneId[] = PANES.map((pane) => pane.id);
 
-export const DEFAULT_PANE: PaneId = PANES[0].id;
+export const DEFAULT_PANE: PaneId = HOME_PANE.id;
 
 export function isPaneId(value: string): value is PaneId {
   return (PANE_IDS as readonly string[]).includes(value);

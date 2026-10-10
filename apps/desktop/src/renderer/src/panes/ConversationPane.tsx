@@ -241,10 +241,7 @@ export function ConversationPane({
       {state.kind === 'idle' && (
         <div className="empty">
           <p className="empty__title">No session open</p>
-          <p className="empty__body">
-            Open a session from Sessions and attach models from at least two vendors. The protocol
-            runs here: each round is drawn as a row, with one lane per model.
-          </p>
+          <p className="empty__body">Open a session and attach models from at least two vendors.</p>
         </div>
       )}
 

@@ -9,6 +9,12 @@ import type { PaneId } from '@shared/panes';
  * dependency for seven small paths would not pay for itself.
  */
 const PATHS: Record<PaneId, ReactElement> = {
+  home: (
+    <>
+      <path d="M3.5 9 10 3.5 16.5 9v7.5h-13z" />
+      <path d="M8 16.5v-4.5h4v4.5" />
+    </>
+  ),
   sessions: (
     <>
       <rect x="3" y="4" width="14" height="4" rx="1" />

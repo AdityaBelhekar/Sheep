@@ -14,10 +14,27 @@ export function useIpcClient(): IpcClient | undefined {
     const bridge = window.sheep;
     if (!bridge) return undefined;
     return createIpcClient({
-      invoke: (channel, payload) => bridge.invoke(channel, payload),
+      invoke: (channel, payload) =>
+        bridge.invoke(channel, payload).catch((error: unknown) => {
+          throw new Error(plainMessage(error), { cause: error });
+        }),
       subscribe: (channel, listener) => bridge.subscribe(channel, listener),
     });
   }, []);
+}
+
+/**
+ * What went wrong, without the plumbing it travelled through.
+ *
+ * Electron and the IPC registry each wrap a handler's error in their own
+ * prefix; a person needs the sentence at the end, not the route it took.
+ */
+function plainMessage(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text
+    .replace(/^Error invoking remote method '[^']*': /, '')
+    .replace(/^Error: /, '')
+    .replace(/^IPC_HANDLER_FAILED: sheep:[a-z-]+: /, '');
 }
 
 /**

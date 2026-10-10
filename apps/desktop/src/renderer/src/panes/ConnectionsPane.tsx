@@ -549,8 +549,6 @@ export function ConnectionsPane({ client }: { client: IpcClient | undefined }): 
           ))}
         </ul>
       )}
-
-      <p className="pane__note">{pane.arriving}.</p>
     </section>
   );
 }

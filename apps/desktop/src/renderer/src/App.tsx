@@ -10,6 +10,7 @@ import { ThemeToggle } from './components/ThemeToggle';
 import { UpdateControl } from './components/UpdateControl';
 import { useIpcClient, useRoute, useSystemPrefersDark } from './hooks';
 import {
+  HOME_PANE,
   PANE_IDS,
   RESEARCH_PANES,
   UTILITY_PANES,
@@ -19,11 +20,11 @@ import {
 import { ArtifactsPane } from './panes/ArtifactsPane';
 import { ConnectionsPane } from './panes/ConnectionsPane';
 import { ConversationPane } from './panes/ConversationPane';
+import { HomePane } from './panes/HomePane';
 import { LabPane } from './panes/LabPane';
 import { PaperPane } from './panes/PaperPane';
 import { LedgerPane } from './panes/LedgerPane';
 import { SessionsPane } from './panes/SessionsPane';
-import { StubPane } from './panes/StubPane';
 import { VerificationPane } from './panes/VerificationPane';
 
 type LogState =
@@ -118,6 +119,7 @@ export function App(): ReactElement {
           <span className="brand__name">{APP_NAME}</span>
         </div>
 
+        <NavGroup panes={[HOME_PANE]} active={paneId} onNavigate={navigate} />
         <span className="nav__heading">The record</span>
         <NavGroup panes={RESEARCH_PANES} active={paneId} onNavigate={navigate} numbered />
         <span className="nav__spacer" />
@@ -133,9 +135,12 @@ export function App(): ReactElement {
         </div>
       </nav>
 
-      <RunningHead active={active} onNavigate={navigate} />
+      {paneId !== 'home' && <RunningHead active={active} onNavigate={navigate} />}
 
       <main className="content">
+        {paneId === 'home' && (
+          <HomePane client={client} onNavigate={navigate} onStoreChanged={refreshLog} />
+        )}
         {paneId === 'sessions' && <SessionsPane client={client} onStoreChanged={refreshLog} />}
         {paneId === 'conversation' && (
           <ConversationPane client={client} onStoreChanged={refreshLog} />
@@ -148,14 +153,6 @@ export function App(): ReactElement {
         {paneId === 'artifacts' && <ArtifactsPane client={client} onStoreChanged={refreshLog} />}
         {paneId === 'paper' && <PaperPane client={client} />}
         {paneId === 'connections' && <ConnectionsPane client={client} />}
-        {paneId !== 'sessions' &&
-          paneId !== 'conversation' &&
-          paneId !== 'ledger' &&
-          paneId !== 'lab' &&
-          paneId !== 'verification' &&
-          paneId !== 'artifacts' &&
-          paneId !== 'paper' &&
-          paneId !== 'connections' && <StubPane paneId={paneId} />}
       </main>
 
       <footer className="statusbar">
@@ -166,32 +163,27 @@ export function App(): ReactElement {
             <i />
             <i />
           </span>
-          {log.kind === 'pending' && 'verifying the event log…'}
+          {log.kind === 'pending' && 'checking the record…'}
           {log.kind === 'ok' &&
-            `chain ${
+            `record ${
               log.summary.chain.ok
-                ? `verified to seq ${String(log.summary.head?.seq ?? 0)}`
+                ? 'intact'
                 : `BROKEN (${String(log.summary.chain.failures.length)})`
             }`}
-          {log.kind === 'error' && `event log unavailable: ${log.message}`}
+          {log.kind === 'error' && `the record could not be read: ${log.message}`}
         </span>
         {log.kind === 'ok' && (
           <>
             <span className="statusbar__item">
               {log.summary.count} event{log.summary.count === 1 ? '' : 's'}
             </span>
-            <span className="statusbar__item statusbar__item--muted">
-              {log.summary.driver} · {log.summary.journalMode} · schema v{log.summary.schemaVersion}
-            </span>
           </>
         )}
         <span className="statusbar__spacer" />
         <span className="statusbar__item" data-status={ping.kind}>
-          {ping.kind === 'pending' && 'contacting main…'}
-          {ping.kind === 'ok' && `main ${ping.version} · ${String(ping.roundTripMs)} ms`}
-          {ping.kind === 'error' && 'main process unreachable'}
+          {ping.kind === 'ok' && `v${ping.version}`}
+          {ping.kind === 'error' && 'the app is not responding'}
         </span>
-        <span className="statusbar__item statusbar__item--muted">local-first · no telemetry</span>
         <UpdateControl client={client} />
       </footer>
     </div>

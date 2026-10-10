@@ -131,10 +131,7 @@ export function PaperPane({ client }: { client: IpcClient | undefined }): ReactE
       {client && sessionId === null && (
         <div className="empty">
           <p className="empty__title">No session is open</p>
-          <p className="empty__body">
-            Open a session from Sessions. A paper is compiled from one session&rsquo;s ledger, and
-            from nothing else.
-          </p>
+          <p className="empty__body">Open a session first.</p>
         </div>
       )}
 
