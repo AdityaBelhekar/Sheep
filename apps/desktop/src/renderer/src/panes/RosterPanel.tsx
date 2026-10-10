@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 import { PARTICIPANT_ROLES, type ParticipantRole, type RosterEntry } from '@sheep/core';
 import type { IpcClient, IpcResponse } from '@sheep/ipc';
+import { EarTag, tagIndex } from '../components/EarTag';
 
 type DetailReply = IpcResponse<'sheep:session-get'>;
 type ModelsReply = IpcResponse<'sheep:models-list'>;
@@ -176,9 +177,22 @@ export function RosterPanel({
           <h2 className="roster__title">{session.title}</h2>
           <p className="roster__question">{session.question}</p>
         </div>
-        <button className="button button--quiet" type="button" onClick={onClose}>
-          Close
-        </button>
+        <div className="button-row">
+          <button
+            className="button"
+            type="button"
+            disabled={vendors.size < 2}
+            title={vendors.size < 2 ? 'Attach models from two vendors first' : undefined}
+            onClick={() => {
+              window.location.hash = '#/conversation';
+            }}
+          >
+            Go to the protocol
+          </button>
+          <button className="button button--quiet" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
       </header>
 
       <div className="roster__budget">
@@ -242,7 +256,7 @@ export function RosterPanel({
           {attached.map((entry) => (
             <li className="roster__entry" key={entry.participantId}>
               <div className="roster__entry-head">
-                <span className="roster__model">{entry.model.modelId}</span>
+                <EarTag model={entry.model} index={tagIndex(roster, entry.participantId)} />
                 <span className="badge">{entry.model.vendorId}</span>
               </div>
 

@@ -1746,6 +1746,7 @@ async function checkSessionBundle(window: BrowserWindow): Promise<void> {
     | { savedText: string; refusedText: string; sessionsBefore: number; sessionsAfter: number }
     | { error: string }
     | undefined;
+  await captureScreenshot(window, 'sessions');
   if (!result || 'error' in result) {
     recordSmokeCheck('renderer-session-bundle', false, result?.error ?? 'no result');
     return;

@@ -107,12 +107,12 @@ export function SessionsPane({
   const select = useCallback(
     (sessionId: string | null) => {
       setSelected(sessionId);
-      void client?.invoke('sheep:settings-write', {
-        key: 'ui.lastSessionId',
-        value: sessionId,
-      });
+      void client
+        ?.invoke('sheep:settings-write', { key: 'ui.lastSessionId', value: sessionId })
+        // The running head shows the open session, so the shell has to hear of it.
+        .then(onStoreChanged);
     },
-    [client],
+    [client, onStoreChanged],
   );
 
   const canCreate = client !== undefined && title.trim() !== '' && question.trim() !== '';
@@ -145,7 +145,7 @@ export function SessionsPane({
 
   return (
     <section
-      className="pane"
+      className="pane pane--wide"
       data-pane="sessions"
       data-sheep-sessions={state.kind === 'ready' ? String(count) : state.kind}
       data-sheep-projected-seq={state.kind === 'ready' ? String(state.projectedThroughSeq) : ''}
@@ -154,69 +154,6 @@ export function SessionsPane({
         <h1 className="pane__title">{pane.label}</h1>
         <p className="pane__summary">{pane.summary}</p>
       </header>
-
-      <form
-        className="new-session"
-        onSubmit={(event) => {
-          event.preventDefault();
-          create();
-        }}
-      >
-        <div className="field">
-          <label className="field__label" htmlFor="new-session-title">
-            Title
-          </label>
-          <input
-            id="new-session-title"
-            className="field__input"
-            value={title}
-            maxLength={200}
-            placeholder="Block-sparse attention at long context"
-            onChange={(event) => {
-              setTitle(event.target.value);
-            }}
-          />
-        </div>
-
-        <div className="field">
-          <label className="field__label" htmlFor="new-session-question">
-            Research question
-          </label>
-          <textarea
-            id="new-session-question"
-            className="field__input field__input--multiline"
-            value={question}
-            rows={2}
-            placeholder="Does block-sparse attention preserve perplexity at 128k context?"
-            onChange={(event) => {
-              setQuestion(event.target.value);
-            }}
-          />
-        </div>
-
-        <div className="button-row">
-          <button className="button" type="submit" disabled={!canCreate || creating}>
-            {creating ? 'Creating…' : 'New session'}
-          </button>
-          <button
-            className="button button--quiet"
-            type="button"
-            data-sheep-import-session
-            onClick={() => {
-              transfer(async (ipc) => {
-                const { imported } = await ipc.invoke('sheep:session-import', {});
-                return imported === null
-                  ? null
-                  : `Imported “${imported.title}”: ${String(imported.events)} events and ${String(
-                      imported.blobs,
-                    )} files, checked against their hashes and the ledger’s rules.`;
-              });
-            }}
-          >
-            Import session…
-          </button>
-        </div>
-      </form>
 
       {transferred !== null && (
         <p
@@ -236,102 +173,202 @@ export function SessionsPane({
         </p>
       )}
 
-      {state.kind === 'ready' && state.sessions.length === 0 && (
-        <div className="empty">
-          <p className="empty__title">No sessions yet</p>
-          <p className="empty__body">
-            A session is one research question with a roster of models attached. Nothing is stored
-            until you create one — the list above is a live read of the projection, not a cache.
-          </p>
-        </div>
-      )}
-
-      {state.kind === 'ready' && state.sessions.length > 0 && (
-        <ul className="session-list">
-          {state.sessions.map((session) => (
-            <li
-              className="session"
-              key={session.sessionId}
-              data-sheep-selected={session.sessionId === selected ? 'true' : undefined}
+      <div className="split">
+        <div className="split__list">
+          <div className="split__bar">
+            <h2 className="split__heading">
+              {count > 0 ? `${String(count)} session${count === 1 ? '' : 's'}` : 'Sessions'}
+            </h2>
+            {selected !== null && (
+              <button
+                className="button button--quiet"
+                type="button"
+                onClick={() => {
+                  select(null);
+                }}
+              >
+                New session
+              </button>
+            )}
+            <button
+              className="button button--quiet"
+              type="button"
+              data-sheep-import-session
+              onClick={() => {
+                transfer(async (ipc) => {
+                  const { imported } = await ipc.invoke('sheep:session-import', {});
+                  return imported === null
+                    ? null
+                    : `Imported “${imported.title}”: ${String(imported.events)} events and ${String(
+                        imported.blobs,
+                      )} files, checked against their hashes and the ledger’s rules.`;
+                });
+              }}
             >
-              <div className="session__head">
-                <h2 className="session__title">{session.title}</h2>
-                <span className="badge" data-status={session.status}>
-                  {session.status}
-                </span>
-              </div>
-              <p className="session__question">{session.question}</p>
-              <dl className="session__meta">
-                <div>
-                  <dt>Created</dt>
-                  <dd>{formatTimestamp(session.createdAt)}</dd>
-                </div>
-                <div>
-                  <dt>Roster</dt>
-                  <dd>{session.participantCount}</dd>
-                </div>
-                <div>
-                  <dt>Messages</dt>
-                  <dd>{session.messageCount}</dd>
-                </div>
-                <div>
-                  <dt>Spend</dt>
-                  <dd>
-                    {formatUsd(session.budget.spentUsd)}
-                    {session.budget.capUsd === null
-                      ? ' · no cap'
-                      : ` of ${formatUsd(session.budget.capUsd)}`}
-                  </dd>
-                </div>
-              </dl>
+              Import session…
+            </button>
+          </div>
 
-              <div className="button-row">
-                <button
-                  className="button button--quiet"
-                  type="button"
-                  data-sheep-open-session={session.sessionId}
-                  onClick={() => {
-                    select(session.sessionId === selected ? null : session.sessionId);
-                  }}
-                >
-                  {session.sessionId === selected ? 'Hide roster' : 'Roster'}
-                </button>
-                <button
-                  className="button button--quiet"
-                  type="button"
-                  data-sheep-export-session={session.sessionId}
-                  onClick={() => {
-                    transfer(async (ipc) => {
-                      const reply = await ipc.invoke('sheep:session-export', {
-                        sessionId: session.sessionId,
-                      });
-                      return reply.saved
-                        ? `Saved “${session.title}” to ${reply.path ?? ''}.`
-                        : null;
-                    });
-                  }}
-                >
-                  Export
-                </button>
-              </div>
+          {state.kind === 'ready' && state.sessions.length === 0 && (
+            <div className="empty">
+              <p className="empty__title">No sessions yet</p>
+              <p className="empty__body">
+                A session is one research question with a roster of models attached. Nothing is
+                stored until you create one.
+              </p>
+            </div>
+          )}
 
-              {session.sessionId === selected && (
-                <RosterPanel
-                  client={client}
-                  sessionId={session.sessionId}
-                  onStoreChanged={() => {
-                    load();
-                    onStoreChanged();
-                  }}
-                  onClose={() => {
-                    select(null);
-                  }}
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+          {state.kind === 'ready' && state.sessions.length > 0 && (
+            <ul className="session-list">
+              {state.sessions.map((session) => (
+                <li
+                  className="session"
+                  key={session.sessionId}
+                  data-sheep-selected={session.sessionId === selected ? 'true' : undefined}
+                >
+                  <div className="session__head">
+                    <h3 className="session__title">{session.title}</h3>
+                    <span className="badge" data-status={session.status}>
+                      {session.status}
+                    </span>
+                  </div>
+                  <p className="session__question">{session.question}</p>
+                  <dl className="session__meta">
+                    <div>
+                      <dt>Created</dt>
+                      <dd>{formatTimestamp(session.createdAt)}</dd>
+                    </div>
+                    <div>
+                      <dt>Roster</dt>
+                      <dd>{session.participantCount}</dd>
+                    </div>
+                    <div>
+                      <dt>Messages</dt>
+                      <dd>{session.messageCount}</dd>
+                    </div>
+                    <div>
+                      <dt>Spend</dt>
+                      <dd>
+                        {formatUsd(session.budget.spentUsd)}
+                        {session.budget.capUsd === null
+                          ? ' · no cap'
+                          : ` of ${formatUsd(session.budget.capUsd)}`}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="button-row">
+                    <button
+                      className={session.sessionId === selected ? 'button' : 'button button--quiet'}
+                      type="button"
+                      data-sheep-open-session={session.sessionId}
+                      aria-pressed={session.sessionId === selected}
+                      onClick={() => {
+                        select(session.sessionId === selected ? null : session.sessionId);
+                      }}
+                    >
+                      {session.sessionId === selected ? 'Open' : 'Open session'}
+                    </button>
+                    <button
+                      className="button button--quiet"
+                      type="button"
+                      data-sheep-export-session={session.sessionId}
+                      onClick={() => {
+                        transfer(async (ipc) => {
+                          const reply = await ipc.invoke('sheep:session-export', {
+                            sessionId: session.sessionId,
+                          });
+                          return reply.saved
+                            ? `Saved “${session.title}” to ${reply.path ?? ''}.`
+                            : null;
+                        });
+                      }}
+                    >
+                      Export
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="split__detail">
+          {selected !== null &&
+          state.kind === 'ready' &&
+          state.sessions.some((session) => session.sessionId === selected) ? (
+            <>
+              <h2 className="split__heading">The flock for this session</h2>
+              <RosterPanel
+                client={client}
+                sessionId={selected}
+                onStoreChanged={() => {
+                  load();
+                  onStoreChanged();
+                }}
+                onClose={() => {
+                  select(null);
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <h2 className="split__heading">Start a session</h2>
+              <form
+                className="new-session"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  create();
+                }}
+              >
+                <div className="field">
+                  <label className="field__label" htmlFor="new-session-title">
+                    Title
+                  </label>
+                  <input
+                    id="new-session-title"
+                    className="field__input"
+                    value={title}
+                    maxLength={200}
+                    placeholder="Block-sparse attention at long context"
+                    onChange={(event) => {
+                      setTitle(event.target.value);
+                    }}
+                  />
+                </div>
+
+                <div className="field">
+                  <label className="field__label" htmlFor="new-session-question">
+                    Research question
+                  </label>
+                  <textarea
+                    id="new-session-question"
+                    className="field__input field__input--multiline"
+                    value={question}
+                    rows={3}
+                    placeholder="Does block-sparse attention preserve perplexity at 128k context?"
+                    onChange={(event) => {
+                      setQuestion(event.target.value);
+                    }}
+                  />
+                </div>
+
+                <p className="pane__note">
+                  The question is fixed before any model is asked anything, and is quoted verbatim
+                  in the paper.
+                </p>
+
+                <div className="button-row">
+                  <button className="button" type="submit" disabled={!canCreate || creating}>
+                    {creating ? 'Creating…' : 'New session'}
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
+        </div>
+      </div>
 
       <p className="pane__note">{pane.arriving}.</p>
     </section>

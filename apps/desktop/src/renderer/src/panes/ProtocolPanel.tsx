@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import type { GateKind } from '@sheep/core';
 import type { IpcClient, IpcResponse, ProtocolEvent } from '@sheep/ipc';
+import { PhaseTrack } from '../components/PhaseTrack';
 
 type Reply = IpcResponse<'sheep:protocol-state'>;
-type PhaseView = Reply['state']['phases'][number];
 
 /**
  * The protocol, and the two places it stops to ask.
@@ -92,21 +92,7 @@ export function ProtocolPanel({
   return (
     <section className="protocol" data-sheep-protocol={reply?.status ?? 'unknown'}>
       <div className="protocol__head">
-        <ol className="protocol__phases">
-          {PHASE_ORDER.map((kind) => {
-            const phase = phases.find((candidate) => candidate.kind === kind);
-            return (
-              <li
-                key={kind}
-                className="protocol__phase"
-                data-status={phase?.status ?? 'pending'}
-                title={describePhase(kind, phase)}
-              >
-                {kind.slice(0, 4)}
-              </li>
-            );
-          })}
-        </ol>
+        <PhaseTrack phases={phases} />
 
         <span className="protocol__spacer" />
 
@@ -153,6 +139,7 @@ export function ProtocolPanel({
 
       {gate && open && (
         <div className="gate" data-sheep-gate={gate.gate}>
+          <p className="gate__kicker">The session is waiting for you</p>
           <h3 className="gate__title">
             {gate.gate === 'charter' ? 'Charter — your approval' : 'Hypotheses — your selection'}
           </h3>
@@ -242,22 +229,6 @@ export function ProtocolPanel({
       )}
     </section>
   );
-}
-
-const PHASE_ORDER = [
-  'FRAMING',
-  'HYPOTHESIS',
-  'METHOD',
-  'EXECUTION',
-  'CRITIQUE',
-  'RESOLUTION',
-  'SYNTHESIS',
-] as const;
-
-function describePhase(kind: string, phase: PhaseView | undefined): string {
-  if (!phase) return `${kind} — not started`;
-  const rounds = `${String(phase.rounds.length)} round${phase.rounds.length === 1 ? '' : 's'}`;
-  return `${kind} — ${phase.status}, ${rounds}${phase.summary === null ? '' : `: ${phase.summary}`}`;
 }
 
 function describe(error: unknown): string {

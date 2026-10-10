@@ -52,7 +52,7 @@ A session is one question, one roster and one event stream.
 
 1. Give it a **title** and a **research question**. The question is fixed
    before any model is asked anything, and is quoted verbatim in the paper.
-2. Open **Roster** and attach models. For each you can set a weight, a
+2. Press **Open session** — its roster appears beside the list — and attach models. For each you can set a weight, a
    per-model spend cap and a preferred role. A preferred role is a preference:
    the hard rules below always win.
 3. Set the session's **spend cap**. When it is reached the session stops

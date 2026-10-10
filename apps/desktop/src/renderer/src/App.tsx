@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
-import { defaultSettings, type Theme } from '@sheep/core';
+import { defaultSettings, type RosterEntry, type SessionSummary, type Theme } from '@sheep/core';
 import type { IpcClient, IpcResponse } from '@sheep/ipc';
 import logoUrl from '@resources/sheep.png';
 import { APP_NAME } from '@shared/product';
+import { EarTag, tagIndex } from './components/EarTag';
 import { PaneIcon } from './components/PaneIcon';
+import { PhaseTrack, type PhaseView } from './components/PhaseTrack';
 import { ThemeToggle } from './components/ThemeToggle';
 import { UpdateControl } from './components/UpdateControl';
 import { useIpcClient, useRoute, useSystemPrefersDark } from './hooks';
@@ -40,6 +42,8 @@ export function App(): ReactElement {
   const [log, setLog] = useState<LogState>({ kind: 'pending' });
   const [ping, setPing] = useState<PingState>({ kind: 'pending' });
   const { theme, resolved, setTheme, ready: themeReady } = useTheme(client);
+  const [revision, setRevision] = useState(0);
+  const active = useActiveSession(client, `${String(revision)}:${paneId}`);
 
   /**
    * Re-reads the log summary.
@@ -47,9 +51,11 @@ export function App(): ReactElement {
    * Exposed to the panes because anything that appends events changes what the
    * status bar is reporting, and a status bar that lags behind the store is
    * worse than none — it invites trusting a number that is no longer true.
+   * The running head is re-read on the same signal, for the same reason.
    */
   const refreshLog = useCallback(() => {
     if (!client) return;
+    setRevision((current) => current + 1);
     client
       .invoke('sheep:event-log-summary', {})
       .then((summary) => {
@@ -106,47 +112,60 @@ export function App(): ReactElement {
       data-sheep-ping={ping.kind}
       data-sheep-theme={theme}
     >
-      <header className="titlebar">
+      <nav className="nav" aria-label="Work surfaces">
         <div className="brand">
-          <img className="brand__logo" src={logoUrl} alt="" width={26} height={26} />
+          <img className="brand__logo" src={logoUrl} alt="" width={30} height={30} />
           <span className="brand__name">{APP_NAME}</span>
         </div>
-        <ThemeToggle theme={theme} resolved={resolved} onChange={setTheme} disabled={!themeReady} />
-      </header>
 
-      <div className="body">
-        <nav className="nav" aria-label="Work surfaces">
-          <NavGroup panes={RESEARCH_PANES} active={paneId} onNavigate={navigate} />
-          <span className="nav__spacer" />
-          <NavGroup panes={UTILITY_PANES} active={paneId} onNavigate={navigate} />
-        </nav>
+        <span className="nav__heading">The record</span>
+        <NavGroup panes={RESEARCH_PANES} active={paneId} onNavigate={navigate} numbered />
+        <span className="nav__spacer" />
+        <NavGroup panes={UTILITY_PANES} active={paneId} onNavigate={navigate} />
 
-        <main className="content">
-          {paneId === 'sessions' && <SessionsPane client={client} onStoreChanged={refreshLog} />}
-          {paneId === 'conversation' && (
-            <ConversationPane client={client} onStoreChanged={refreshLog} />
-          )}
-          {paneId === 'ledger' && <LedgerPane client={client} onStoreChanged={refreshLog} />}
-          {paneId === 'lab' && <LabPane client={client} onStoreChanged={refreshLog} />}
-          {paneId === 'verification' && (
-            <VerificationPane client={client} onStoreChanged={refreshLog} />
-          )}
-          {paneId === 'artifacts' && <ArtifactsPane client={client} onStoreChanged={refreshLog} />}
-          {paneId === 'paper' && <PaperPane client={client} />}
-          {paneId === 'connections' && <ConnectionsPane client={client} />}
-          {paneId !== 'sessions' &&
-            paneId !== 'conversation' &&
-            paneId !== 'ledger' &&
-            paneId !== 'lab' &&
-            paneId !== 'verification' &&
-            paneId !== 'artifacts' &&
-            paneId !== 'paper' &&
-            paneId !== 'connections' && <StubPane paneId={paneId} />}
-        </main>
-      </div>
+        <div className="nav__foot">
+          <ThemeToggle
+            theme={theme}
+            resolved={resolved}
+            onChange={setTheme}
+            disabled={!themeReady}
+          />
+        </div>
+      </nav>
+
+      <RunningHead active={active} onNavigate={navigate} />
+
+      <main className="content">
+        {paneId === 'sessions' && <SessionsPane client={client} onStoreChanged={refreshLog} />}
+        {paneId === 'conversation' && (
+          <ConversationPane client={client} onStoreChanged={refreshLog} />
+        )}
+        {paneId === 'ledger' && <LedgerPane client={client} onStoreChanged={refreshLog} />}
+        {paneId === 'lab' && <LabPane client={client} onStoreChanged={refreshLog} />}
+        {paneId === 'verification' && (
+          <VerificationPane client={client} onStoreChanged={refreshLog} />
+        )}
+        {paneId === 'artifacts' && <ArtifactsPane client={client} onStoreChanged={refreshLog} />}
+        {paneId === 'paper' && <PaperPane client={client} />}
+        {paneId === 'connections' && <ConnectionsPane client={client} />}
+        {paneId !== 'sessions' &&
+          paneId !== 'conversation' &&
+          paneId !== 'ledger' &&
+          paneId !== 'lab' &&
+          paneId !== 'verification' &&
+          paneId !== 'artifacts' &&
+          paneId !== 'paper' &&
+          paneId !== 'connections' && <StubPane paneId={paneId} />}
+      </main>
 
       <footer className="statusbar">
         <span className="statusbar__item" data-status={chainState}>
+          <span className="chainmark" data-chain={chainState} aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
           {log.kind === 'pending' && 'verifying the event log…'}
           {log.kind === 'ok' &&
             `chain ${
@@ -161,7 +180,7 @@ export function App(): ReactElement {
             <span className="statusbar__item">
               {log.summary.count} event{log.summary.count === 1 ? '' : 's'}
             </span>
-            <span className="statusbar__item">
+            <span className="statusbar__item statusbar__item--muted">
               {log.summary.driver} · {log.summary.journalMode} · schema v{log.summary.schemaVersion}
             </span>
           </>
@@ -179,19 +198,173 @@ export function App(): ReactElement {
   );
 }
 
+/**
+ * The session, pinned.
+ *
+ * A paper carries its title on every page; this carries the question on every
+ * surface, with who is in the flock, where the protocol stands and what has
+ * been spent. It is read-only on purpose — the surfaces below are where
+ * anything is changed.
+ */
+function RunningHead({
+  active,
+  onNavigate,
+}: {
+  active: ActiveSession | null;
+  onNavigate: (id: PaneId) => void;
+}): ReactElement {
+  if (active === null) {
+    return (
+      <header className="runhead">
+        <div className="runhead__what">
+          <span className="runhead__kicker">No session open</span>
+          <p className="runhead__question runhead__question--none">
+            Open a session to pin its question here.
+          </p>
+        </div>
+        <div className="runhead__side">
+          <button
+            type="button"
+            className="button button--quiet"
+            onClick={() => {
+              onNavigate('sessions');
+            }}
+          >
+            Choose a session
+          </button>
+        </div>
+      </header>
+    );
+  }
+
+  const { session, roster, phases } = active;
+  const { spentUsd, capUsd } = session.budget;
+  const used = capUsd === null || capUsd === 0 ? 0 : Math.min(1, spentUsd / capUsd);
+
+  return (
+    <header className="runhead" data-sheep-active-session={session.sessionId}>
+      <div className="runhead__what">
+        <span className="runhead__kicker">
+          <span className="badge" data-status={session.status}>
+            {session.status}
+          </span>
+          {session.title}
+        </span>
+        <p className="runhead__question" title={session.question}>
+          {session.question}
+        </p>
+      </div>
+
+      <div className="runhead__side">
+        <span className="runhead__tags">
+          {roster
+            .filter((entry) => entry.detachedAt === null)
+            .map((entry) => (
+              <EarTag
+                key={entry.participantId}
+                model={entry.model}
+                index={tagIndex(roster, entry.participantId)}
+                bare
+              />
+            ))}
+        </span>
+
+        <PhaseTrack phases={phases} mini />
+
+        <div
+          className="meter"
+          data-level={used >= 1 ? 'spent' : used >= 0.8 ? 'high' : 'ok'}
+          title="Spent so far, against this session's cap"
+        >
+          <span>
+            {formatUsd(spentUsd)}
+            {capUsd === null ? ' · no cap' : ` / ${formatUsd(capUsd)}`}
+          </span>
+          {capUsd !== null && (
+            <span className="meter__bar">
+              <span className="meter__fill" style={{ width: `${String(used * 100)}%` }} />
+            </span>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function formatUsd(amount: number): string {
+  return amount >= 0.01 || amount === 0 ? `$${amount.toFixed(2)}` : `$${amount.toFixed(4)}`;
+}
+
+interface ActiveSession {
+  readonly session: SessionSummary;
+  readonly roster: readonly RosterEntry[];
+  readonly phases: readonly PhaseView[];
+}
+
+/**
+ * The open session, for the running head.
+ *
+ * Re-read whenever `revision` moves — a pane appended events, or the route
+ * changed — rather than patched from what a pane says it did: the same rule the
+ * panes follow, for the same reason.
+ */
+function useActiveSession(client: IpcClient | undefined, revision: unknown): ActiveSession | null {
+  const [active, setActive] = useState<ActiveSession | null>(null);
+
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const sessionId = (await client.invoke('sheep:settings-read', {})).settings[
+          'ui.lastSessionId'
+        ];
+        if (sessionId === null) {
+          if (!cancelled) setActive(null);
+          return;
+        }
+        const [detail, protocol] = await Promise.all([
+          client.invoke('sheep:session-get', { sessionId }),
+          // A session that has never run has no protocol state worth failing for.
+          client.invoke('sheep:protocol-state', { sessionId }).catch(() => null),
+        ]);
+        if (cancelled) return;
+        setActive({
+          session: detail.session,
+          roster: detail.roster,
+          phases: protocol?.state.phases ?? [],
+        });
+      } catch {
+        // The stored id can outlive its session; an empty head says so honestly.
+        if (!cancelled) setActive(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, revision]);
+
+  return active;
+}
+
 /** One block of navigation items, so the seven surfaces stay visibly seven. */
 function NavGroup({
   panes,
   active,
   onNavigate,
+  numbered = false,
 }: {
   panes: readonly PaneDefinition[];
   active: PaneId;
   onNavigate: (id: PaneId) => void;
+  /** The research surfaces are steps, and are numbered as steps. */
+  numbered?: boolean;
 }): ReactElement {
   return (
     <>
-      {panes.map((pane) => (
+      {panes.map((pane, index) => (
         <button
           key={pane.id}
           type="button"
@@ -204,6 +377,7 @@ function NavGroup({
         >
           <PaneIcon pane={pane.id as PaneId} />
           <span className="nav__label">{pane.label}</span>
+          {numbered && <span className="nav__index">{String(index + 1).padStart(2, '0')}</span>}
         </button>
       ))}
     </>
