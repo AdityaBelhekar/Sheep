@@ -80,6 +80,7 @@ const message: Message = {
   finish: 'stop',
   params: { maxOutputTokens: 4_096, temperature: 0.2 },
   promptHash: 'c'.repeat(64),
+  privateTo: null,
   recordedAt: NOW,
 };
 

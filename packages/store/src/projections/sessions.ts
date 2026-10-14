@@ -83,6 +83,8 @@ export const SESSIONS_DDL = `
     max_output_tokens INTEGER,
     temperature    REAL,
     prompt_hash    TEXT,
+    -- The participant a private message is with. NULL is the room.
+    private_to     TEXT,
     recorded_at    TEXT NOT NULL
   ) STRICT;
 
@@ -120,7 +122,8 @@ export const SESSIONS_PROJECTION: Projection = {
   // 5 changes no column. It retires stores that reached 4 while the runner
   // still emptied a stale table instead of dropping it, and so kept the old
   // shape under the new number.
-  ddlVersion: 5,
+  // 6 adds `messages.private_to`.
+  ddlVersion: 6,
   // Children first: these are the tables a future foreign key would depend on.
   tables: ['participants', 'messages', 'sessions'],
   ddl: SESSIONS_DDL,
@@ -202,8 +205,9 @@ export const SESSIONS_PROJECTION: Projection = {
              message_id, session_id, phase_id, round_id, seq, author_kind, participant_id,
              connection_id, vendor_id, model_id, model_version, role, body_kind, body_text,
              body_hash, body_bytes, media_type, input_tokens, output_tokens, cached_tokens,
-             cost_usd, finish, max_output_tokens, temperature, prompt_hash, recorded_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             cost_usd, finish, max_output_tokens, temperature, prompt_hash, private_to,
+             recorded_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(message_id) DO UPDATE SET
              seq = excluded.seq,
              recorded_at = excluded.recorded_at`,
@@ -233,6 +237,7 @@ export const SESSIONS_PROJECTION: Projection = {
             event.payload.params?.maxOutputTokens ?? null,
             event.payload.params?.temperature ?? null,
             event.payload.promptHash ?? null,
+            event.payload.privateTo ?? null,
             at,
           ],
         );
@@ -390,6 +395,7 @@ type MessageRow = {
   max_output_tokens: number | null;
   temperature: number | null;
   prompt_hash: string | null;
+  private_to: string | null;
   recorded_at: string;
 };
 
@@ -407,7 +413,7 @@ const MESSAGE_COLUMNS =
   'message_id, session_id, phase_id, round_id, seq, author_kind, participant_id, connection_id, ' +
   'vendor_id, model_id, model_version, role, body_kind, body_text, body_hash, body_bytes, ' +
   'media_type, input_tokens, output_tokens, cached_tokens, cost_usd, finish, max_output_tokens, ' +
-  'temperature, prompt_hash, ' +
+  'temperature, prompt_hash, private_to, ' +
   'recorded_at';
 
 /** Newest first — what a session list shows. */
@@ -466,6 +472,33 @@ export function listParticipants(
       [sessionId],
     )
     .map(toRosterEntry);
+}
+
+/**
+ * The latest turns of one conversation, oldest first: the room when
+ * `privateTo` is null; with a participant, the room and that participant's
+ * private thread, interleaved as they happened. A model spoken to privately is
+ * still one of the room, and should not forget it; what no query here ever
+ * returns is another participant's private thread.
+ *
+ * Only turns outside the protocol. A round's answers are sealed from the other
+ * models until the round closes, and a chat turn must not be the way around that.
+ */
+export function listThread(
+  db: SqliteDatabase,
+  sessionId: string,
+  privateTo: string | null,
+  limit: number,
+): Message[] {
+  return db
+    .all<MessageRow>(
+      `SELECT ${MESSAGE_COLUMNS} FROM messages
+       WHERE session_id = ? AND phase_id IS NULL AND (private_to IS NULL OR private_to IS ?)
+       ORDER BY seq DESC LIMIT ?`,
+      [sessionId, privateTo, limit],
+    )
+    .map(toMessage)
+    .reverse();
 }
 
 export function getMessage(db: SqliteDatabase, messageId: string): Message | undefined {
@@ -552,6 +585,7 @@ function toMessage(row: MessageRow): Message {
             ...(row.temperature === null ? {} : { temperature: row.temperature }),
           },
     promptHash: row.prompt_hash,
+    privateTo: row.private_to,
     recordedAt: row.recorded_at,
   };
 }

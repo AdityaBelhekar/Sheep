@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DomainEventType } from '@sheep/core';
-import { EVENT_FIXTURES, SESSION_ID } from '@sheep/core/fixtures';
+import { EVENT_FIXTURES, PARTICIPANT_A, SESSION_ID } from '@sheep/core/fixtures';
 import { describe, expect, it } from 'vitest';
 import { EventLog } from '../events/log';
 import { ARTIFACTS_PROJECTION } from './artifacts';
@@ -16,7 +16,13 @@ import { openDatabase } from '../sqlite/open';
 import type { SqliteDatabase, SqliteDriverName, SqlRow } from '../sqlite/types';
 import { TESTABLE_DRIVERS, useTempDir } from '../test-support';
 import { ProjectionRunner } from './runner';
-import { SESSIONS_PROJECTION, getSession, listMessages, listSessions } from './sessions';
+import {
+  SESSIONS_PROJECTION,
+  getSession,
+  listMessages,
+  listSessions,
+  listThread,
+} from './sessions';
 import type { Projection, ProjectionReport } from './types';
 
 const tempDir = useTempDir('sheep-projections-');
@@ -209,8 +215,59 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
         finish: fixture.finish,
         params: fixture.params,
         promptHash: fixture.promptHash,
+        privateTo: null,
         recordedAt: '2026-08-17T09:00:02.000Z',
       });
+    } finally {
+      h.close();
+    }
+  });
+
+  it('keeps a private exchange out of the room and from other models, and protocol turns out of all', () => {
+    const h = harness(driver);
+    try {
+      h.runner.ensure();
+      h.emit('session.created');
+      // The fixture is a protocol turn: it belongs to a round, so to no chat.
+      h.emit('message.recorded');
+      const aside = (messageId: string, text: string, privateTo?: string): void => {
+        h.emit('message.recorded', {
+          messageId,
+          phaseId: undefined,
+          roundId: undefined,
+          author: { kind: 'HUMAN' },
+          role: undefined,
+          body: { kind: 'text', text },
+          usage: undefined,
+          finish: undefined,
+          params: undefined,
+          promptHash: undefined,
+          ...(privateTo === undefined ? {} : { privateTo }),
+        });
+      };
+      aside('00000010-0000-4000-8000-000000000010', 'to everyone');
+      aside('00000011-0000-4000-8000-000000000011', 'just between us', PARTICIPANT_A);
+      aside('00000012-0000-4000-8000-000000000012', 'everyone again');
+      h.catchUp();
+
+      const text = (messages: readonly { body: { kind: string; text?: string } }[]): unknown[] =>
+        messages.map((message) => message.body.text);
+      expect(text(listThread(h.db, SESSION_ID, null, 10))).toEqual([
+        'to everyone',
+        'everyone again',
+      ]);
+      // Privately, the room is still there, with the private turn where it happened.
+      expect(text(listThread(h.db, SESSION_ID, PARTICIPANT_A, 10))).toEqual([
+        'to everyone',
+        'just between us',
+        'everyone again',
+      ]);
+      expect(
+        text(listThread(h.db, SESSION_ID, '88888888-8888-4888-8888-888888888888', 10)),
+      ).toEqual(['to everyone', 'everyone again']);
+      // The latest turns, oldest first.
+      expect(text(listThread(h.db, SESSION_ID, null, 1))).toEqual(['everyone again']);
+      expect(listThread(h.db, SESSION_ID, PARTICIPANT_A, 10)[1]?.privateTo).toBe(PARTICIPANT_A);
     } finally {
       h.close();
     }

@@ -201,6 +201,11 @@ export const EVENT_PAYLOADS = {
     finish: messageFinishReasonSchema.optional(),
     params: generationParamsSchema.optional(),
     promptHash: sha256Schema.optional(),
+    /**
+     * Set on both halves of a private exchange: what a person said to one
+     * model on the side, and what it answered. Absent, a message is the room's.
+     */
+    privateTo: idSchema.optional(),
   }),
 
   /**

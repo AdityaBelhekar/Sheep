@@ -824,14 +824,24 @@ export const IPC_CONTRACTS = {
   'sheep:chat-send': {
     request: z.object({
       sessionId: idSchema,
-      participantId: idSchema,
-      text: z.string().min(1).max(32_768),
+      /** The one model that answers. Omitted, every attached model does, in turn. */
+      participantId: idSchema.optional(),
+      /** With `participantId`: a private exchange the other models never see. */
+      private: z.boolean().optional(),
+      /** Omitted, with no `participantId`: the models carry on without the person. */
+      text: z.string().min(1).max(32_768).optional(),
     }),
     response: z.object({
+      /** The first run's id; cancelling any run of a send stops the rest of it. */
       runId: idSchema,
-      userMessageId: idSchema,
+      /** Null when nothing was said and the models were only asked to go on. */
+      userMessageId: idSchema.nullable(),
       /** The id the answer will be recorded under, known before it exists. */
       assistantMessageId: idSchema,
+      /** Every answer this send will produce, in the order the models speak. */
+      runs: z.array(
+        z.object({ runId: idSchema, participantId: idSchema, assistantMessageId: idSchema }),
+      ),
       /** What the call is expected to cost, priced at the worst case. */
       estimatedCostUsd: usdSchema.nullable(),
     }),

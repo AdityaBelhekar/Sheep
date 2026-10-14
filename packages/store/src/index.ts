@@ -159,6 +159,7 @@ export {
   getParticipant,
   getSession,
   listMessages,
+  listThread,
   listParticipants,
   listSessions,
   type RosterEntry,

@@ -7,6 +7,7 @@ the order a session uses them.
 - [Before you start](#before-you-start)
 - [Connections](#connections)
 - [Sessions](#sessions)
+- [Conversation: chatting with the models](#conversation-chatting-with-the-models)
 - [Conversation: running the protocol](#conversation-running-the-protocol)
 - [Ledger](#ledger)
 - [Lab](#lab)
@@ -61,9 +62,20 @@ A session is one question, one roster and one event stream.
 **Export** saves a session to a `.sheep` file; **Import session…** opens one.
 See [Moving a session between machines](#moving-a-session-between-machines).
 
+## Conversation: chatting with the models
+
+The Conversation pane opens on **Chat**: one room with every attached model in it.
+
+- **Message everyone**, and every model answers in turn. Each one reads the whole room first, the other models' answers included, so they reply to each other as well as to you.
+- **To** sends a message to one model in the room. Everyone still sees it; only that model answers.
+- **Let them discuss** asks for another round of answers with nothing new from you.
+- **Private chat** on a model's tag opens a window with just that model. It knows what was said in the room, but the other models never see the private messages or its replies.
+
+Nothing said in the chat becomes a claim. The research itself happens in the protocol, under the **Protocol** tab.
+
 ## Conversation: running the protocol
 
-Press **Start the protocol** (later, **Continue**). The session moves through seven phases:
+Open the **Protocol** tab and press **Start the protocol** (later, **Continue**). The session moves through seven phases:
 
 | Phase | What happens |
 |---|---|

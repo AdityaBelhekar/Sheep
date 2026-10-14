@@ -117,6 +117,8 @@ export const messageSchema = z.strictObject({
   params: generationParamsSchema.nullable(),
   /** Hash of the exact prompt that produced this, for reproducibility (P5). */
   promptHash: sha256Schema.nullable(),
+  /** The one participant a private message is between the person and. Null: everyone sees it. */
+  privateTo: idSchema.nullable(),
   recordedAt: timestampSchema,
 });
 export type Message = z.infer<typeof messageSchema>;
