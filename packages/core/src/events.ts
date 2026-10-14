@@ -212,6 +212,12 @@ export const EVENT_PAYLOADS = {
     reasoning: z.string().min(1).max(MAX_REASONING_LENGTH).optional(),
     /** Files the person attached, by content address. */
     attachments: z.array(attachmentSchema).min(1).max(8).optional(),
+    /**
+     * Set on a summary of a chat: the last message it stands in for. Every
+     * model then reads the summary and what came after that message, instead
+     * of everything.
+     */
+    summaryThrough: idSchema.optional(),
   }),
 
   /**

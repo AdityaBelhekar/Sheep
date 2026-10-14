@@ -2793,6 +2793,14 @@ select.field__input {
   white-space: normal;
 }
 
+/* A summary sits on the line between what it covers and what came after. */
+.talk__msg--summary {
+  align-items: stretch;
+  padding: 0.3rem 0;
+  border-top: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--border);
+}
+
 .talk__msg--waiting {
   opacity: 0.65;
 }
@@ -3047,6 +3055,15 @@ select.field__input {
   background: var(--sunken);
   font-family: var(--mono);
   font-size: 0.85em;
+}
+
+/* Math inside a sentence stays inside it; the Verification pane's formulas are blocks. */
+.md .formula {
+  display: inline;
+}
+
+.md .formula__math {
+  font-size: 1em;
 }
 
 .md__rule {

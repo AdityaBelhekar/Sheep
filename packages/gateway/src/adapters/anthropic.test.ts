@@ -186,6 +186,20 @@ describe('AnthropicAdapter', () => {
     });
   });
 
+  it('asks for the prefix to be cached only when the request says it will be sent again', () => {
+    const adapter = new AnthropicAdapter({ apiKey: 'sk-test' });
+    const request = {
+      modelId: 'claude-opus-5-5',
+      system: 'You are one of several models.',
+      messages: [{ role: 'user' as const, content: [{ kind: 'text' as const, text: 'Hello' }] }],
+      maxOutputTokens: 64,
+    };
+    expect(adapter.toWire(request)['cache_control']).toBeUndefined();
+    expect(adapter.toWire({ ...request, cachePrefix: true })['cache_control']).toEqual({
+      type: 'ephemeral',
+    });
+  });
+
   it('refuses to send a blank key', async () => {
     const adapter = new AnthropicAdapter({ apiKey: () => '', fetch: fakeFetch([]).fetch });
     await expect(drain(adapter.stream(request()))).rejects.toThrow(CredentialError);

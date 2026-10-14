@@ -15,6 +15,7 @@ import {
   PricingTable,
   StreamCancelledError,
   canonicalJson,
+  collectDeltas,
   estimateInputTokens,
   hashOf,
   priceUsage,
@@ -23,8 +24,9 @@ import {
   type StopReason,
   type TokenUsage,
 } from '@sheep/gateway';
-import { getSession, listParticipants, listThread, sessionBlobRef } from '@sheep/store';
+import { getMessage, getSession, listParticipants, listThread, sessionBlobRef } from '@sheep/store';
 import { assertWithinCaps } from './budget';
+import { sinceSummary, splitForSummary, transcriptFor } from './chat-context';
 import { getAdapterRegistry, syncConnections } from './connections';
 import { logError, logWarn } from './log';
 import { getStore } from './store';
@@ -69,8 +71,11 @@ const CARRY_ON =
 /** A ceiling, not a target. Required by the gateway so nothing runs away. */
 const MAX_OUTPUT_TOKENS = 2_048;
 
-/** How much history one turn carries. Enough for a conversation, bounded. */
-const HISTORY_LIMIT = 40;
+/**
+ * How far back the thread is read for one turn. The token budget and the
+ * summary decide how much of it is sent; this only bounds the read.
+ */
+const THREAD_WINDOW = 200;
 
 /** Images every provider here takes. Anything else arrives as the text read out of it. */
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
@@ -93,6 +98,40 @@ const CONTEXT_BUDGET_TOKENS = 24_000;
 const IMAGE_TURNS = 6;
 
 const LEFT_OUT = '[Sheep] Older turns of this conversation are left out to keep it short.';
+
+/**
+ * When a chat passes the budget, the older part is summarized and only about
+ * this share of the budget is kept as it was said. The rest of the budget is
+ * room to talk before the next summary, which is what keeps the start of every
+ * prompt the same — and so cached — for many turns rather than one.
+ */
+const KEEP_SHARE = 0.4;
+
+/** The longest a summary may run. */
+const SUMMARY_MAX_TOKENS = 1_500;
+
+/**
+ * A summary is rewritten from the one before it each time, so anything it
+ * drops is gone for good. The fixed sections are what stop that: the person's
+ * own words and each model's own proposal are carried forward, not
+ * re-summarized away.
+ */
+const SUMMARY_SYSTEM = [
+  'You keep the record of a group conversation between a person and several AI models short',
+  'enough for it to go on. Write the summary the models will read in place of the turns it',
+  'covers. If there is a summary so far, it is part of the record: carry everything in it',
+  'forward, then add the new turns. Use exactly these sections:',
+  'FROM THE PERSON: every instruction, decision, name, codename, number and fact the person',
+  'stated, word for word, oldest first. Never drop one.',
+  "PROPOSALS: each model's own proposal under its name, as it first stated it, then how it",
+  'changed. Keep every model, even ones the discussion moved away from.',
+  'WHERE THEY STAND: agreements, disagreements and why, with names.',
+  'OPEN: questions not yet settled.',
+  'Keep numbers, names, code and file contents later turns may need. Drop greetings and',
+  'repetition. Plain text, at most 500 words. Add nothing that was not said.',
+].join(' ');
+
+const SUMMARY_PREFACE = '[Sheep] A summary of the conversation before the turns below:';
 
 type Part = NormalizedMessage['content'][number];
 
@@ -292,7 +331,11 @@ async function prepare(
 
   const descriptor = await registry.describe(connection.adapterId, participant.model.modelId);
   const isPrivate = run.privateTo !== undefined;
-  const thread = listThread(store.db, run.sessionId, run.privateTo ?? null, HISTORY_LIMIT);
+  const view = run.privateTo ?? null;
+  let { summary, turns } = sinceSummary(
+    listThread(store.db, run.sessionId, view, THREAD_WINDOW),
+    view,
+  );
   const others = attached.filter((entry) => entry.participantId !== participant.participantId);
   // In a room of one there is nobody to tell apart, so nothing is labelled.
   const labelled = others.length > 0;
@@ -300,33 +343,60 @@ async function prepare(
   const vision =
     descriptor.capabilities.vision &&
     !unsighted.has(sightKey(connection.adapterId, participant.model.modelId));
-  const messages = toNormalized(thread, participant.participantId, labelled, vision);
-  if (pending !== undefined) {
-    const label = labelled ? userLabel(isPrivate) : null;
-    say(messages, 'user', userParts(pending.text, pending.attachments, label, vision));
-  }
-  // Only when the person said nothing: the models were asked to go on.
-  if (carryOn && pending === undefined) {
-    if (messages.length === 0) throw new Error('there is nothing to carry on from yet');
-    say(messages, 'user', CARRY_ON);
-  }
-
-  const request: NormalizedRequest = {
-    modelId: participant.model.modelId,
-    system: systemPrompt(session, participant, others, isPrivate),
-    messages,
-    maxOutputTokens: Math.min(MAX_OUTPUT_TOKENS, descriptor.maxOutputTokens),
-    metadata: { sessionId: run.sessionId, participantId: participant.participantId },
-  };
-  fitToBudget(
-    request,
-    Math.min(CONTEXT_BUDGET_TOKENS, descriptor.contextWindowTokens - request.maxOutputTokens),
+  const maxOutputTokens = Math.min(MAX_OUTPUT_TOKENS, descriptor.maxOutputTokens);
+  const contextBudget = Math.min(
+    CONTEXT_BUDGET_TOKENS,
+    descriptor.contextWindowTokens - maxOutputTokens,
   );
+  const rates = pricing.priceFor(descriptor);
+
+  const compose = (): NormalizedRequest => {
+    const messages = toNormalized(turns, participant.participantId, labelled, vision);
+    if (summary !== null && summary.body.kind === 'text') {
+      messages.unshift({
+        role: 'user',
+        content: [{ kind: 'text', text: `${SUMMARY_PREFACE}\n${summary.body.text}` }],
+      });
+      // A summary and the person's next words are one turn, not two.
+      const [first, second] = messages;
+      if (first && second?.role === 'user') {
+        messages.splice(0, 2, { role: 'user', content: [...first.content, ...second.content] });
+      }
+    }
+    if (pending !== undefined) {
+      const label = labelled ? userLabel(isPrivate) : null;
+      say(messages, 'user', userParts(pending.text, pending.attachments, label, vision));
+    }
+    // Only when the person said nothing: the models were asked to go on.
+    if (carryOn && pending === undefined) {
+      if (messages.length === 0) throw new Error('there is nothing to carry on from yet');
+      say(messages, 'user', CARRY_ON);
+    }
+    return {
+      modelId: participant.model.modelId,
+      system: systemPrompt(session, participant, others, isPrivate),
+      messages,
+      maxOutputTokens,
+      // The same start is sent again next turn, by this model and the others.
+      cachePrefix: true,
+      metadata: { sessionId: run.sessionId, participantId: participant.participantId },
+    };
+  };
+
+  let request = compose();
+  if (estimateInputTokens(request) > contextBudget) {
+    const folded = await summarize(run, connection.adapterId, rates, summary, turns, contextBudget);
+    if (folded) {
+      ({ summary, turns } = folded);
+      request = compose();
+    }
+  }
+  // The last resort, when there was nothing older to fold or the summary failed.
+  fitToBudget(request, contextBudget);
 
   // Priced at `maxOutputTokens` — the worst case, not a guess at the likely
   // one. A budget that assumed the average would be right about the average and
   // wrong exactly when it mattered.
-  const rates = pricing.priceFor(descriptor);
   const estimate = rates
     ? priceUsage(
         rates,
@@ -345,6 +415,108 @@ async function prepare(
     rates: descriptor.pricing ?? rates,
     estimatedCostUsd: estimate?.costUsd ?? null,
   };
+}
+
+/**
+ * Folds the older part of a thread into a summary, written by the model about
+ * to speak and recorded in the session, so every later turn — this model's and
+ * the others' — reads the summary and the recent turns instead of everything.
+ *
+ * Billed and capped like any other call. Returns null, and leaves the thread as
+ * it was, when there is nothing older to fold or the model could not write it;
+ * the caller then trims instead.
+ */
+async function summarize(
+  run: Run,
+  adapterId: string,
+  rates: ReturnType<PricingTable['priceFor']>,
+  summary: Message | null,
+  turns: readonly Message[],
+  contextBudget: number,
+): Promise<{ summary: Message; turns: Message[] } | null> {
+  const { older, recent } = splitForSummary(turns, Math.floor(contextBudget * KEEP_SHARE));
+  const through = older.at(-1);
+  if (!through) return null;
+
+  const store = getStore();
+  const request: NormalizedRequest = {
+    modelId: run.participant.model.modelId,
+    system: SUMMARY_SYSTEM,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            kind: 'text',
+            text: transcriptFor(summary?.body.kind === 'text' ? summary.body.text : null, older),
+          },
+        ],
+      },
+    ],
+    maxOutputTokens: SUMMARY_MAX_TOKENS,
+    metadata: { sessionId: run.sessionId, participantId: run.participant.participantId },
+  };
+
+  try {
+    const estimate = rates
+      ? priceUsage(
+          rates,
+          { inputTokens: estimateInputTokens(request), outputTokens: SUMMARY_MAX_TOKENS },
+          'estimated',
+        )
+      : null;
+    const budget = getSession(store.db, run.sessionId)?.budget;
+    if (budget)
+      assertWithinCaps(budget, run.participant, estimate?.costUsd ?? null, rates === null);
+
+    const response = await collectDeltas(
+      getAdapterRegistry().stream(adapterId, request, { signal: run.controller.signal }),
+    );
+    const text = response.text.trim();
+    if (text === '') return null;
+
+    const cost = rates ? priceUsage(rates, response.usage, 'measured') : null;
+    const messageId = randomUUID();
+    store.record([
+      domainEvent('message.recorded', {
+        sessionId: run.sessionId,
+        messageId,
+        // Sheep's, not the model's: a summary is not something the model said
+        // in the conversation. Which model wrote it is in its prompt hash's transcript.
+        author: { kind: 'SYSTEM' },
+        body: { kind: 'text', text: text.slice(0, 60_000) },
+        summaryThrough: through.messageId,
+        ...(run.privateTo === undefined ? {} : { privateTo: run.privateTo }),
+        ...(cost
+          ? {
+              usage: {
+                inputTokens: cost.inputTokens,
+                outputTokens: cost.outputTokens,
+                costUsd: cost.costUsd,
+              },
+            }
+          : {}),
+        finish: toFinish(response.stopReason),
+        params: { maxOutputTokens: SUMMARY_MAX_TOKENS },
+        promptHash: hashOf(canonicalJson(request)),
+      }),
+      ...(cost && cost.costUsd > 0
+        ? [
+            domainEvent('session.spend-recorded', {
+              sessionId: run.sessionId,
+              costUsd: cost.costUsd,
+              messageId,
+            }),
+          ]
+        : []),
+    ]);
+    const recorded = getMessage(store.db, messageId);
+    return recorded ? { summary: recorded, turns: recent } : null;
+  } catch (error) {
+    if (run.controller.signal.aborted) throw error;
+    logWarn('the chat could not be summarized; older turns are trimmed instead -', error);
+    return null;
+  }
 }
 
 /** What a model is told it is doing, which depends on who else can hear. */

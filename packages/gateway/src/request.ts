@@ -129,6 +129,13 @@ export const normalizedRequestSchema = z.strictObject({
   topP: z.number().min(0).max(1).optional(),
   stopSequences: z.array(z.string().min(1).max(200)).max(16).optional(),
   seed: z.number().int().optional(),
+  /**
+   * This request's beginning will be sent again: ask the provider to keep it.
+   * Only where that is a request — Anthropic's. OpenAI-dialect providers and
+   * Gemini keep a repeated prefix on their own, and a one-off call that asked
+   * would pay to store what nothing reads again.
+   */
+  cachePrefix: z.boolean().optional(),
   metadata: requestMetadataSchema.optional(),
 });
 export type NormalizedRequest = z.infer<typeof normalizedRequestSchema>;

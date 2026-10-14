@@ -285,6 +285,10 @@ export class AnthropicAdapter implements ModelAdapter {
     if (request.stopSequences?.length) body['stop_sequences'] = [...request.stopSequences];
     if (request.temperature !== undefined) body['temperature'] = request.temperature;
     if (request.topP !== undefined) body['top_p'] = request.topP;
+    // Top-level: the provider places the breakpoint after the last block, so
+    // each turn reads the one before it from cache. A prefix too short to
+    // cache is simply not cached; nothing fails.
+    if (request.cachePrefix) body['cache_control'] = { type: 'ephemeral' };
 
     const outputConfig: Record<string, unknown> = {};
     if (this.#options.effort) outputConfig['effort'] = this.#options.effort;

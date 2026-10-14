@@ -73,7 +73,7 @@ The Conversation pane opens on **Chat**: one room with every attached model in i
 
 - **Attach** images, PDFs, code or text files with the paperclip, or drop or paste them into the box. Images go to the models as images; a model that cannot see images is told one was there instead. A PDF is sent as its text.
 - **Thinking** is folded: a model that thinks before answering shows one line, “Thought · N words”, above its answer. Click it to read the thinking.
-- **Long chats** are kept affordable: each model is sent about the last 24,000 tokens of the conversation, and images only from the last few turns. Everything stays in the record.
+- **Long chats** stay affordable and keep their memory. When a conversation grows past about 24,000 tokens, the model about to answer writes a summary of the older part: your instructions and facts word for word, each model's proposals under its name, where they agree and disagree, and what is open. It shows in the chat as one folded line, **Earlier conversation summarized**. Every model then reads the summary and the recent turns, and the start of each prompt stays the same for many turns, so providers that cache a repeated prompt (Anthropic, OpenAI-style APIs such as Ollama Cloud, Gemini) charge less for it. Images are re-sent only from the last few turns. Everything stays in the record.
 
 Nothing said in the chat becomes a claim. The research itself happens in the protocol, under the **Protocol** tab.
 

@@ -568,6 +568,21 @@ function ChatMessage({
   everyone: readonly RosterEntry[];
 }): ReactElement {
   const text = message.body.kind === 'text' ? message.body.text : '(stored as a blob)';
+  if (message.summaryThrough !== null) {
+    // What the models read in place of the turns above it, folded like thinking.
+    const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+    return (
+      <li className="talk__msg talk__msg--summary" data-author="SYSTEM">
+        <details className="think">
+          <summary className="think__summary">
+            <span className="think__label">Earlier conversation summarized</span>
+            <span className="think__count">{words} words</span>
+          </summary>
+          <div className="think__body">{text}</div>
+        </details>
+      </li>
+    );
+  }
   if (message.author.kind !== 'MODEL') {
     return (
       <li className="talk__msg" data-author={message.author.kind}>

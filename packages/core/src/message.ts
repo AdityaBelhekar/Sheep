@@ -131,6 +131,8 @@ export const messageSchema = z.strictObject({
   reasoning: z.string().max(MAX_REASONING_LENGTH).nullable(),
   /** Files the person attached. Empty for everything else. */
   attachments: z.array(attachmentSchema).max(8),
+  /** On a chat summary: the last message it stands in for. Null on everything else. */
+  summaryThrough: idSchema.nullable(),
   usage: usageSchema.nullable(),
   /** How the turn stopped. Null for anything a model did not produce. */
   finish: messageFinishReasonSchema.nullable(),

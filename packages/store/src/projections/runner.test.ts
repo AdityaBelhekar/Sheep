@@ -213,6 +213,7 @@ describe.each(TESTABLE_DRIVERS)('projections on %s', (driver) => {
         body: fixture.body,
         reasoning: null,
         attachments: [],
+        summaryThrough: null,
         usage: fixture.usage,
         finish: fixture.finish,
         params: fixture.params,

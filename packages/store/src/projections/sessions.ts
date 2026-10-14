@@ -90,6 +90,8 @@ export const SESSIONS_DDL = `
     reasoning      TEXT,
     -- Attached files, as a JSON array of {name, mediaType, hash, bytes}.
     attachments    TEXT,
+    -- On a chat summary: the last message it stands in for.
+    summary_through TEXT,
     recorded_at    TEXT NOT NULL
   ) STRICT;
 
@@ -127,8 +129,8 @@ export const SESSIONS_PROJECTION: Projection = {
   // 5 changes no column. It retires stores that reached 4 while the runner
   // still emptied a stale table instead of dropping it, and so kept the old
   // shape under the new number.
-  // 6 adds `messages.private_to`; 7, `reasoning` and `attachments`.
-  ddlVersion: 7,
+  // 6 adds `messages.private_to`; 7, `reasoning` and `attachments`; 8, `summary_through`.
+  ddlVersion: 8,
   // Children first: these are the tables a future foreign key would depend on.
   tables: ['participants', 'messages', 'sessions'],
   ddl: SESSIONS_DDL,
@@ -211,8 +213,8 @@ export const SESSIONS_PROJECTION: Projection = {
              connection_id, vendor_id, model_id, model_version, role, body_kind, body_text,
              body_hash, body_bytes, media_type, input_tokens, output_tokens, cached_tokens,
              cost_usd, finish, max_output_tokens, temperature, prompt_hash, private_to,
-             reasoning, attachments, recorded_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             reasoning, attachments, summary_through, recorded_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(message_id) DO UPDATE SET
              seq = excluded.seq,
              recorded_at = excluded.recorded_at`,
@@ -245,6 +247,7 @@ export const SESSIONS_PROJECTION: Projection = {
             event.payload.privateTo ?? null,
             event.payload.reasoning ?? null,
             event.payload.attachments ? JSON.stringify(event.payload.attachments) : null,
+            event.payload.summaryThrough ?? null,
             at,
           ],
         );
@@ -405,6 +408,7 @@ type MessageRow = {
   private_to: string | null;
   reasoning: string | null;
   attachments: string | null;
+  summary_through: string | null;
   recorded_at: string;
 };
 
@@ -422,7 +426,7 @@ const MESSAGE_COLUMNS =
   'message_id, session_id, phase_id, round_id, seq, author_kind, participant_id, connection_id, ' +
   'vendor_id, model_id, model_version, role, body_kind, body_text, body_hash, body_bytes, ' +
   'media_type, input_tokens, output_tokens, cached_tokens, cost_usd, finish, max_output_tokens, ' +
-  'temperature, prompt_hash, private_to, reasoning, attachments, ' +
+  'temperature, prompt_hash, private_to, reasoning, attachments, summary_through, ' +
   'recorded_at';
 
 /** Newest first — what a session list shows. */
@@ -578,6 +582,7 @@ function toMessage(row: MessageRow): Message {
         : { kind: 'text', text: row.body_text ?? '' },
     reasoning: row.reasoning,
     attachments: row.attachments === null ? [] : (JSON.parse(row.attachments) as Attachment[]),
+    summaryThrough: row.summary_through,
     usage:
       row.cost_usd === null
         ? null
