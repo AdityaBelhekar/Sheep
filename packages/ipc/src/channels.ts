@@ -37,6 +37,7 @@ export const IPC_CHANNELS = [
   'sheep:lab-cancel',
   'sheep:executions-list',
   'sheep:execution-blob',
+  'sheep:message-attachment',
   'sheep:derivation-check',
   'sheep:derivations-list',
   'sheep:derivation-get',

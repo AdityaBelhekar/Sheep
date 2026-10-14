@@ -93,13 +93,16 @@ export {
 } from './protocol';
 
 export {
+  MAX_REASONING_LENGTH,
   MESSAGE_FINISH_REASONS,
+  attachmentSchema,
   generationParamsSchema,
   messageAuthorSchema,
   messageBodySchema,
   messageFinishReasonSchema,
   messageSchema,
   usageSchema,
+  type Attachment,
   type GenerationParams,
   type Message,
   type MessageAuthor,

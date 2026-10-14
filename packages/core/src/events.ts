@@ -12,6 +12,8 @@ import {
   proposedTestSchema,
 } from './dispute';
 import {
+  MAX_REASONING_LENGTH,
+  attachmentSchema,
   generationParamsSchema,
   messageAuthorSchema,
   messageBodySchema,
@@ -206,6 +208,10 @@ export const EVENT_PAYLOADS = {
      * model on the side, and what it answered. Absent, a message is the room's.
      */
     privateTo: idSchema.optional(),
+    /** The model's visible thinking, recorded beside the answer and never as part of it. */
+    reasoning: z.string().min(1).max(MAX_REASONING_LENGTH).optional(),
+    /** Files the person attached, by content address. */
+    attachments: z.array(attachmentSchema).min(1).max(8).optional(),
   }),
 
   /**

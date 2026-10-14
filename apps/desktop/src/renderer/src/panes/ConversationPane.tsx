@@ -10,6 +10,13 @@ import {
 import type { Message, ModelRef, RosterEntry, SessionSummary } from '@sheep/core';
 import type { IpcClient, StreamEvent } from '@sheep/ipc';
 import { paneById } from '@shared/panes';
+import {
+  ACCEPT,
+  formatBytes,
+  isImage,
+  readAttachment,
+  type OutgoingAttachment,
+} from '../components/attachments';
 import { EarTag, tagIndex } from '../components/EarTag';
 import { Markdown } from '../components/Markdown';
 import type { PhaseView } from '../components/PhaseTrack';
@@ -41,7 +48,20 @@ type Loaded =
     }
   | { kind: 'error'; message: string };
 
-type SendInput = { participantId?: string; private?: boolean; text?: string };
+type SendInput = {
+  participantId?: string;
+  private?: boolean;
+  text?: string;
+  attachments?: OutgoingAttachment[];
+};
+
+/** What the person typed and attached, as a send: an empty part is left out, not sent empty. */
+function said(text: string, files: OutgoingAttachment[]): SendInput {
+  return {
+    ...(text === '' ? {} : { text }),
+    ...(files.length === 0 ? {} : { attachments: files }),
+  };
+}
 
 /** Everyone, in the "to" picker. A participant id otherwise. */
 const EVERYONE = 'everyone';
@@ -367,6 +387,7 @@ export function ConversationPane({
           </div>
 
           <Thread
+            client={client}
             messages={room}
             runs={roomRuns}
             everyone={everyone}
@@ -389,7 +410,9 @@ export function ConversationPane({
             placeholder={
               target ? `Message ${target.model.modelId} (everyone sees it)` : 'Message everyone'
             }
-            onSend={(text) => send(to === EVERYONE ? { text } : { participantId: to, text })}
+            onSend={(text, files) =>
+              send({ ...(to === EVERYONE ? {} : { participantId: to }), ...said(text, files) })
+            }
             onStop={() => {
               stop(null);
             }}
@@ -429,6 +452,7 @@ export function ConversationPane({
 
       {state.kind === 'ready' && privateWith !== null && (
         <PrivateChat
+          client={client}
           participant={everyone.find((entry) => entry.participantId === privateWith)}
           index={tagIndex(everyone, privateWith)}
           messages={messages.filter(
@@ -437,7 +461,9 @@ export function ConversationPane({
           runs={runs.filter((run) => run.privateTo === privateWith)}
           everyone={everyone}
           problem={problem}
-          onSend={(text) => send({ participantId: privateWith, private: true, text })}
+          onSend={(text, files) =>
+            send({ participantId: privateWith, private: true, ...said(text, files) })
+          }
           onStop={() => {
             stop(privateWith);
           }}
@@ -454,11 +480,13 @@ export function ConversationPane({
 
 /** One conversation, oldest first, with whatever is still being written at the end. */
 function Thread({
+  client,
   messages,
   runs,
   everyone,
   empty,
 }: {
+  client: IpcClient | undefined;
   messages: readonly Message[];
   runs: readonly LiveRun[];
   everyone: readonly RosterEntry[];
@@ -474,7 +502,12 @@ function Thread({
     <ol className="talk__thread">
       {messages.length === 0 && runs.length === 0 && <li className="talk__hello">{empty}</li>}
       {messages.map((message) => (
-        <ChatMessage key={message.messageId} message={message} everyone={everyone} />
+        <ChatMessage
+          key={message.messageId}
+          client={client}
+          message={message}
+          everyone={everyone}
+        />
       ))}
       {runs.map((run) => {
         const model = everyone.find((entry) => entry.participantId === run.participantId)?.model;
@@ -489,9 +522,7 @@ function Thread({
             <Speaker model={model} index={index}>
               <span className="talk__typing" aria-label="writing" />
             </Speaker>
-            {run.reasoning !== '' && run.text === '' && (
-              <p className="talk__thinking">{run.reasoning}</p>
-            )}
+            {run.reasoning !== '' && <Thinking text={run.reasoning} live={run.text === ''} />}
             <div className="chat__body talk__body">
               <Markdown text={run.text} />
             </div>
@@ -528,9 +559,11 @@ function Speaker({
 }
 
 function ChatMessage({
+  client,
   message,
   everyone,
 }: {
+  client: IpcClient | undefined;
   message: Message;
   everyone: readonly RosterEntry[];
 }): ReactElement {
@@ -538,7 +571,12 @@ function ChatMessage({
   if (message.author.kind !== 'MODEL') {
     return (
       <li className="talk__msg" data-author={message.author.kind}>
-        <div className="talk__bubble">{text}</div>
+        <Attachments
+          client={client}
+          messageId={message.messageId}
+          attachments={message.attachments}
+        />
+        {text !== '' && <div className="talk__bubble">{text}</div>}
       </li>
     );
   }
@@ -552,10 +590,15 @@ function ChatMessage({
           </span>
         )}
       </Speaker>
+      {message.reasoning !== null && <Thinking text={message.reasoning} />}
       <div className="talk__body">
         {text === '' ? (
           <p className="chat__empty">
-            {message.finish === 'cancelled' ? 'stopped before it said anything' : 'no text'}
+            {message.finish === 'cancelled'
+              ? 'stopped before it said anything'
+              : message.reasoning !== null
+                ? 'it ran out of room while thinking, before it answered'
+                : 'no text'}
           </p>
         ) : (
           <Markdown text={text} />
@@ -585,18 +628,63 @@ function Composer({
   /** The room's composer: the one the launch checks type into. */
   primary?: boolean;
   /** Resolves false when the message did not leave, so it is given back. */
-  onSend: (text: string) => Promise<boolean>;
+  onSend: (text: string, files: OutgoingAttachment[]) => Promise<boolean>;
   onStop: () => void;
   children?: ReactNode;
 }): ReactElement {
   const [draft, setDraft] = useState('');
+  const [files, setFiles] = useState<readonly Picked[]>([]);
+  const [reading, setReading] = useState(false);
+  const [fileProblem, setFileProblem] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement | null>(null);
+
+  // A preview's object URL is the page's to free, once nothing shows it.
+  useEffect(
+    () => () => {
+      for (const picked of files) if (picked.preview) URL.revokeObjectURL(picked.preview);
+    },
+    [files],
+  );
+
+  const add = (list: FileList | readonly File[]): void => {
+    const incoming = [...list];
+    if (incoming.length === 0) return;
+    setFileProblem(null);
+    setFiles((current) => {
+      const room = Math.max(0, MAX_FILES - current.length);
+      if (incoming.length > room) setFileProblem(`At most ${String(MAX_FILES)} files a message.`);
+      return [
+        ...current,
+        ...incoming.slice(0, room).map((file) => ({
+          id: `${file.name}-${String(file.size)}-${String(Math.random())}`,
+          file,
+          preview: isImage(file) ? URL.createObjectURL(file) : null,
+        })),
+      ];
+    });
+  };
+
   const submit = (): void => {
     const text = draft.trim();
-    if (text === '' || busy) return;
-    setDraft('');
-    void onSend(text).then((sent) => {
-      if (!sent) setDraft(text);
-    });
+    if ((text === '' && files.length === 0) || busy || reading) return;
+    setReading(true);
+    setFileProblem(null);
+    void Promise.all(files.map((picked) => readAttachment(picked.file)))
+      .then(async (outgoing) => {
+        const kept = files;
+        setDraft('');
+        setFiles([]);
+        if (!(await onSend(text, outgoing))) {
+          setDraft(text);
+          setFiles(kept);
+        }
+      })
+      .catch((error: unknown) => {
+        setFileProblem(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        setReading(false);
+      });
   };
 
   return (
@@ -606,7 +694,45 @@ function Composer({
         event.preventDefault();
         submit();
       }}
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        add(event.dataTransfer.files);
+      }}
     >
+      {files.length > 0 && (
+        <ul className="talk__files">
+          {files.map((picked) => (
+            <li key={picked.id} className="talk__file">
+              {picked.preview ? (
+                <img className="talk__file-thumb" src={picked.preview} alt="" />
+              ) : (
+                <span className="talk__file-icon" aria-hidden="true">
+                  {picked.file.name.split('.').pop()?.slice(0, 4).toUpperCase() ?? 'FILE'}
+                </span>
+              )}
+              <span className="talk__file-name">{picked.file.name}</span>
+              <button
+                type="button"
+                className="talk__file-remove"
+                aria-label={`Remove ${picked.file.name}`}
+                onClick={() => {
+                  setFiles((current) => current.filter((entry) => entry.id !== picked.id));
+                }}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {fileProblem !== null && (
+        <p className="talk__file-problem" role="alert">
+          {fileProblem}
+        </p>
+      )}
       <textarea
         className="talk__input"
         rows={1}
@@ -614,6 +740,13 @@ function Composer({
         value={draft}
         onChange={(event) => {
           setDraft(event.target.value);
+        }}
+        onPaste={(event) => {
+          // A pasted screenshot arrives as a file; text pastes as text.
+          if (event.clipboardData.files.length > 0) {
+            event.preventDefault();
+            add(event.clipboardData.files);
+          }
         }}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) {
@@ -623,6 +756,37 @@ function Composer({
         }}
       />
       <div className="talk__tools">
+        <input
+          ref={picker}
+          type="file"
+          multiple
+          accept={ACCEPT}
+          hidden
+          onChange={(event) => {
+            if (event.target.files) add(event.target.files);
+            event.target.value = '';
+          }}
+        />
+        <button
+          type="button"
+          className="talk__attach"
+          aria-label="Attach images or files"
+          title="Attach images, PDFs or text files (or drop or paste them here)"
+          onClick={() => {
+            picker.current?.click();
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path
+              d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L14 4.5a3.5 3.5 0 015 5L10.5 18a2 2 0 01-3-3L15 7.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
         {children}
         <span className="talk__spacer" />
         {busy ? (
@@ -643,9 +807,9 @@ function Composer({
             data-sheep-send={primary ? 'true' : undefined}
             aria-label="Send"
             title="Send (Enter)"
-            disabled={draft.trim() === ''}
+            disabled={(draft.trim() === '' && files.length === 0) || reading}
           >
-            <span aria-hidden="true">↑</span>
+            <span aria-hidden="true">{reading ? '…' : '↑'}</span>
           </button>
         )}
       </div>
@@ -653,8 +817,105 @@ function Composer({
   );
 }
 
+/** A file picked for the next message, with a preview while it waits. */
+interface Picked {
+  readonly id: string;
+  readonly file: File;
+  readonly preview: string | null;
+}
+
+/** As many as one message carries; the main process holds the same line. */
+const MAX_FILES = 6;
+
+/**
+ * What a model thought before it answered, folded to one line.
+ *
+ * Folded, always: the answer is what the chat shows. While the model is still
+ * thinking the line says so and counts as it goes; a click opens the thinking
+ * itself, live or finished.
+ */
+function Thinking({ text, live = false }: { text: string; live?: boolean }): ReactElement {
+  const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+  return (
+    <details className="think" data-live={live ? 'true' : undefined}>
+      <summary className="think__summary">
+        <span className="think__label">{live ? 'Thinking' : 'Thought'}</span>
+        <span className="think__count">{words} words</span>
+      </summary>
+      <div className="think__body">{text}</div>
+    </details>
+  );
+}
+
+/** The files a person sent, as thumbnails and labels; fetched from the store when shown. */
+function Attachments({
+  client,
+  messageId,
+  attachments,
+}: {
+  client: IpcClient | undefined;
+  messageId: string;
+  attachments: Message['attachments'];
+}): ReactElement | null {
+  if (attachments.length === 0) return null;
+  return (
+    <ul className="talk__sent-files">
+      {attachments.map((file) =>
+        file.mediaType.startsWith('image/') ? (
+          <li key={file.hash}>
+            <SentImage client={client} messageId={messageId} hash={file.hash} name={file.name} />
+          </li>
+        ) : (
+          <li key={file.hash} className="talk__file talk__file--sent">
+            <span className="talk__file-icon" aria-hidden="true">
+              {file.name.split('.').pop()?.slice(0, 4).toUpperCase() ?? 'FILE'}
+            </span>
+            <span className="talk__file-name">{file.name}</span>
+            <span className="talk__file-size">{formatBytes(file.bytes)}</span>
+          </li>
+        ),
+      )}
+    </ul>
+  );
+}
+
+function SentImage({
+  client,
+  messageId,
+  hash,
+  name,
+}: {
+  client: IpcClient | undefined;
+  messageId: string;
+  hash: string;
+  name: string;
+}): ReactElement {
+  const [source, setSource] = useState<string | null>(null);
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    void client
+      .invoke('sheep:message-attachment', { messageId, hash })
+      .then((reply) => {
+        if (!cancelled) setSource(`data:${reply.mediaType};base64,${reply.base64}`);
+      })
+      .catch(() => {
+        // The label below still says what was sent.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, messageId, hash]);
+  return source === null ? (
+    <span className="talk__file talk__file--sent">{name}</span>
+  ) : (
+    <img className="talk__sent-image" src={source} alt={name} title={name} />
+  );
+}
+
 /** A private thread with one model, in a window over the room. */
 function PrivateChat({
+  client,
   participant,
   index,
   messages,
@@ -666,13 +927,14 @@ function PrivateChat({
   onClose,
   nameOf,
 }: {
+  client: IpcClient | undefined;
   participant: RosterEntry | undefined;
   index: number;
   messages: readonly Message[];
   runs: readonly LiveRun[];
   everyone: readonly RosterEntry[];
   problem: string | null;
-  onSend: (text: string) => Promise<boolean>;
+  onSend: (text: string, files: OutgoingAttachment[]) => Promise<boolean>;
   onStop: () => void;
   onClose: () => void;
   nameOf: (participantId: string) => string;
@@ -704,6 +966,7 @@ function PrivateChat({
       </header>
       <div className="dm__body">
         <Thread
+          client={client}
           messages={messages}
           runs={runs}
           everyone={everyone}

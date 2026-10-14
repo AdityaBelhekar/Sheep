@@ -72,6 +72,23 @@ export const MESSAGE_FINISH_REASONS = [
 export const messageFinishReasonSchema = z.enum(MESSAGE_FINISH_REASONS);
 export type MessageFinishReason = z.infer<typeof messageFinishReasonSchema>;
 
+/**
+ * A file the person attached to a message: kept in the content-addressed store,
+ * and named here by its hash, so the log stays small and the file is carried by
+ * a session bundle like any other blob.
+ */
+export const attachmentSchema = z.strictObject({
+  name: z.string().min(1).max(200),
+  /** An image type, or `text/plain` for anything read as text (a PDF's text included). */
+  mediaType: z.string().min(1).max(120),
+  hash: sha256Schema,
+  bytes: byteCountSchema,
+});
+export type Attachment = z.infer<typeof attachmentSchema>;
+
+/** The most a model's visible thinking may run to in one turn. */
+export const MAX_REASONING_LENGTH = 200_000;
+
 /** What one model call actually cost. Populated by the gateway (Phase 17). */
 export const usageSchema = z.strictObject({
   inputTokens: tokenCountSchema,
@@ -110,6 +127,10 @@ export const messageSchema = z.strictObject({
   /** The role the author held when it spoke, if it held one. */
   role: participantRoleSchema.nullable(),
   body: messageBodySchema,
+  /** What the model thought before it answered, kept apart from the answer. Null when it showed none. */
+  reasoning: z.string().max(MAX_REASONING_LENGTH).nullable(),
+  /** Files the person attached. Empty for everything else. */
+  attachments: z.array(attachmentSchema).max(8),
   usage: usageSchema.nullable(),
   /** How the turn stopped. Null for anything a model did not produce. */
   finish: messageFinishReasonSchema.nullable(),

@@ -71,6 +71,10 @@ The Conversation pane opens on **Chat**: one room with every attached model in i
 - **Let them discuss** asks for another round of answers with nothing new from you.
 - **Private chat** on a model's tag opens a window with just that model. It knows what was said in the room, but the other models never see the private messages or its replies.
 
+- **Attach** images, PDFs, code or text files with the paperclip, or drop or paste them into the box. Images go to the models as images; a model that cannot see images is told one was there instead. A PDF is sent as its text.
+- **Thinking** is folded: a model that thinks before answering shows one line, “Thought · N words”, above its answer. Click it to read the thinking.
+- **Long chats** are kept affordable: each model is sent about the last 24,000 tokens of the conversation, and images only from the last few turns. Everything stays in the record.
+
 Nothing said in the chat becomes a claim. The research itself happens in the protocol, under the **Protocol** tab.
 
 ## Conversation: running the protocol

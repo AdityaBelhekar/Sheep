@@ -76,6 +76,8 @@ const message: Message = {
   author: { kind: 'MODEL', participantId: PARTICIPANT_A, model: ANTHROPIC_MODEL },
   role: 'CRITIC',
   body: { kind: 'text', text: 'The baseline is missing.' },
+  reasoning: null,
+  attachments: [],
   usage: { inputTokens: 900, outputTokens: 120, costUsd: 0.02 },
   finish: 'stop',
   params: { maxOutputTokens: 4_096, temperature: 0.2 },

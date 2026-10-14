@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { BrowserWindow } from 'electron';
 import {
+  MAX_REASONING_LENGTH,
   domainEvent,
+  type Attachment,
   type Message,
   type MessageFinishReason,
   type ModelRef,
@@ -21,7 +23,7 @@ import {
   type StopReason,
   type TokenUsage,
 } from '@sheep/gateway';
-import { getSession, listParticipants, listThread } from '@sheep/store';
+import { getSession, listParticipants, listThread, sessionBlobRef } from '@sheep/store';
 import { assertWithinCaps } from './budget';
 import { getAdapterRegistry, syncConnections } from './connections';
 import { logError, logWarn } from './log';
@@ -70,6 +72,36 @@ const MAX_OUTPUT_TOKENS = 2_048;
 /** How much history one turn carries. Enough for a conversation, bounded. */
 const HISTORY_LIMIT = 40;
 
+/** Images every provider here takes. Anything else arrives as the text read out of it. */
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_TEXT_BYTES = 2 * 1024 * 1024;
+
+/** How much of one attached text a model is shown. The whole of it stays in the record. */
+const TEXT_IN_PROMPT = 100_000;
+
+/**
+ * The most one chat turn sends a model, in estimated tokens.
+ *
+ * Every model is sent the room on every turn, so a long chat is paid for again
+ * by each of them each time. Past this, the oldest turns are left out — the
+ * record keeps them — and the model is told they are there.
+ */
+const CONTEXT_BUDGET_TOKENS = 24_000;
+
+/** Images are sent again only from this many recent turns; older ones are named instead. */
+const IMAGE_TURNS = 6;
+
+const LEFT_OUT = '[Sheep] Older turns of this conversation are left out to keep it short.';
+
+type Part = NormalizedMessage['content'][number];
+
+/** What the person has just sent and is not yet in the log. */
+interface Pending {
+  readonly text: string;
+  readonly attachments: readonly Attachment[];
+}
+
 interface Run {
   readonly runId: string;
   readonly sessionId: string;
@@ -92,6 +124,18 @@ interface Prepared {
 
 const runs = new Map<string, Run>();
 
+/**
+ * Models that turned an image away, by adapter and model id. A catalogue that
+ * cannot say which of its models see — Ollama Cloud's cannot — is believed
+ * until a model refuses, and then that model is sent a note instead, for the
+ * rest of the app's life.
+ */
+const unsighted = new Set<string>();
+const sightKey = (adapterId: string, modelId: string): string => `${adapterId}\u0000${modelId}`;
+
+/** A provider's way of saying a model takes no images. */
+const NO_IMAGES = /image/i;
+
 /** Prices, with room for the user's own overrides in a later phase. */
 const pricing = new PricingTable();
 
@@ -101,8 +145,10 @@ export interface SendChatInput {
   readonly participantId?: string | undefined;
   /** With `participantId`: a private exchange the other models never see. */
   readonly private?: boolean | undefined;
-  /** Absent, with no `participantId`: the models carry on without the person. */
+  /** Absent, with no `participantId` and nothing attached: the models carry on without the person. */
   readonly text?: string | undefined;
+  /** An image as it is, or the text read out of anything else. */
+  readonly attachments?: readonly { name: string; mediaType: string; base64: string }[] | undefined;
 }
 
 export interface SendChatResult {
@@ -137,7 +183,9 @@ export async function sendChat(
   if (input.private === true && input.participantId === undefined) {
     throw new Error('a private message is to one model');
   }
-  if (input.text === undefined && input.participantId !== undefined) {
+  // Nothing said and nothing attached: the models are being asked to carry on.
+  const nothing = input.text === undefined && (input.attachments?.length ?? 0) === 0;
+  if (nothing && input.participantId !== undefined) {
     throw new Error('there is nothing to send');
   }
 
@@ -154,12 +202,19 @@ export async function sendChat(
   }));
   const [first, ...rest] = batch as [Run, ...Run[]];
 
+  // Kept by content address before anything is asked of a model, so the
+  // message below can name them. A refused send leaves them unreferenced.
+  const attachments = storeAttachments(input.sessionId, input.attachments ?? []);
+  const pending: Pending | undefined = nothing
+    ? undefined
+    : { text: input.text ?? '', attachments };
+
   // The first call is prepared before anything is written down, so a send that
   // cannot start — a spent cap, a connection that is gone — records nothing.
-  const prepared = await prepare(session, first, attached, input.text);
+  const prepared = await prepare(session, first, attached, pending);
 
-  const userMessageId = input.text === undefined ? null : randomUUID();
-  if (userMessageId !== null && input.text !== undefined) {
+  const userMessageId = pending === undefined ? null : randomUUID();
+  if (userMessageId !== null && pending !== undefined) {
     // Recorded before the call: a question that reached a provider and then
     // vanished would make the answer that followed it inexplicable.
     store.record([
@@ -167,8 +222,9 @@ export async function sendChat(
         sessionId: input.sessionId,
         messageId: userMessageId,
         author: { kind: 'HUMAN' },
-        body: { kind: 'text', text: input.text },
+        body: { kind: 'text', text: pending.text },
         ...(privateTo === undefined ? {} : { privateTo }),
+        ...(attachments.length === 0 ? {} : { attachments }),
       }),
     ]);
   }
@@ -187,10 +243,7 @@ export async function sendChat(
       }
       try {
         // Nothing pending: the person's message is in the thread by now.
-        await drive(
-          run,
-          await prepare(session, run, attached, undefined, input.text === undefined),
-        );
+        await drive(run, await prepare(session, run, attached, undefined, nothing));
       } catch (error) {
         // One model that cannot answer does not silence the ones after it.
         logWarn(`run ${run.runId} could not start -`, error);
@@ -222,7 +275,7 @@ async function prepare(
   session: SessionSummary,
   run: Run,
   attached: readonly RosterEntry[],
-  pending: string | undefined,
+  pending: Pending | undefined,
   carryOn = pending === undefined && run.privateTo === undefined && attached.length > 1,
 ): Promise<Prepared> {
   const store = getStore();
@@ -244,9 +297,13 @@ async function prepare(
   // In a room of one there is nobody to tell apart, so nothing is labelled.
   const labelled = others.length > 0;
 
-  const messages = toNormalized(thread, participant.participantId, labelled);
+  const vision =
+    descriptor.capabilities.vision &&
+    !unsighted.has(sightKey(connection.adapterId, participant.model.modelId));
+  const messages = toNormalized(thread, participant.participantId, labelled, vision);
   if (pending !== undefined) {
-    say(messages, 'user', labelled ? `${userLabel(isPrivate)} ${pending}` : pending);
+    const label = labelled ? userLabel(isPrivate) : null;
+    say(messages, 'user', userParts(pending.text, pending.attachments, label, vision));
   }
   // Only when the person said nothing: the models were asked to go on.
   if (carryOn && pending === undefined) {
@@ -261,6 +318,10 @@ async function prepare(
     maxOutputTokens: Math.min(MAX_OUTPUT_TOKENS, descriptor.maxOutputTokens),
     metadata: { sessionId: run.sessionId, participantId: participant.participantId },
   };
+  fitToBudget(
+    request,
+    Math.min(CONTEXT_BUDGET_TOKENS, descriptor.contextWindowTokens - request.maxOutputTokens),
+  );
 
   // Priced at `maxOutputTokens` — the worst case, not a guess at the likely
   // one. A budget that assumed the average would be right about the average and
@@ -364,22 +425,35 @@ function skip(run: Run, finish: 'cancelled' | 'error', message: string | null): 
 
 async function drive(run: Run, prepared: Prepared): Promise<void> {
   const store = getStore();
-  const { request, rates } = prepared;
+  const { rates } = prepared;
+  let { request } = prepared;
   const model: ModelRef = run.participant.model;
   const participantId = run.participant.participantId;
-  // The exact request that produced this answer, addressed by hash — the
-  // reproducibility half of P5, and the same digest the CAS transcript uses.
-  const promptHash = hashOf(canonicalJson(request));
-
   let text = '';
   let reasoning = '';
   let usage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
   let stopReason: StopReason | null = null;
-  let failure: Error | null = null;
+  let failure: Error | null;
   let started = false;
 
-  try {
-    for await (const delta of getAdapterRegistry().stream(prepared.adapterId, request, {
+  for (let attempt = 0; ; attempt += 1) {
+    failure = await stream(request).then(
+      () => null,
+      (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
+    );
+    // Refused for an image before saying anything: once more, with each image
+    // named instead of sent. Anything else is the failure it is.
+    if (!failure || attempt > 0 || started || !hasImages(request)) break;
+    if (!NO_IMAGES.test(failure.message)) break;
+    unsighted.add(sightKey(prepared.adapterId, request.modelId));
+    request = withoutImages(request);
+  }
+  // The exact request that produced this answer, addressed by hash — the
+  // reproducibility half of P5, and the same digest the CAS transcript uses.
+  const promptHash = hashOf(canonicalJson(request));
+
+  async function stream(sent: NormalizedRequest): Promise<void> {
+    for await (const delta of getAdapterRegistry().stream(prepared.adapterId, sent, {
       signal: run.controller.signal,
     })) {
       switch (delta.kind) {
@@ -415,8 +489,6 @@ async function drive(run: Run, prepared: Prepared): Promise<void> {
           break;
       }
     }
-  } catch (error) {
-    failure = error instanceof Error ? error : new Error(String(error));
   }
 
   const cancelled = run.controller.signal.aborted || failure instanceof StreamCancelledError;
@@ -437,7 +509,10 @@ async function drive(run: Run, prepared: Prepared): Promise<void> {
         sessionId: run.sessionId,
         messageId: run.assistantMessageId,
         author: { kind: 'MODEL', participantId, model },
-        body: { kind: 'text', text: text || reasoning },
+        // The answer only. The thinking is kept beside it, so a reader can
+        // fold it away and a later prompt never mistakes it for something said.
+        body: { kind: 'text', text },
+        ...(reasoning === '' ? {} : { reasoning: reasoning.slice(0, MAX_REASONING_LENGTH) }),
         ...(cost
           ? {
               usage: {
@@ -499,14 +574,98 @@ async function drive(run: Run, prepared: Prepared): Promise<void> {
  * Two models answering in a row are both "the other side" to a third, and some
  * providers refuse a conversation that does not alternate.
  */
-function say(wire: NormalizedMessage[], role: 'user' | 'assistant', text: string): void {
+function say(wire: NormalizedMessage[], role: 'user' | 'assistant', said: string | Part[]): void {
+  const parts: Part[] = typeof said === 'string' ? [{ kind: 'text', text: said }] : said;
+  if (parts.length === 0) return;
   const last = wire.at(-1);
-  const part = last?.role === role ? last.content.at(-1) : undefined;
-  if (part?.kind === 'text') {
-    last?.content.splice(-1, 1, { kind: 'text', text: `${part.text}\n\n${text}` });
-  } else {
-    wire.push({ role, content: [{ kind: 'text', text }] });
+  if (last?.role !== role) {
+    wire.push({ role, content: [...parts] });
+    return;
   }
+  for (const part of parts) {
+    const tail = last.content.at(-1);
+    if (part.kind === 'text' && tail?.kind === 'text') {
+      last.content.splice(-1, 1, { kind: 'text', text: `${tail.text}\n\n${part.text}` });
+    } else {
+      last.content.push(part);
+    }
+  }
+}
+
+/**
+ * Files sent with a message, checked and kept by content address.
+ *
+ * An image must be one every provider takes, and anything else must already be
+ * text: the renderer reads a PDF's text out of it before sending, and a file
+ * that is not valid UTF-8 is refused rather than handed to a model as noise.
+ */
+function storeAttachments(
+  sessionId: string,
+  files: readonly { name: string; mediaType: string; base64: string }[],
+): Attachment[] {
+  const store = getStore();
+  return files.map((file) => {
+    const data = Buffer.from(file.base64, 'base64');
+    if (IMAGE_TYPES.has(file.mediaType)) {
+      if (data.byteLength > MAX_IMAGE_BYTES) throw new Error(`${file.name} is larger than 8 MB`);
+    } else if (file.mediaType === 'text/plain') {
+      if (data.byteLength > MAX_TEXT_BYTES) throw new Error(`${file.name} is larger than 2 MB`);
+      try {
+        new TextDecoder('utf-8', { fatal: true }).decode(data);
+      } catch {
+        throw new Error(`${file.name} is not text, so it cannot be sent`);
+      }
+    } else {
+      throw new Error(`${file.name}: only images and text files can be attached`);
+    }
+    const { hash } = store.blobs.put(data, sessionBlobRef(sessionId));
+    return { name: file.name, mediaType: file.mediaType, hash, bytes: data.byteLength };
+  });
+}
+
+/**
+ * What the person said, as a model is sent it: the words, then each file. An
+ * image goes as an image to a model that can see; to one that cannot, it is
+ * named so that its absence is not a mystery.
+ */
+function userParts(
+  text: string,
+  attachments: readonly Attachment[],
+  label: string | null,
+  vision: boolean,
+  /** False for a turn far enough back that its images are named, not sent again. */
+  recent = true,
+): Part[] {
+  const store = getStore();
+  const parts: Part[] = [];
+  const said = label === null ? text : `${label} ${text}`.trimEnd();
+  if (said !== '') parts.push({ kind: 'text', text: said });
+  for (const file of attachments) {
+    if (file.mediaType.startsWith('image/')) {
+      parts.push(
+        vision && recent
+          ? {
+              kind: 'image',
+              mediaType: file.mediaType,
+              dataBase64: Buffer.from(store.blobs.read(file.hash)).toString('base64'),
+            }
+          : {
+              kind: 'text',
+              text: vision
+                ? `[Attached image "${file.name}", shown earlier in the conversation]`
+                : `[Attached image "${file.name}": this model cannot see images]`,
+            },
+      );
+    } else {
+      const content = store.blobs.readText(file.hash);
+      const clipped =
+        content.length > TEXT_IN_PROMPT
+          ? `${content.slice(0, TEXT_IN_PROMPT)}\n[… the rest of the file is not shown]`
+          : content;
+      parts.push({ kind: 'text', text: `[Attached file "${file.name}"]\n${clipped}` });
+    }
+  }
+  return parts;
 }
 
 /**
@@ -522,10 +681,14 @@ function toNormalized(
   messages: readonly Message[],
   self: string,
   labelled: boolean,
+  vision: boolean,
 ): NormalizedMessage[] {
   const wire: NormalizedMessage[] = [];
-  for (const message of messages) {
-    if (message.body.kind !== 'text' || message.body.text === '') continue;
+  for (const [index, message] of messages.entries()) {
+    if (message.body.kind !== 'text') continue;
+    if (message.body.text === '' && message.attachments.length === 0) continue;
+    // An image seen turns ago is not worth its tokens on every turn since.
+    const recent = messages.length - index <= IMAGE_TURNS;
     const { author } = message;
     if (author.kind === 'SYSTEM') continue;
     if (author.kind === 'MODEL' && author.participantId === self) {
@@ -533,11 +696,47 @@ function toNormalized(
     } else if (author.kind === 'MODEL') {
       say(wire, 'user', `[${author.model.modelId}] ${message.body.text}`);
     } else {
-      const label = userLabel(message.privateTo !== null);
-      say(wire, 'user', labelled ? `${label} ${message.body.text}` : message.body.text);
+      const label = labelled ? userLabel(message.privateTo !== null) : null;
+      say(wire, 'user', userParts(message.body.text, message.attachments, label, vision, recent));
     }
   }
   return wire;
+}
+
+/**
+ * Leaves out the oldest turns until the request fits the budget, keeping the
+ * newest whole. The conversation still starts with something said to the
+ * model — providers refuse one that opens with its own answer — and it is told
+ * what is missing rather than left to assume it saw everything.
+ */
+function fitToBudget(request: NormalizedRequest, budget: number): void {
+  const messages = request.messages as NormalizedMessage[];
+  let dropped = false;
+  while (messages.length > 1 && estimateInputTokens(request) > budget) {
+    messages.shift();
+    while (messages.length > 1 && messages[0]?.role === 'assistant') messages.shift();
+    dropped = true;
+  }
+  if (dropped) messages[0]?.content.unshift({ kind: 'text', text: LEFT_OUT });
+}
+
+function hasImages(request: NormalizedRequest): boolean {
+  return request.messages.some((message) => message.content.some((part) => part.kind === 'image'));
+}
+
+/** The same request, with every image replaced by a line saying one was there. */
+function withoutImages(request: NormalizedRequest): NormalizedRequest {
+  return {
+    ...request,
+    messages: request.messages.map((message) => ({
+      ...message,
+      content: message.content.map((part) =>
+        part.kind === 'image'
+          ? { kind: 'text', text: '[An image was attached here: this model cannot see images]' }
+          : part,
+      ),
+    })),
+  };
 }
 
 /** How the person is named to a model: privately, or in front of everyone. */

@@ -593,6 +593,15 @@ export const IPC_CONTRACTS = {
    * Addressed through the execution rather than by hash alone, so the renderer
    * can read what a run produced and nothing else in the store.
    */
+  /** A file attached to a message, for the renderer to show. Only that message's own. */
+  'sheep:message-attachment': {
+    request: z.object({ messageId: idSchema, hash: sha256Schema }),
+    response: z.object({
+      base64: z.string(),
+      mediaType: z.string(),
+      bytes: z.number().int().nonnegative(),
+    }),
+  },
   'sheep:execution-blob': {
     request: z.object({ executionId: idSchema, hash: sha256Schema }),
     response: z.object({
@@ -828,8 +837,23 @@ export const IPC_CONTRACTS = {
       participantId: idSchema.optional(),
       /** With `participantId`: a private exchange the other models never see. */
       private: z.boolean().optional(),
-      /** Omitted, with no `participantId`: the models carry on without the person. */
+      /** Omitted, with no `participantId` and nothing attached: the models carry on without the person. */
       text: z.string().min(1).max(32_768).optional(),
+      /**
+       * Files to send with the message: an image as it is, anything else as
+       * the text the renderer read out of it (a PDF's text, a source file).
+       */
+      attachments: z
+        .array(
+          z.object({
+            name: z.string().min(1).max(200),
+            mediaType: z.string().min(1).max(120),
+            base64: z.string().min(1).max(14_000_000),
+          }),
+        )
+        .min(1)
+        .max(6)
+        .optional(),
     }),
     response: z.object({
       /** The first run's id; cancelling any run of a send stops the rest of it. */

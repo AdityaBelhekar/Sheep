@@ -2793,18 +2793,6 @@ select.field__input {
   white-space: normal;
 }
 
-.talk__thinking {
-  margin: 0;
-  padding-left: 0.7rem;
-  border-left: 2px solid var(--border-strong);
-  color: var(--fg-muted);
-  font-size: 0.85rem;
-  white-space: pre-wrap;
-  max-height: 8rem;
-  overflow: hidden;
-  mask-image: linear-gradient(transparent, #000 40%);
-}
-
 .talk__msg--waiting {
   opacity: 0.65;
 }
@@ -3065,6 +3053,211 @@ select.field__input {
   border: 0;
   border-top: 1px solid var(--border);
   margin: 1rem 0;
+}
+
+/* ── Attachments: picked in the box, shown on the message ── */
+
+.talk__attach {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.talk__attach:hover {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.talk__attach:focus-visible,
+.talk__file-remove:focus-visible,
+.think__summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.talk__files,
+.talk__sent-files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.talk__sent-files {
+  align-items: flex-start;
+  justify-content: flex-end;
+  max-width: 80%;
+}
+
+.talk__file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 16rem;
+  padding: 0.3rem 0.4rem 0.3rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  font-size: 0.78rem;
+}
+
+.talk__file-thumb {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 0.4rem;
+  object-fit: cover;
+}
+
+.talk__file-icon {
+  display: grid;
+  place-items: center;
+  min-width: 2.2rem;
+  height: 2.2rem;
+  padding: 0 0.25rem;
+  border-radius: 0.4rem;
+  background: var(--accent-soft);
+  color: var(--fg-muted);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.talk__file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.talk__file-size {
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+}
+
+.talk__file-remove {
+  width: 1.4rem;
+  height: 1.4rem;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--fg-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.talk__file-remove:hover {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.talk__file-problem {
+  margin: 0;
+  color: var(--error);
+  font-size: 0.8rem;
+}
+
+.talk__sent-image {
+  display: block;
+  max-width: min(22rem, 100%);
+  max-height: 16rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  object-fit: contain;
+  background: var(--surface);
+}
+
+/* ── Thinking: one folded line above the answer; a click opens it ── */
+
+.think {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.think__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.6rem 0.2rem 0.45rem;
+  border-radius: 999px;
+  color: var(--fg-muted);
+  font-size: 0.8rem;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.think__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A chevron that turns when the thinking is open. */
+.think__summary::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+
+.think[open] > .think__summary::before {
+  transform: rotate(45deg);
+}
+
+.think__summary:hover {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.think__label {
+  font-weight: 600;
+}
+
+.think__count {
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+}
+
+/* Still thinking: the word shimmers, so a folded line still looks alive. */
+.think[data-live='true'] .think__label {
+  background: linear-gradient(90deg, var(--fg-faint), var(--fg), var(--fg-faint)) 0 0 / 200% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: think-shimmer 1.6s linear infinite;
+}
+
+@keyframes think-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.think__body {
+  margin: 0.35rem 0 0.2rem 0.6rem;
+  padding: 0.1rem 0 0.1rem 0.8rem;
+  border-left: 2px solid var(--border-strong);
+  max-height: 22rem;
+  overflow-y: auto;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 
 @media (prefers-reduced-motion: reduce) {

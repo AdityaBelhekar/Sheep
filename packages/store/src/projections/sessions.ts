@@ -1,4 +1,5 @@
 import type {
+  Attachment,
   DomainEvent,
   DomainEventType,
   Message,
@@ -85,6 +86,10 @@ export const SESSIONS_DDL = `
     prompt_hash    TEXT,
     -- The participant a private message is with. NULL is the room.
     private_to     TEXT,
+    -- The model's visible thinking, apart from the answer.
+    reasoning      TEXT,
+    -- Attached files, as a JSON array of {name, mediaType, hash, bytes}.
+    attachments    TEXT,
     recorded_at    TEXT NOT NULL
   ) STRICT;
 
@@ -122,8 +127,8 @@ export const SESSIONS_PROJECTION: Projection = {
   // 5 changes no column. It retires stores that reached 4 while the runner
   // still emptied a stale table instead of dropping it, and so kept the old
   // shape under the new number.
-  // 6 adds `messages.private_to`.
-  ddlVersion: 6,
+  // 6 adds `messages.private_to`; 7, `reasoning` and `attachments`.
+  ddlVersion: 7,
   // Children first: these are the tables a future foreign key would depend on.
   tables: ['participants', 'messages', 'sessions'],
   ddl: SESSIONS_DDL,
@@ -206,8 +211,8 @@ export const SESSIONS_PROJECTION: Projection = {
              connection_id, vendor_id, model_id, model_version, role, body_kind, body_text,
              body_hash, body_bytes, media_type, input_tokens, output_tokens, cached_tokens,
              cost_usd, finish, max_output_tokens, temperature, prompt_hash, private_to,
-             recorded_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             reasoning, attachments, recorded_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(message_id) DO UPDATE SET
              seq = excluded.seq,
              recorded_at = excluded.recorded_at`,
@@ -238,6 +243,8 @@ export const SESSIONS_PROJECTION: Projection = {
             event.payload.params?.temperature ?? null,
             event.payload.promptHash ?? null,
             event.payload.privateTo ?? null,
+            event.payload.reasoning ?? null,
+            event.payload.attachments ? JSON.stringify(event.payload.attachments) : null,
             at,
           ],
         );
@@ -396,6 +403,8 @@ type MessageRow = {
   temperature: number | null;
   prompt_hash: string | null;
   private_to: string | null;
+  reasoning: string | null;
+  attachments: string | null;
   recorded_at: string;
 };
 
@@ -413,7 +422,7 @@ const MESSAGE_COLUMNS =
   'message_id, session_id, phase_id, round_id, seq, author_kind, participant_id, connection_id, ' +
   'vendor_id, model_id, model_version, role, body_kind, body_text, body_hash, body_bytes, ' +
   'media_type, input_tokens, output_tokens, cached_tokens, cost_usd, finish, max_output_tokens, ' +
-  'temperature, prompt_hash, private_to, ' +
+  'temperature, prompt_hash, private_to, reasoning, attachments, ' +
   'recorded_at';
 
 /** Newest first — what a session list shows. */
@@ -567,6 +576,8 @@ function toMessage(row: MessageRow): Message {
             mediaType: row.media_type ?? 'application/octet-stream',
           }
         : { kind: 'text', text: row.body_text ?? '' },
+    reasoning: row.reasoning,
+    attachments: row.attachments === null ? [] : (JSON.parse(row.attachments) as Attachment[]),
     usage:
       row.cost_usd === null
         ? null

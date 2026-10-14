@@ -302,6 +302,22 @@ export function createIpcRegistry(): IpcRegistry {
     .register('sheep:lab-cancel', (request) => ({ cancelled: cancelLabRun(request.runId) }))
     .register('sheep:executions-list', (request) => readExecutions(request.sessionId))
     .register('sheep:execution-blob', (request) => readExecutionBlob(request))
+    .register('sheep:message-attachment', (request) => {
+      const store = getStore();
+      // Only a file the message itself names: a hash alone opens nothing.
+      const file = getMessage(store.db, request.messageId)?.attachments.find(
+        (attachment) => attachment.hash === request.hash,
+      );
+      if (!file) {
+        throw new Error(`message ${request.messageId} has no attachment ${request.hash}`);
+      }
+      const bytes = store.blobs.read(file.hash);
+      return {
+        base64: Buffer.from(bytes).toString('base64'),
+        mediaType: file.mediaType,
+        bytes: bytes.byteLength,
+      };
+    })
     .register('sheep:derivation-check', (request) => checkDerivation(request))
     .register('sheep:derivations-list', (request) => readDerivations(request.sessionId))
     .register('sheep:derivation-get', (request) => getDerivationDetail(request.derivationId))
